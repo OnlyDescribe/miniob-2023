@@ -48,9 +48,7 @@ ServerParam::ServerParam()
   port = PORT_DEFAULT;
 }
 
-Server::Server(ServerParam input_server_param) : server_param_(input_server_param)
-{
-}
+Server::Server(ServerParam input_server_param) : server_param_(input_server_param) {}
 
 Server::~Server()
 {
@@ -59,10 +57,7 @@ Server::~Server()
   }
 }
 
-void Server::init()
-{
-  session_stage_ = get_seda_config()->get_stage(SESSION_STAGE_NAME);
-}
+void Server::init() { session_stage_ = get_seda_config()->get_stage(SESSION_STAGE_NAME); }
 
 int Server::set_non_block(int fd)
 {

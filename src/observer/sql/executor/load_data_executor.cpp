@@ -40,10 +40,8 @@ RC LoadDataExecutor::execute(SQLStageEvent *sql_event)
  * @param errmsg 如果出现错误，通过这个参数返回错误信息
  * @return 成功返回RC::SUCCESS
  */
-RC insert_record_from_file(Table *table, 
-                           std::vector<std::string> &file_values, 
-                           std::vector<Value> &record_values, 
-                           std::stringstream &errmsg)
+RC insert_record_from_file(
+    Table *table, std::vector<std::string> &file_values, std::vector<Value> &record_values, std::stringstream &errmsg)
 {
 
   const int field_num = record_values.size();

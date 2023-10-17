@@ -20,18 +20,11 @@ See the Mulan PSL v2 for more details. */
 
 using namespace std;
 
-BufferedWriter::BufferedWriter(int fd)
-  : fd_(fd), buffer_()
-{}
+BufferedWriter::BufferedWriter(int fd) : fd_(fd), buffer_() {}
 
-BufferedWriter::BufferedWriter(int fd, int32_t size)
-  : fd_(fd), buffer_(size)
-{}
+BufferedWriter::BufferedWriter(int fd, int32_t size) : fd_(fd), buffer_(size) {}
 
-BufferedWriter::~BufferedWriter()
-{
-  close();
-}
+BufferedWriter::~BufferedWriter() { close(); }
 
 RC BufferedWriter::close()
 {

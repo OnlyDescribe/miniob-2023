@@ -18,13 +18,9 @@ See the Mulan PSL v2 for more details. */
 #include "persist.h"
 #include "common/log/log.h"
 
-PersistHandler::PersistHandler()
-{}
+PersistHandler::PersistHandler() {}
 
-PersistHandler::~PersistHandler()
-{
-  close_file();
-}
+PersistHandler::~PersistHandler() { close_file(); }
 
 RC PersistHandler::create_file(const char *file_name)
 {

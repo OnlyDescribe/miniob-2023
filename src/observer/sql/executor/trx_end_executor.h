@@ -43,8 +43,7 @@ public:
 
     if (stmt->type() == StmtType::COMMIT) {
       return trx->commit();
-    }
-    else {
+    } else {
       return trx->rollback();
     }
   }

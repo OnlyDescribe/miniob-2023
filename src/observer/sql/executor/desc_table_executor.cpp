@@ -33,8 +33,9 @@ RC DescTableExecutor::execute(SQLStageEvent *sql_event)
   Stmt *stmt = sql_event->stmt();
   SessionEvent *session_event = sql_event->session_event();
   Session *session = session_event->session();
-  ASSERT(stmt->type() == StmtType::DESC_TABLE, 
-         "desc table executor can not run this command: %d", static_cast<int>(stmt->type()));
+  ASSERT(stmt->type() == StmtType::DESC_TABLE,
+      "desc table executor can not run this command: %d",
+      static_cast<int>(stmt->type()));
 
   DescTableStmt *desc_table_stmt = static_cast<DescTableStmt *>(stmt);
 

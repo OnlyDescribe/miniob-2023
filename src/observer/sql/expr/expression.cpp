@@ -29,12 +29,10 @@ RC ValueExpr::get_value(const Tuple &tuple, Value &value) const
 }
 
 /////////////////////////////////////////////////////////////////////////////////
-CastExpr::CastExpr(unique_ptr<Expression> child, AttrType cast_type)
-    : child_(std::move(child)), cast_type_(cast_type)
+CastExpr::CastExpr(unique_ptr<Expression> child, AttrType cast_type) : child_(std::move(child)), cast_type_(cast_type)
 {}
 
-CastExpr::~CastExpr()
-{}
+CastExpr::~CastExpr() {}
 
 RC CastExpr::cast(const Value &value, Value &cast_value) const
 {
@@ -83,8 +81,7 @@ ComparisonExpr::ComparisonExpr(CompOp comp, unique_ptr<Expression> left, unique_
     : comp_(comp), left_(std::move(left)), right_(std::move(right))
 {}
 
-ComparisonExpr::~ComparisonExpr()
-{}
+ComparisonExpr::~ComparisonExpr() {}
 
 RC ComparisonExpr::compare_value(const Value &left, const Value &right, bool &result) const
 {
@@ -211,12 +208,11 @@ AttrType ArithmeticExpr::value_type() const
     return left_->value_type();
   }
 
-  if (left_->value_type() == AttrType::INTS &&
-      right_->value_type() == AttrType::INTS &&
+  if (left_->value_type() == AttrType::INTS && right_->value_type() == AttrType::INTS &&
       arithmetic_type_ != Type::DIV) {
     return AttrType::INTS;
   }
-  
+
   return AttrType::FLOATS;
 }
 
@@ -254,14 +250,16 @@ RC ArithmeticExpr::calc_value(const Value &left_value, const Value &right_value,
     case Type::DIV: {
       if (target_type == AttrType::INTS) {
         if (right_value.get_int() == 0) {
-          // NOTE: 设置为整数最大值是不正确的。通常的做法是设置为NULL，但是当前的miniob没有NULL概念，所以这里设置为整数最大值。
+          // NOTE:
+          // 设置为整数最大值是不正确的。通常的做法是设置为NULL，但是当前的miniob没有NULL概念，所以这里设置为整数最大值。
           value.set_int(numeric_limits<int>::max());
         } else {
           value.set_int(left_value.get_int() / right_value.get_int());
         }
       } else {
         if (right_value.get_float() > -EPSILON && right_value.get_float() < EPSILON) {
-          // NOTE: 设置为浮点数最大值是不正确的。通常的做法是设置为NULL，但是当前的miniob没有NULL概念，所以这里设置为浮点数最大值。
+          // NOTE:
+          // 设置为浮点数最大值是不正确的。通常的做法是设置为NULL，但是当前的miniob没有NULL概念，所以这里设置为浮点数最大值。
           value.set_float(numeric_limits<float>::max());
         } else {
           value.set_float(left_value.get_float() / right_value.get_float());

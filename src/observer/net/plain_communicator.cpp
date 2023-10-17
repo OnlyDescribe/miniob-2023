@@ -161,7 +161,7 @@ RC PlainCommunicator::write_result(SessionEvent *event, bool &need_disconnect)
   if (!need_disconnect) {
     (void)write_debug(event, need_disconnect);
   }
-  writer_->flush(); // TODO handle error
+  writer_->flush();  // TODO handle error
   return rc;
 }
 

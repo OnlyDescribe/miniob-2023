@@ -55,8 +55,8 @@ public:
   LatchMemo(DiskBufferPool *buffer_pool);
   ~LatchMemo();
 
-  RC   get_page(PageNum page_num, Frame *&frame);
-  RC   allocate_page(Frame *&frame);
+  RC get_page(PageNum page_num, Frame *&frame);
+  RC allocate_page(Frame *&frame);
   void dispose_page(PageNum page_num);
   void latch(Frame *frame, LatchMemoType type);
   void xlatch(Frame *frame);
@@ -70,13 +70,13 @@ public:
 
   void release_to(int point);
 
-  int  memo_point() const { return static_cast<int>(items_.size()); }
+  int memo_point() const { return static_cast<int>(items_.size()); }
 
 private:
   void release_item(LatchMemoItem &item);
-  
+
 private:
-  DiskBufferPool *           buffer_pool_ = nullptr;
-  std::deque<LatchMemoItem>  items_;
-  std::vector<PageNum>       disposed_pages_;
+  DiskBufferPool *buffer_pool_ = nullptr;
+  std::deque<LatchMemoItem> items_;
+  std::vector<PageNum> disposed_pages_;
 };

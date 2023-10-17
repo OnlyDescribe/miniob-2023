@@ -22,8 +22,7 @@ See the Mulan PSL v2 for more details. */
 
 using namespace common;
 
-ConditionFilter::~ConditionFilter()
-{}
+ConditionFilter::~ConditionFilter() {}
 
 DefaultConditionFilter::DefaultConditionFilter()
 {
@@ -35,8 +34,7 @@ DefaultConditionFilter::DefaultConditionFilter()
   right_.attr_length = 0;
   right_.attr_offset = 0;
 }
-DefaultConditionFilter::~DefaultConditionFilter()
-{}
+DefaultConditionFilter::~DefaultConditionFilter() {}
 
 RC DefaultConditionFilter::init(const ConDesc &left, const ConDesc &right, AttrType attr_type, CompOp comp_op)
 {
@@ -141,21 +139,14 @@ bool DefaultConditionFilter::filter(const Record &rec) const
   int cmp_result = left_value.compare(right_value);
 
   switch (comp_op_) {
-    case EQUAL_TO:
-      return 0 == cmp_result;
-    case LESS_EQUAL:
-      return cmp_result <= 0;
-    case NOT_EQUAL:
-      return cmp_result != 0;
-    case LESS_THAN:
-      return cmp_result < 0;
-    case GREAT_EQUAL:
-      return cmp_result >= 0;
-    case GREAT_THAN:
-      return cmp_result > 0;
+    case EQUAL_TO: return 0 == cmp_result;
+    case LESS_EQUAL: return cmp_result <= 0;
+    case NOT_EQUAL: return cmp_result != 0;
+    case LESS_THAN: return cmp_result < 0;
+    case GREAT_EQUAL: return cmp_result >= 0;
+    case GREAT_THAN: return cmp_result > 0;
 
-    default:
-      break;
+    default: break;
   }
 
   LOG_PANIC("Never should print this.");

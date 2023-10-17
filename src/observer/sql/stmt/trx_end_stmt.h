@@ -26,9 +26,7 @@ See the Mulan PSL v2 for more details. */
 class TrxEndStmt : public Stmt
 {
 public:
-  TrxEndStmt(StmtType type)
-          : type_(type)
-  {}
+  TrxEndStmt(StmtType type) : type_(type) {}
   virtual ~TrxEndStmt() = default;
 
   StmtType type() const override { return type_; }

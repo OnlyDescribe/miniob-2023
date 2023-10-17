@@ -20,7 +20,8 @@ See the Mulan PSL v2 for more details. */
 
 class Trx;
 
-class DefaultHandler {
+class DefaultHandler
+{
 public:
   DefaultHandler();
 
@@ -80,7 +81,8 @@ public:
    * @param attributes
    * @return
    */
-  RC create_table(const char *dbname, const char *relation_name, int attribute_count, const AttrInfoSqlNode *attributes);
+  RC create_table(
+      const char *dbname, const char *relation_name, int attribute_count, const AttrInfoSqlNode *attributes);
 
   /**
    * 销毁名为relName的表以及在该表上建立的所有索引

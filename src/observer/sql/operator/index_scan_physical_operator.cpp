@@ -16,14 +16,12 @@ See the Mulan PSL v2 for more details. */
 #include "storage/index/index.h"
 #include "storage/trx/trx.h"
 
-IndexScanPhysicalOperator::IndexScanPhysicalOperator(
-    Table *table, Index *index, bool readonly, 
-    const Value *left_value, bool left_inclusive, 
-    const Value *right_value, bool right_inclusive)
-    : table_(table), 
-      index_(index), 
-      readonly_(readonly), 
-      left_inclusive_(left_inclusive), 
+IndexScanPhysicalOperator::IndexScanPhysicalOperator(Table *table, Index *index, bool readonly, const Value *left_value,
+    bool left_inclusive, const Value *right_value, bool right_inclusive)
+    : table_(table),
+      index_(index),
+      readonly_(readonly),
+      left_inclusive_(left_inclusive),
       right_inclusive_(right_inclusive)
 {
   if (left_value) {

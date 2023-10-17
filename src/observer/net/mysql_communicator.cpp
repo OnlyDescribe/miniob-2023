@@ -53,7 +53,7 @@ const uint32_t CLIENT_OPTIONAL_RESULTSET_METADATA =
  * @details 这些枚举值都是从MySQL的协议中抄过来的
  * @ingroup MySQLProtocol
  */
-enum ResultSetMetaData 
+enum ResultSetMetaData
 {
   RESULTSET_METADATA_NONE = 0,
   RESULTSET_METADATA_FULL = 1,
@@ -64,7 +64,7 @@ enum ResultSetMetaData
  * @details 枚举值类型是从MySQL的协议中抄过来的
  * @ingroup MySQLProtocol
  */
-enum enum_field_types 
+enum enum_field_types
 {
   MYSQL_TYPE_DECIMAL,
   MYSQL_TYPE_TINY,
@@ -110,7 +110,7 @@ enum enum_field_types
 
 /**
  * @brief 将数据写入到缓存中
- * 
+ *
  * @param buf  数据缓存
  * @param value 要写入的值
  * @return int 写入的字节数
@@ -124,7 +124,7 @@ int store_int1(char *buf, int8_t value)
 
 /**
  * @brief 将数据写入到缓存中
- * 
+ *
  * @param buf  数据缓存
  * @param value 要写入的值
  * @return int 写入的字节数
@@ -138,7 +138,7 @@ int store_int2(char *buf, int16_t value)
 
 /**
  * @brief 将数据写入到缓存中
- * 
+ *
  * @param buf  数据缓存
  * @param value 要写入的值
  * @return int 写入的字节数
@@ -152,7 +152,7 @@ int store_int3(char *buf, int32_t value)
 
 /**
  * @brief 将数据写入到缓存中
- * 
+ *
  * @param buf  数据缓存
  * @param value 要写入的值
  * @return int 写入的字节数
@@ -166,7 +166,7 @@ int store_int4(char *buf, int32_t value)
 
 /**
  * @brief 将数据写入到缓存中
- * 
+ *
  * @param buf  数据缓存
  * @param value 要写入的值
  * @return int 写入的字节数
@@ -180,7 +180,7 @@ int store_int6(char *buf, int64_t value)
 
 /**
  * @brief 将数据写入到缓存中
- * 
+ *
  * @param buf  数据缓存
  * @param value 要写入的值
  * @return int 写入的字节数
@@ -226,7 +226,7 @@ int store_lenenc_int(char *buf, uint64_t value)
 
 /**
  * @brief 将以'\0'结尾的字符串写入到缓存中
- * 
+ *
  * @param buf  数据缓存
  * @param s 要写入的字符串
  * @return int 写入的字节数
@@ -245,7 +245,7 @@ int store_null_terminated_string(char *buf, const char *s)
 
 /**
  * @brief 将指定长度的字符串写入到缓存中
- * 
+ *
  * @param buf  数据缓存
  * @param s 要写入的字符串
  * @param len 字符串的长度
@@ -264,7 +264,7 @@ int store_fix_length_string(char *buf, const char *s, int len)
 
 /**
  * @brief 按照带有长度标识的字符串写入到缓存，长度标识以变长整数编码
- * 
+ *
  * @param buf  数据缓存
  * @param s 要写入的字符串
  * @return int 写入的字节数
@@ -284,7 +284,7 @@ int store_lenenc_string(char *buf, const char *s)
  * [MariaDB Packet](https://mariadb.com/kb/en/0-packet/)
  * @ingroup MySQLProtocol
  */
-struct PacketHeader 
+struct PacketHeader
 {
   int32_t payload_length : 24;  //! 当前packet的除掉头的长度
   int8_t sequence_id = 0;       //! 当前packet在当前处理过程中是第几个包
@@ -295,21 +295,18 @@ struct PacketHeader
  * @details 所有的包都有一个包头，所以BasePacket中包含了一个 @ref PacketHeader
  * @ingroup MySQLProtocol
  */
-class BasePacket 
+class BasePacket
 {
 public:
   PacketHeader packet_header;
 
-  BasePacket(int8_t sequence = 0)
-  {
-    packet_header.sequence_id = sequence;
-  }
+  BasePacket(int8_t sequence = 0) { packet_header.sequence_id = sequence; }
 
   virtual ~BasePacket() = default;
 
   /**
    * @brief 将当前包编码成网络包
-   * 
+   *
    * @param[in] capabilities MySQL协议中的capability标志
    * @param[out] net_packet 编码后的网络包
    */
@@ -321,9 +318,10 @@ public:
  * @ingroup MySQLProtocol
  * @details 先由服务端发送到客户端。
  * 这个包会交互capability与用户名密码。
- * [MySQL Handshake]https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_connection_phase_packets_protocol_handshake_v10.html
+ * [MySQL
+ * Handshake]https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_connection_phase_packets_protocol_handshake_v10.html
  */
-struct HandshakeV10 : public BasePacket 
+struct HandshakeV10 : public BasePacket
 {
   int8_t protocol = 10;
   char server_version[7] = "5.7.25";
@@ -338,8 +336,7 @@ struct HandshakeV10 : public BasePacket
   char reserved[10] = {0};
   char auth_plugin_data_part_2[13] = "bbbbbbbbbbbb";
 
-  HandshakeV10(int8_t sequence = 0) : BasePacket(sequence)
-  {}
+  HandshakeV10(int8_t sequence = 0) : BasePacket(sequence) {}
   virtual ~HandshakeV10() = default;
 
   /**
@@ -380,7 +377,7 @@ struct HandshakeV10 : public BasePacket
  * @brief 响应包，在很多场景中都会使用
  * @ingroup MySQLProtocol
  */
-struct OkPacket : public BasePacket 
+struct OkPacket : public BasePacket
 {
   int8_t header = 0;  // 0x00 for ok and 0xFE for EOF
   int32_t affected_rows = 0;
@@ -389,8 +386,7 @@ struct OkPacket : public BasePacket
   int16_t warnings = 0;
   std::string info;  // human readable status information
 
-  OkPacket(int8_t sequence = 0) : BasePacket(sequence)
-  {}
+  OkPacket(int8_t sequence = 0) : BasePacket(sequence) {}
   virtual ~OkPacket() = default;
 
   /**
@@ -434,14 +430,13 @@ struct OkPacket : public BasePacket
  * @ingroup MySQLProtocol
  * @details [basic_err_packet](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_basic_err_packet.html)
  */
-struct EofPacket : public BasePacket 
+struct EofPacket : public BasePacket
 {
   int8_t header = 0xFE;
   int16_t warnings = 0;
   int16_t status_flags = 0x22;
 
-  EofPacket(int8_t sequence = 0) : BasePacket(sequence)
-  {}
+  EofPacket(int8_t sequence = 0) : BasePacket(sequence) {}
   virtual ~EofPacket() = default;
 
   virtual RC encode(uint32_t capabilities, std::vector<char> &net_packet) const override
@@ -476,7 +471,7 @@ struct EofPacket : public BasePacket
  * @details [eof_packet](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_basic_eof_packet.html)
  * @ingroup MySQLProtocol
  */
-struct ErrPacket : public BasePacket 
+struct ErrPacket : public BasePacket
 {
   int8_t header = 0xFF;
   int16_t error_code = 0;
@@ -484,8 +479,7 @@ struct ErrPacket : public BasePacket
   std::string sql_state{"HY000"};
   std::string error_message;
 
-  ErrPacket(int8_t sequence = 0) : BasePacket(sequence)
-  {}
+  ErrPacket(int8_t sequence = 0) : BasePacket(sequence) {}
   virtual ~ErrPacket() = default;
 
   virtual RC encode(uint32_t capabilities, std::vector<char> &net_packet) const override
@@ -519,10 +513,11 @@ struct ErrPacket : public BasePacket
 /**
  * @brief MySQL客户端发过来的请求包
  * @ingroup MySQLProtocol
- * @details [MySQL Protocol Command Phase](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_command_phase.html)
- * [MariaDB Text Protocol](https://mariadb.com/kb/en/2-text-protocol/)
+ * @details [MySQL Protocol Command
+ * Phase](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_command_phase.html) [MariaDB Text
+ * Protocol](https://mariadb.com/kb/en/2-text-protocol/)
  */
-struct QueryPacket 
+struct QueryPacket
 {
   PacketHeader packet_header;
   int8_t command;     // 0x03: COM_QUERY
@@ -595,7 +590,7 @@ RC MysqlCommunicator::init(int fd, Session *session, const std::string &addr)
 
 /**
  * @brief MySQL客户端连接时会发起一个"select @@version_comment"的查询，这里对这个查询进行特殊处理
- * 
+ *
  * @param[out] need_disconnect 连接上如果出现异常，通过这个标识来判断是否需要断开连接
  */
 RC MysqlCommunicator::handle_version_comment(bool &need_disconnect)
@@ -613,7 +608,7 @@ RC MysqlCommunicator::handle_version_comment(bool &need_disconnect)
 
 /**
  * @brief 读取客户端发过来的请求
- * 
+ *
  * @param[out] event 如果有新的请求，就会生成一个SessionEvent
  */
 RC MysqlCommunicator::read_event(SessionEvent *&event)

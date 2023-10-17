@@ -44,7 +44,7 @@ using namespace common;
 const std::string HISTORY_FILE = std::string(getenv("HOME")) + "/.miniob.history";
 time_t last_history_write_time = 0;
 
-char *my_readline(const char *prompt) 
+char *my_readline(const char *prompt)
 {
   int size = history_length;
   if (size == 0) {
@@ -67,7 +67,7 @@ char *my_readline(const char *prompt)
   }
   return line;
 }
-#else // USE_READLINE
+#else   // USE_READLINE
 char *my_readline(const char *prompt)
 {
   char *buffer = (char *)malloc(MAX_MEM_BUFFER_SIZE);
@@ -84,16 +84,15 @@ char *my_readline(const char *prompt)
   }
   return buffer;
 }
-#endif // USE_READLINE
+#endif  // USE_READLINE
 
 /* this function config a exit-cmd list, strncasecmp func truncate the command from terminal according to the number,
-   'strncasecmp("exit", cmd, 4)' means that obclient read command string from terminal, truncate it to 4 chars from 
+   'strncasecmp("exit", cmd, 4)' means that obclient read command string from terminal, truncate it to 4 chars from
    the beginning, then compare the result with 'exit', if they match, exit the obclient.
 */
-bool is_exit_command(const char *cmd) {
-  return 0 == strncasecmp("exit", cmd, 4) ||
-         0 == strncasecmp("bye", cmd, 3) ||
-         0 == strncasecmp("\\q", cmd, 2) ;
+bool is_exit_command(const char *cmd)
+{
+  return 0 == strncasecmp("exit", cmd, 4) || 0 == strncasecmp("bye", cmd, 3) || 0 == strncasecmp("\\q", cmd, 2);
 }
 
 int init_unix_sock(const char *unix_sock_path)
@@ -155,15 +154,9 @@ int main(int argc, char *argv[])
   extern char *optarg;
   while ((opt = getopt(argc, argv, "s:h:p:")) > 0) {
     switch (opt) {
-      case 's':
-        unix_socket_path = optarg;
-        break;
-      case 'p':
-        server_port = atoi(optarg);
-        break;
-      case 'h':
-        server_host = optarg;
-        break;
+      case 's': unix_socket_path = optarg; break;
+      case 'p': server_port = atoi(optarg); break;
+      case 'h': server_host = optarg; break;
     }
   }
 
@@ -194,7 +187,7 @@ int main(int argc, char *argv[])
       break;
     }
 
-    if ((send_bytes = write(sockfd, input_command, strlen(input_command) + 1)) == -1) { // TODO writen
+    if ((send_bytes = write(sockfd, input_command, strlen(input_command) + 1)) == -1) {  // TODO writen
       fprintf(stderr, "send error: %d:%s \n", errno, strerror(errno));
       exit(1);
     }

@@ -21,16 +21,11 @@ using namespace std;
 
 const int32_t DEFAULT_BUFFER_SIZE = 16 * 1024;
 
-RingBuffer::RingBuffer()
-    : RingBuffer(DEFAULT_BUFFER_SIZE)
-{}
+RingBuffer::RingBuffer() : RingBuffer(DEFAULT_BUFFER_SIZE) {}
 
-RingBuffer::RingBuffer(int32_t size)
-    : buffer_(size)
-{}
+RingBuffer::RingBuffer(int32_t size) : buffer_(size) {}
 
-RingBuffer::~RingBuffer()
-{}
+RingBuffer::~RingBuffer() {}
 
 RC RingBuffer::read(char *buf, int32_t size, int32_t &read_size)
 {
@@ -40,7 +35,7 @@ RC RingBuffer::read(char *buf, int32_t size, int32_t &read_size)
 
   RC rc = RC::SUCCESS;
   read_size = 0;
-  while (OB_SUCC(rc) && read_size < size && this->size() > 0) {
+  while (OB_SUCC(rc) && read_size<size &&this->size()> 0) {
     const char *tmp_buf = nullptr;
     int32_t tmp_size = 0;
     rc = buffer(tmp_buf, tmp_size);
@@ -98,7 +93,7 @@ RC RingBuffer::write(const char *data, int32_t size, int32_t &write_size)
 
   RC rc = RC::SUCCESS;
   write_size = 0;
-  while (OB_SUCC(rc) && write_size < size && this->remain() > 0) {
+  while (OB_SUCC(rc) && write_size<size &&this->remain()> 0) {
 
     const int32_t read_pos = this->read_pos();
     const int32_t tmp_buf_size = (read_pos <= write_pos_) ? (capacity() - write_pos_) : (read_pos - write_pos_);

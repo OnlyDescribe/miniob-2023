@@ -65,17 +65,8 @@ RC IndexMeta::from_json(const TableMeta &table, const Json::Value &json_value, I
   return index.init(name_value.asCString(), *field);
 }
 
-const char *IndexMeta::name() const
-{
-  return name_.c_str();
-}
+const char *IndexMeta::name() const { return name_.c_str(); }
 
-const char *IndexMeta::field() const
-{
-  return field_.c_str();
-}
+const char *IndexMeta::field() const { return field_.c_str(); }
 
-void IndexMeta::desc(std::ostream &os) const
-{
-  os << "index name=" << name_ << ", field=" << field_;
-}
+void IndexMeta::desc(std::ostream &os) const { os << "index name=" << name_ << ", field=" << field_; }

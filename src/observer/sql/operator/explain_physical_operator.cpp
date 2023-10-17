@@ -62,10 +62,7 @@ RC ExplainPhysicalOperator::next()
   return RC::SUCCESS;
 }
 
-Tuple *ExplainPhysicalOperator::current_tuple()
-{
-  return &tuple_;
-}
+Tuple *ExplainPhysicalOperator::current_tuple() { return &tuple_; }
 
 /**
  * 递归打印某个算子

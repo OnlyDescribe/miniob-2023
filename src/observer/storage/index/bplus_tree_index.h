@@ -21,7 +21,7 @@ See the Mulan PSL v2 for more details. */
  * @brief B+树索引
  * @ingroup Index
  */
-class BplusTreeIndex : public Index 
+class BplusTreeIndex : public Index
 {
 public:
   BplusTreeIndex() = default;
@@ -51,7 +51,7 @@ private:
  * @brief B+树索引扫描器
  * @ingroup Index
  */
-class BplusTreeIndexScanner : public IndexScanner 
+class BplusTreeIndexScanner : public IndexScanner
 {
 public:
   BplusTreeIndexScanner(BplusTreeHandler &tree_handle);

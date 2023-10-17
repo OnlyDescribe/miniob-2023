@@ -24,7 +24,7 @@ static constexpr int PAGE_HEADER_SIZE = (sizeof(PageHeader));
 /**
  * @brief 8字节对齐
  * 注: ceiling(a / b) = floor((a + b - 1) / b)
- * 
+ *
  * @param size 待对齐的字节数
  */
 int align8(int size) { return (size + 7) / 8 * 8; }
@@ -57,7 +57,7 @@ RecordPageIterator::~RecordPageIterator() {}
 void RecordPageIterator::init(RecordPageHandler &record_page_handler, SlotNum start_slot_num /*=0*/)
 {
   record_page_handler_ = &record_page_handler;
-  page_num_            = record_page_handler.get_page_num();
+  page_num_ = record_page_handler.get_page_num();
   bitmap_.init(record_page_handler.bitmap_, record_page_handler.page_header_->record_capacity);
   next_slot_num_ = bitmap_.next_setted_bit(start_slot_num);
 }
@@ -100,10 +100,10 @@ RC RecordPageHandler::init(DiskBufferPool &buffer_pool, PageNum page_num, bool r
     frame_->write_latch();
   }
   disk_buffer_pool_ = &buffer_pool;
-  readonly_         = readonly;
-  page_header_      = (PageHeader *)(data);
-  bitmap_           = data + PAGE_HEADER_SIZE;
-  
+  readonly_ = readonly;
+  page_header_ = (PageHeader *)(data);
+  bitmap_ = data + PAGE_HEADER_SIZE;
+
   LOG_TRACE("Successfully init page_num %d.", page_num);
   return ret;
 }
@@ -125,9 +125,9 @@ RC RecordPageHandler::recover_init(DiskBufferPool &buffer_pool, PageNum page_num
 
   frame_->write_latch();
   disk_buffer_pool_ = &buffer_pool;
-  readonly_         = false;
-  page_header_      = (PageHeader *)(data);
-  bitmap_           = data + PAGE_HEADER_SIZE;
+  readonly_ = false;
+  page_header_ = (PageHeader *)(data);
+  bitmap_ = data + PAGE_HEADER_SIZE;
 
   buffer_pool.recover_page(page_num);
 
@@ -143,14 +143,15 @@ RC RecordPageHandler::init_empty_page(DiskBufferPool &buffer_pool, PageNum page_
     return ret;
   }
 
-  page_header_->record_num          = 0;
-  page_header_->record_real_size    = record_size;
-  page_header_->record_size         = align8(record_size);
-  page_header_->record_capacity     = page_record_capacity(BP_PAGE_DATA_SIZE, page_header_->record_size);
+  page_header_->record_num = 0;
+  page_header_->record_real_size = record_size;
+  page_header_->record_size = align8(record_size);
+  page_header_->record_capacity = page_record_capacity(BP_PAGE_DATA_SIZE, page_header_->record_size);
   page_header_->first_record_offset = align8(PAGE_HEADER_SIZE + page_bitmap_size(page_header_->record_capacity));
   this->fix_record_capacity();
-  ASSERT(page_header_->first_record_offset + 
-         page_header_->record_capacity * page_header_->record_size <= BP_PAGE_DATA_SIZE, "Record overflow the page size");
+  ASSERT(page_header_->first_record_offset + page_header_->record_capacity * page_header_->record_size <=
+             BP_PAGE_DATA_SIZE,
+      "Record overflow the page size");
 
   bitmap_ = frame_->data() + PAGE_HEADER_SIZE;
   memset(bitmap_, 0, page_bitmap_size(page_header_->record_capacity));
@@ -189,7 +190,7 @@ RC RecordPageHandler::insert_record(const char *data, RID *rid)
 
   // 找到空闲位置
   Bitmap bitmap(bitmap_, page_header_->record_capacity);
-  int    index = bitmap.next_unsetted_bit(0);
+  int index = bitmap.next_unsetted_bit(0);
   bitmap.set_bit(index);
   page_header_->record_num++;
 
@@ -323,7 +324,7 @@ RC RecordFileHandler::init_free_pages()
   BufferPoolIterator bp_iterator;
   bp_iterator.init(*disk_buffer_pool_);
   RecordPageHandler record_page_handler;
-  PageNum           current_page_num = 0;
+  PageNum current_page_num = 0;
 
   while (bp_iterator.has_next()) {
     current_page_num = bp_iterator.next();
@@ -348,8 +349,8 @@ RC RecordFileHandler::insert_record(const char *data, int record_size, RID *rid)
   RC ret = RC::SUCCESS;
 
   RecordPageHandler record_page_handler;
-  bool              page_found       = false;
-  PageNum           current_page_num = 0;
+  bool page_found = false;
+  PageNum current_page_num = 0;
 
   // 当前要访问free_pages对象，所以需要加锁。在非并发编译模式下，不需要考虑这个锁
   lock_.lock();
@@ -495,10 +496,10 @@ RC RecordFileScanner::open_scan(
 {
   close_scan();
 
-  table_            = table;
+  table_ = table;
   disk_buffer_pool_ = &buffer_pool;
-  trx_              = trx;
-  readonly_         = readonly;
+  trx_ = trx;
+  readonly_ = readonly;
 
   RC rc = bp_iterator_.init(buffer_pool);
   if (rc != RC::SUCCESS) {

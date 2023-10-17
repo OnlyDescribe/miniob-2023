@@ -65,7 +65,4 @@ RC PredicatePhysicalOperator::close()
   return RC::SUCCESS;
 }
 
-Tuple *PredicatePhysicalOperator::current_tuple()
-{
-  return children_[0]->current_tuple();
-}
+Tuple *PredicatePhysicalOperator::current_tuple() { return children_[0]->current_tuple(); }

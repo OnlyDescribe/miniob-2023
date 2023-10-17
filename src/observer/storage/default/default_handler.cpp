@@ -37,18 +37,11 @@ void DefaultHandler::set_default(DefaultHandler *handler)
   default_handler = handler;
 }
 
-DefaultHandler &DefaultHandler::get_default()
-{
-  return *default_handler;
-}
+DefaultHandler &DefaultHandler::get_default() { return *default_handler; }
 
-DefaultHandler::DefaultHandler()
-{}
+DefaultHandler::DefaultHandler() {}
 
-DefaultHandler::~DefaultHandler() noexcept
-{
-  destroy();
-}
+DefaultHandler::~DefaultHandler() noexcept { destroy(); }
 
 RC DefaultHandler::init(const char *base_dir)
 {
@@ -115,10 +108,7 @@ RC DefaultHandler::create_db(const char *dbname)
   return RC::SUCCESS;
 }
 
-RC DefaultHandler::drop_db(const char *dbname)
-{
-  return RC::INTERNAL;
-}
+RC DefaultHandler::drop_db(const char *dbname) { return RC::INTERNAL; }
 
 RC DefaultHandler::open_db(const char *dbname)
 {
@@ -148,15 +138,9 @@ RC DefaultHandler::open_db(const char *dbname)
   return ret;
 }
 
-RC DefaultHandler::close_db(const char *dbname)
-{
-  return RC::UNIMPLENMENT;
-}
+RC DefaultHandler::close_db(const char *dbname) { return RC::UNIMPLENMENT; }
 
-RC DefaultHandler::execute(const char *sql)
-{
-  return RC::UNIMPLENMENT;
-}
+RC DefaultHandler::execute(const char *sql) { return RC::UNIMPLENMENT; }
 
 RC DefaultHandler::create_table(
     const char *dbname, const char *relation_name, int attribute_count, const AttrInfoSqlNode *attributes)
@@ -168,10 +152,7 @@ RC DefaultHandler::create_table(
   return db->create_table(relation_name, attribute_count, attributes);
 }
 
-RC DefaultHandler::drop_table(const char *dbname, const char *relation_name)
-{
-  return RC::UNIMPLENMENT;
-}
+RC DefaultHandler::drop_table(const char *dbname, const char *relation_name) { return RC::UNIMPLENMENT; }
 
 Db *DefaultHandler::find_db(const char *dbname) const
 {

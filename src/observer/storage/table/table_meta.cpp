@@ -29,10 +29,10 @@ static const Json::StaticString FIELD_INDEXES("indexes");
 
 TableMeta::TableMeta(const TableMeta &other)
     : table_id_(other.table_id_),
-    name_(other.name_),
-    fields_(other.fields_),
-    indexes_(other.indexes_),
-    record_size_(other.record_size_)
+      name_(other.name_),
+      fields_(other.fields_),
+      indexes_(other.indexes_),
+      record_size_(other.record_size_)
 {}
 
 void TableMeta::swap(TableMeta &other) noexcept
@@ -56,7 +56,7 @@ RC TableMeta::init(int32_t table_id, const char *name, int field_num, const Attr
   }
 
   RC rc = RC::SUCCESS;
-  
+
   int field_offset = 0;
   int trx_field_num = 0;
   const vector<FieldMeta> *trx_fields = TrxKit::instance()->trx_fields();
@@ -65,7 +65,7 @@ RC TableMeta::init(int32_t table_id, const char *name, int field_num, const Attr
 
     for (size_t i = 0; i < trx_fields->size(); i++) {
       const FieldMeta &field_meta = (*trx_fields)[i];
-      fields_[i] = FieldMeta(field_meta.name(), field_meta.type(), field_offset, field_meta.len(), false/*visible*/);
+      fields_[i] = FieldMeta(field_meta.name(), field_meta.type(), field_offset, field_meta.len(), false /*visible*/);
       field_offset += field_meta.len();
     }
 
@@ -76,8 +76,8 @@ RC TableMeta::init(int32_t table_id, const char *name, int field_num, const Attr
 
   for (int i = 0; i < field_num; i++) {
     const AttrInfoSqlNode &attr_info = attributes[i];
-    rc = fields_[i + trx_field_num].init(attr_info.name.c_str(), 
-            attr_info.type, field_offset, attr_info.length, true/*visible*/);
+    rc = fields_[i + trx_field_num].init(
+        attr_info.name.c_str(), attr_info.type, field_offset, attr_info.length, true /*visible*/);
     if (rc != RC::SUCCESS) {
       LOG_ERROR("Failed to init field meta. table name=%s, field name: %s", name, attr_info.name.c_str());
       return rc;
@@ -89,7 +89,7 @@ RC TableMeta::init(int32_t table_id, const char *name, int field_num, const Attr
   record_size_ = field_offset;
 
   table_id_ = table_id;
-  name_     = name;
+  name_ = name;
   LOG_INFO("Sussessfully initialized table meta. table id=%d, name=%s", table_id, name);
   return RC::SUCCESS;
 }
@@ -100,25 +100,16 @@ RC TableMeta::add_index(const IndexMeta &index)
   return RC::SUCCESS;
 }
 
-const char *TableMeta::name() const
-{
-  return name_.c_str();
-}
+const char *TableMeta::name() const { return name_.c_str(); }
 
-const FieldMeta *TableMeta::trx_field() const
-{
-  return &fields_[0];
-}
+const FieldMeta *TableMeta::trx_field() const { return &fields_[0]; }
 
 const std::pair<const FieldMeta *, int> TableMeta::trx_fields() const
 {
   return std::pair<const FieldMeta *, int>{fields_.data(), sys_field_num()};
 }
 
-const FieldMeta *TableMeta::field(int index) const
-{
-  return &fields_[index];
-}
+const FieldMeta *TableMeta::field(int index) const { return &fields_[index]; }
 const FieldMeta *TableMeta::field(const char *name) const
 {
   if (nullptr == name) {
@@ -141,10 +132,7 @@ const FieldMeta *TableMeta::find_field_by_offset(int offset) const
   }
   return nullptr;
 }
-int TableMeta::field_num() const
-{
-  return fields_.size();
-}
+int TableMeta::field_num() const { return fields_.size(); }
 
 int TableMeta::sys_field_num() const
 {
@@ -175,26 +163,17 @@ const IndexMeta *TableMeta::find_index_by_field(const char *field) const
   return nullptr;
 }
 
-const IndexMeta *TableMeta::index(int i) const
-{
-  return &indexes_[i];
-}
+const IndexMeta *TableMeta::index(int i) const { return &indexes_[i]; }
 
-int TableMeta::index_num() const
-{
-  return indexes_.size();
-}
+int TableMeta::index_num() const { return indexes_.size(); }
 
-int TableMeta::record_size() const
-{
-  return record_size_;
-}
+int TableMeta::record_size() const { return record_size_; }
 
 int TableMeta::serialize(std::ostream &ss) const
 {
 
   Json::Value table_value;
-  table_value[FIELD_TABLE_ID]   = table_id_;
+  table_value[FIELD_TABLE_ID] = table_id_;
   table_value[FIELD_TABLE_NAME] = name_;
 
   Json::Value fields_value;
@@ -305,13 +284,9 @@ int TableMeta::deserialize(std::istream &is)
   return (int)(is.tellg() - old_pos);
 }
 
-int TableMeta::get_serial_size() const
-{
-  return -1;
-}
+int TableMeta::get_serial_size() const { return -1; }
 
-void TableMeta::to_string(std::string &output) const
-{}
+void TableMeta::to_string(std::string &output) const {}
 
 void TableMeta::desc(std::ostream &os) const
 {

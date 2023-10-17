@@ -16,8 +16,7 @@ See the Mulan PSL v2 for more details. */
 #include "sql/stmt/stmt.h"
 #include "common/log/log.h"
 
-ExplainStmt::ExplainStmt(std::unique_ptr<Stmt> child_stmt) : child_stmt_(std::move(child_stmt))
-{}
+ExplainStmt::ExplainStmt(std::unique_ptr<Stmt> child_stmt) : child_stmt_(std::move(child_stmt)) {}
 
 RC ExplainStmt::create(Db *db, const ExplainSqlNode &explain, Stmt *&stmt)
 {

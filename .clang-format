@@ -4,8 +4,8 @@ Language: Cpp
 SortIncludes: false
 AccessModifierOffset: -2
 AlignAfterOpenBracket: DontAlign
-AlignConsecutiveAssignments: true
-AlignConsecutiveDeclarations: true
+# AlignConsecutiveAssignments: true
+# AlignConsecutiveDeclarations: true
 DerivePointerAlignment: false
 PointerAlignment: Right
 ConstructorInitializerIndentWidth: 4

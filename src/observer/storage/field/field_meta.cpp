@@ -25,8 +25,7 @@ const static Json::StaticString FIELD_OFFSET("offset");
 const static Json::StaticString FIELD_LEN("len");
 const static Json::StaticString FIELD_VISIBLE("visible");
 
-FieldMeta::FieldMeta() : attr_type_(AttrType::UNDEFINED), attr_offset_(-1), attr_len_(0), visible_(false)
-{}
+FieldMeta::FieldMeta() : attr_type_(AttrType::UNDEFINED), attr_offset_(-1), attr_len_(0), visible_(false) {}
 
 FieldMeta::FieldMeta(const char *name, AttrType attr_type, int attr_offset, int attr_len, bool visible)
 {
@@ -57,30 +56,15 @@ RC FieldMeta::init(const char *name, AttrType attr_type, int attr_offset, int at
   return RC::SUCCESS;
 }
 
-const char *FieldMeta::name() const
-{
-  return name_.c_str();
-}
+const char *FieldMeta::name() const { return name_.c_str(); }
 
-AttrType FieldMeta::type() const
-{
-  return attr_type_;
-}
+AttrType FieldMeta::type() const { return attr_type_; }
 
-int FieldMeta::offset() const
-{
-  return attr_offset_;
-}
+int FieldMeta::offset() const { return attr_offset_; }
 
-int FieldMeta::len() const
-{
-  return attr_len_;
-}
+int FieldMeta::len() const { return attr_len_; }
 
-bool FieldMeta::visible() const
-{
-  return visible_;
-}
+bool FieldMeta::visible() const { return visible_; }
 
 void FieldMeta::desc(std::ostream &os) const
 {

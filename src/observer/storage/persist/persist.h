@@ -24,7 +24,7 @@ See the Mulan PSL v2 for more details. */
 
 #include "common/rc.h"
 
-class PersistHandler 
+class PersistHandler
 {
 public:
   PersistHandler();

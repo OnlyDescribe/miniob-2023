@@ -39,12 +39,6 @@ RC InsertPhysicalOperator::open(Trx *trx)
   return rc;
 }
 
-RC InsertPhysicalOperator::next()
-{
-  return RC::RECORD_EOF;
-}
+RC InsertPhysicalOperator::next() { return RC::RECORD_EOF; }
 
-RC InsertPhysicalOperator::close()
-{
-  return RC::SUCCESS;
-}
+RC InsertPhysicalOperator::close() { return RC::SUCCESS; }

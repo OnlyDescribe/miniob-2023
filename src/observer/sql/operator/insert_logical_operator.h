@@ -29,10 +29,7 @@ public:
   InsertLogicalOperator(Table *table, std::vector<Value> values);
   virtual ~InsertLogicalOperator() = default;
 
-  LogicalOperatorType type() const override
-  {
-    return LogicalOperatorType::INSERT;
-  }
+  LogicalOperatorType type() const override { return LogicalOperatorType::INSERT; }
 
   Table *table() const { return table_; }
   const std::vector<Value> &values() const { return values_; }

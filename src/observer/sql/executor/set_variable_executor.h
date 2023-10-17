@@ -69,21 +69,9 @@ private:
       bool_value = var_value.get_float() != 0.0;
     } else if (var_value.attr_type() == AttrType::CHARS) {
 
-      std::string true_strings[] = {
-          "true",
-          "on",
-          "yes",
-          "t",
-          "1"
-      };
+      std::string true_strings[] = {"true", "on", "yes", "t", "1"};
 
-      std::string false_strings[] = {
-          "false",
-          "off",
-          "no",
-          "f",
-          "0"
-      };
+      std::string false_strings[] = {"false", "off", "no", "f", "0"};
 
       for (size_t i = 0; i < sizeof(true_strings) / sizeof(true_strings[0]); i++) {
         if (strcasecmp(var_value.get_string().c_str(), true_strings[i].c_str()) == 0) {

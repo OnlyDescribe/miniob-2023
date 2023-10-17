@@ -46,10 +46,7 @@ bool *&_get_init()
   return util_init_p;
 }
 
-bool get_init()
-{
-  return *_get_init();
-}
+bool get_init() { return *_get_init(); }
 
 void set_init(bool value)
 {
@@ -157,7 +154,7 @@ int init_global_objects(ProcessParam *process_param, Ini &properties)
   BufferPoolManager::set_instance(GCTX.buffer_pool_manager_);
 
   GCTX.handler_ = new DefaultHandler();
-  
+
   DefaultHandler::set_default(GCTX.handler_);
 
   int ret = 0;
@@ -266,7 +263,7 @@ int init(ProcessParam *process_param)
 void cleanup_util()
 {
   uninit_global_objects();
-  
+
   if (nullptr != get_properties()) {
     delete get_properties();
     get_properties() = nullptr;
@@ -281,7 +278,4 @@ void cleanup_util()
   return;
 }
 
-void cleanup()
-{
-  cleanup_util();
-}
+void cleanup() { cleanup_util(); }

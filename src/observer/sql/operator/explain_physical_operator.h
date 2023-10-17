@@ -26,10 +26,7 @@ public:
   ExplainPhysicalOperator() = default;
   virtual ~ExplainPhysicalOperator() = default;
 
-  PhysicalOperatorType type() const override
-  {
-    return PhysicalOperatorType::EXPLAIN;
-  }
+  PhysicalOperatorType type() const override { return PhysicalOperatorType::EXPLAIN; }
 
   RC open(Trx *trx) override;
   RC next() override;
