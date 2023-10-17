@@ -22,6 +22,7 @@ See the Mulan PSL v2 for more details. */
 #include <functional>
 #include <memory>
 
+#include "sql/parser/value.h"
 #include "storage/record/record_manager.h"
 #include "storage/buffer/disk_buffer_pool.h"
 #include "storage/trx/latch_memo.h"
@@ -71,6 +72,9 @@ public:
       }
       case CHARS: {
         return common::compare_string((void *)v1, attr_length_, (void *)v2, attr_length_);
+      }
+      case DATES: {
+        return common::compare_date((void *)v1, (void *)v2);
       }
       default: {
         ASSERT(false, "unknown attr type. %d", attr_type_);
@@ -145,6 +149,9 @@ public:
           str.push_back(v[i]);
         }
         return str;
+      }
+      case DATES: {
+        return std::to_string(*(int *)v);
       }
       default: {
         ASSERT(false, "unknown attr type. %d", attr_type_);

@@ -23,6 +23,7 @@ See the Mulan PSL v2 for more details. */
 enum AttrType
 {
   UNDEFINED,
+  DATES,     ///< 日期类型
   CHARS,     ///< 字符串类型
   INTS,      ///< 整数类型(4字节)
   FLOATS,    ///< 浮点数类型(4字节)
@@ -47,6 +48,7 @@ public:
   explicit Value(float val);
   explicit Value(bool val);
   explicit Value(const char *s, int len = 0);
+  explicit Value(const char *s, AttrType type);
 
   Value(const Value &other) = default;
   Value &operator=(const Value &other) = default;
@@ -58,9 +60,12 @@ public:
   void set_float(float val);
   void set_boolean(bool val);
   void set_string(const char *s, int len = 0);
+  void set_date(const char *s);
+  void set_date(int date);
   void set_value(const Value &value);
 
   std::string to_string() const;
+  int to_date() const;
 
   int compare(const Value &other) const;
 
@@ -68,6 +73,8 @@ public:
   int length() const { return length_; }
 
   AttrType attr_type() const { return attr_type_; }
+
+  bool check_date();
 
 public:
   /**
@@ -86,6 +93,7 @@ private:
   union
   {
     int int_value_;
+    int date_value_;
     float float_value_;
     bool bool_value_;
   } num_value_;

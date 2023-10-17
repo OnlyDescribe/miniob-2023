@@ -110,6 +110,7 @@ ROLLBACK                                RETURN_TOKEN(TRX_ROLLBACK);
 INT                                     RETURN_TOKEN(INT_T);
 CHAR                                    RETURN_TOKEN(STRING_T);
 FLOAT                                   RETURN_TOKEN(FLOAT_T);
+DATE                                    RETURN_TOKEN(DATE_T);
 LOAD                                    RETURN_TOKEN(LOAD);
 DATA                                    RETURN_TOKEN(DATA);
 INFILE                                  RETURN_TOKEN(INFILE);
@@ -127,14 +128,15 @@ EXPLAIN                                 RETURN_TOKEN(EXPLAIN);
 ">="                                    RETURN_TOKEN(GE);
 ">"                                     RETURN_TOKEN(GT);
 
-"+" |
-"-" |
-"*" |
-"/"                                     { return yytext[0]; }
-\"[^"]*\"                               yylval->string = strdup(yytext); RETURN_TOKEN(SSS);
-'[^']*\'                                yylval->string = strdup(yytext); RETURN_TOKEN(SSS);
+"+"                                                               |
+"-"                                                               |
+"*"                                                               |
+"/"                                                               { return yytext[0]; }
+{QUOTE}([0-9]{4})\-([0-9]{1,2})\-([0-9]{1,2}){QUOTE}              yylval->string = strdup(yytext); RETURN_TOKEN(DATE);
+\"[^"]*\"                                                         yylval->string = strdup(yytext); RETURN_TOKEN(SSS);
+'[^']*\'                                                          yylval->string = strdup(yytext); RETURN_TOKEN(SSS);
 
-.                                       LOG_DEBUG("Unknown character [%c]",yytext[0]); return yytext[0];
+.                                                                 LOG_DEBUG("Unknown character [%c]",yytext[0]); return yytext[0];
 %%
 
 void scan_string(const char *str, yyscan_t scanner) {

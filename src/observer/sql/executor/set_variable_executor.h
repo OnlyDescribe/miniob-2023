@@ -87,6 +87,8 @@ private:
         }
       }
       rc = RC::VARIABLE_NOT_VALID;
+    } else if (var_value.attr_type() == AttrType::DATES) {
+      bool_value = var_value.get_boolean();
     }
 
     return rc;
