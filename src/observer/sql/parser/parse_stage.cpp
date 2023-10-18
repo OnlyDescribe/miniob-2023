@@ -51,7 +51,6 @@ RC ParseStage::handle_request(SQLStageEvent *sql_event)
   std::unique_ptr<ParsedSqlNode> sql_node = std::move(parsed_sql_result.sql_nodes().front());
   
   if (sql_node->flag == SCF_INVALID) {
-    // set error information to event
     rc = RC::VARIABLE_NOT_VALID;
     sql_result->set_return_code(rc);
     // sql_result->set_state_string("Failed to parse sql"); // OUTPUT FAILURE
