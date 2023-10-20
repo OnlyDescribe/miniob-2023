@@ -60,6 +60,7 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
         TABLE
         TABLES
         INDEX
+        UNIQUE
         CALC
         SELECT
         DESC
@@ -115,6 +116,8 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
   std::vector<RelAttrSqlNode> *     rel_attr_list;
   std::vector<std::string> *        relation_list;
   char *                            string;
+  std::vector<char *> *             string_list;
+  std::vector<std::string> *        std_string_list;
   int                               number;
   float                             floats;
 }
@@ -132,6 +135,7 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
 %type <value>               value
 %type <number>              number
 %type <comp>                comp_op
+%type <std_string_list>     id_list
 %type <rel_attr>            rel_attr
 %type <attr_infos>          attr_def_list
 %type <attr_info>           attr_def
@@ -259,16 +263,66 @@ desc_table_stmt:
     ;
 
 create_index_stmt:    /*create index 语句的语法解析树*/
-    CREATE INDEX ID ON ID LBRACE ID RBRACE
+    CREATE INDEX ID ON ID LBRACE ID id_list RBRACE
     {
       $$ = new ParsedSqlNode(SCF_CREATE_INDEX);
       CreateIndexSqlNode &create_index = $$->create_index;
       create_index.index_name = $3;
       create_index.relation_name = $5;
-      create_index.attribute_name = $7;
+      create_index.is_unique = false;
+      
+      std::vector<std::string> *attribute_name_vec = $8;
+
+      if (attribute_name_vec != nullptr) {
+        create_index.attribute_name.swap(*attribute_name_vec);
+      }
+
+      create_index.attribute_name.emplace_back($7);
+      std::reverse(create_index.attribute_name.begin(), create_index.attribute_name.end());
+
       free($3);
       free($5);
       free($7);
+      free($8);
+    }
+    | CREATE UNIQUE INDEX ID ON ID LBRACE ID id_list RBRACE
+    {
+      $$ = new ParsedSqlNode(SCF_CREATE_INDEX);
+      CreateIndexSqlNode &create_index = $$->create_index;
+      create_index.index_name = $4;
+      create_index.relation_name = $6;
+      create_index.is_unique = true;
+      
+      std::vector<std::string> *attribute_name_vec = $9;
+
+      if (attribute_name_vec != nullptr) {
+        create_index.attribute_name.swap(*attribute_name_vec);
+      }
+
+      create_index.attribute_name.emplace_back($8);
+      std::reverse(create_index.attribute_name.begin(), create_index.attribute_name.end());
+
+      free($4);
+      free($6);
+      free($8);
+      free($9);
+    }
+    ;
+
+id_list:
+    /* empty */
+    {
+      $$ = nullptr;
+    }
+    | COMMA ID id_list
+    {
+      if ($3 != nullptr) {
+        $$ = $3;
+      } else {
+        $$ = new std::vector<std::string>;
+      }
+      $$->emplace_back($2);
+      delete $2;
     }
     ;
 

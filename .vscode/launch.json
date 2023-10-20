@@ -22,6 +22,7 @@
             "request": "launch",
             "name": "LLDB",
             "program": "${workspaceFolder}/build/bin/observer",
+            // "program": "${workspaceFolder}/build/bin/bplus_tree_test",
             // "program": "${workspaceFolder}/${defaultBuildTask}/bin/observer",
             "args": ["-f", "${workspaceFolder}/etc/observer.ini", "-P", "cli"],
             "cwd": "${workspaceFolder}/build"

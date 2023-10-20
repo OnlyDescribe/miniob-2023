@@ -32,5 +32,16 @@ RC CreateIndexExecutor::execute(SQLStageEvent *sql_event)
 
   Trx *trx = session->current_trx();
   Table *table = create_index_stmt->table();
-  return table->create_index(trx, create_index_stmt->field_meta(), create_index_stmt->index_name().c_str());
+
+  // 这里从db复制了一份字段field_metas(一般字段名不大)
+  // 这是考虑到尽可能少修改并统一联合索引字段的接口, 即 const std::vector<FieldMeta> &field_meta
+  std::vector<FieldMeta> new_field_metas;
+  const std::vector<const FieldMeta *> &field_metas = create_index_stmt->field_meta();
+  new_field_metas.reserve(field_metas.size());
+  for (const FieldMeta *field_meta_ptr : field_metas) {
+    new_field_metas.push_back(*field_meta_ptr);
+  }
+
+  return table->create_index(
+      trx, new_field_metas, create_index_stmt->index_name().c_str(), create_index_stmt->is_unique());
 }

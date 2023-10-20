@@ -21,6 +21,7 @@ See the Mulan PSL v2 for more details. */
 #include <sstream>
 #include <functional>
 #include <memory>
+#include <vector>
 
 #include "sql/parser/value.h"
 #include "storage/record/record_manager.h"
@@ -53,39 +54,62 @@ enum class BplusTreeOperationType
 class AttrComparator
 {
 public:
-  void init(AttrType type, int length)
+  // TODO NULL
+  void init(const std::vector<AttrType> &type, const std::vector<int> &length)
   {
     attr_type_ = type;
     attr_length_ = length;
   }
 
-  int attr_length() const { return attr_length_; }
+  int attr_length() const
+  {
+    int len{0};
+    for (int i = 0; i < attr_length_.size(); ++i) {
+      len += attr_length_[i];
+    }
+
+    return len;
+  }
 
   int operator()(const char *v1, const char *v2) const
   {
-    switch (attr_type_) {
-      case INTS: {
-        return common::compare_int((void *)v1, (void *)v2);
-      } break;
-      case FLOATS: {
-        return common::compare_float((void *)v1, (void *)v2);
+    int pos{0};
+    int res;
+
+    // TODO(oldcb): 支持null类型
+    for (int i = 0; i < attr_type_.size(); ++i) {
+      switch (attr_type_[i]) {
+        case INTS: {
+          res = common::compare_int((void *)(pos + v1), (void *)(pos + v2));
+        } break;
+        case FLOATS: {
+          res = common::compare_float((void *)(pos + v1), (void *)(pos + v2));
+        }
+        case CHARS: {
+          res = common::compare_string((void *)(pos + v1), attr_length_[i], (void *)(pos + v2), attr_length_[i]);
+        }
+        case DATES: {
+          res = common::compare_date((void *)(pos + v1), (void *)(pos + v2));
+        }
+        default: {
+          ASSERT(false, "unknown attr type. %d", attr_type_[i]);
+          // LOG_ERROR("unknown attr type. %d", attr_type_[i]);
+          return 0;
+        }
       }
-      case CHARS: {
-        return common::compare_string((void *)v1, attr_length_, (void *)v2, attr_length_);
-      }
-      case DATES: {
-        return common::compare_date((void *)v1, (void *)v2);
-      }
-      default: {
-        ASSERT(false, "unknown attr type. %d", attr_type_);
-        return 0;
+      pos += attr_length_[i];
+
+      if (res != 0) {
+        return res;
       }
     }
+    return 0;
   }
 
 private:
-  AttrType attr_type_;
-  int attr_length_;
+  // std::vector<int> attr_id_;         // 各字段对应在表中是第几位
+  std::vector<AttrType> attr_type_;  // 将多个字段看成一个, 采用字典序进行比较
+  std::vector<int> attr_length_;
 };
 
 /**
@@ -96,14 +120,25 @@ private:
 class KeyComparator
 {
 public:
-  void init(AttrType type, int length) { attr_comparator_.init(type, length); }
+  // 测试需要该接口
+  void init(const AttrType &type, int length, bool is_unique = false)
+  {
+    is_unique_ = is_unique;
+    attr_comparator_.init(std::vector<AttrType>{type}, std::vector<int>{length});
+  }
+
+  void init(const std::vector<AttrType> &type, const std::vector<int> &length, bool is_unique = false)
+  {
+    is_unique_ = is_unique;
+    attr_comparator_.init(type, length);
+  }
 
   const AttrComparator &attr_comparator() const { return attr_comparator_; }
 
   int operator()(const char *v1, const char *v2) const
   {
     int result = attr_comparator_(v1, v2);
-    if (result != 0) {
+    if (is_unique_ || result != 0) {
       return result;
     }
 
@@ -113,6 +148,7 @@ public:
   }
 
 private:
+  bool is_unique_ = false;
   AttrComparator attr_comparator_;
 };
 
@@ -123,46 +159,56 @@ private:
 class AttrPrinter
 {
 public:
-  void init(AttrType type, int length)
+  void init(const std::vector<AttrType> &type, const std::vector<int> &length)
   {
     attr_type_ = type;
     attr_length_ = length;
   }
 
-  int attr_length() const { return attr_length_; }
+  int attr_length() const
+  {
+    int len{0};
+    for (int i = 0; i < attr_length_.size(); ++i) {
+      len += attr_length_[i];
+    }
+
+    return len;
+  }
 
   std::string operator()(const char *v) const
   {
-    switch (attr_type_) {
-      case INTS: {
-        return std::to_string(*(int *)v);
-      } break;
-      case FLOATS: {
-        return std::to_string(*(float *)v);
-      }
-      case CHARS: {
-        std::string str;
-        for (int i = 0; i < attr_length_; i++) {
-          if (v[i] == 0) {
-            break;
-          }
-          str.push_back(v[i]);
+    for (int i = 0; i < attr_type_.size(); ++i) {
+      switch (attr_type_[i]) {
+        case INTS: {
+          return std::to_string(*(int *)v);
+        } break;
+        case FLOATS: {
+          return std::to_string(*(float *)v);
         }
-        return str;
-      }
-      case DATES: {
-        return std::to_string(*(int *)v);
-      }
-      default: {
-        ASSERT(false, "unknown attr type. %d", attr_type_);
+        case CHARS: {
+          std::string str;
+          for (int j = 0; j < attr_length_[i]; j++) {
+            if (v[j] == 0) {
+              break;
+            }
+            str.push_back(v[j]);
+          }
+          return str;
+        }
+        case DATES: {
+          return std::to_string(*(int *)v);
+        }
+        default: {
+          ASSERT(false, "unknown attr type. %d", attr_type_);
+        }
       }
     }
     return std::string();
   }
 
 private:
-  AttrType attr_type_;
-  int attr_length_;
+  std::vector<AttrType> attr_type_;
+  std::vector<int> attr_length_;
 };
 
 /**
@@ -172,7 +218,7 @@ private:
 class KeyPrinter
 {
 public:
-  void init(AttrType type, int length) { attr_printer_.init(type, length); }
+  void init(const std::vector<AttrType> &type, const std::vector<int> &length) { attr_printer_.init(type, length); }
 
   const AttrPrinter &attr_printer() const { return attr_printer_; }
 
@@ -203,23 +249,39 @@ struct IndexFileHeader
     memset(this, 0, sizeof(IndexFileHeader));
     root_page = BP_INVALID_PAGE_NUM;
   }
-  PageNum root_page;          ///< 根节点在磁盘中的页号
-  int32_t internal_max_size;  ///< 内部节点最大的键值对数
-  int32_t leaf_max_size;      ///< 叶子节点最大的键值对数
-  int32_t attr_length;        ///< 键值的长度
-  int32_t key_length;         ///< attr length + sizeof(RID)
-  AttrType attr_type;         ///< 键值的类型
+
+  static constexpr int MAX_NUM = 15;
+
+  // TODO
+  bool is_unique;
+  PageNum root_page;             ///< 根节点在磁盘中的页号
+  int32_t internal_max_size;     ///< 内部节点最大的键值对数
+  int32_t leaf_max_size;         ///< 叶子节点最大的键值对数
+  int32_t key_length;            ///< attr length + sizeof(RID)
+  int32_t attr_num;              ///< 键值的数量
+  int32_t attr_length[MAX_NUM];  ///< 键值的长度
+  AttrType attr_type[MAX_NUM];   ///< 键值的类型
 
   const std::string to_string()
   {
     std::stringstream ss;
 
-    ss << "attr_length:" << attr_length << ","
-       << "key_length:" << key_length << ","
-       << "attr_type:" << attr_type << ","
-       << "root_page:" << root_page << ","
+    ss << "root_page:" << root_page << ","
        << "internal_max_size:" << internal_max_size << ","
-       << "leaf_max_size:" << leaf_max_size << ";";
+       << "leaf_max_size:" << leaf_max_size << ","
+       << "key_length:" << key_length << "\n";
+
+    ss << "attr_length:" << attr_length[0];
+    for (int i = 1; i < attr_num; ++i) {
+      ss << ", :" << attr_length[1];
+    }
+    ss << "\n";
+
+    ss << "attr_type:" << attr_type[0];
+    for (int i = 1; i < attr_num; ++i) {
+      ss << ", :" << attr_type[1];
+    }
+    ss << ";";
 
     return ss.str();
   }
@@ -449,8 +511,10 @@ public:
    * 此函数创建一个名为fileName的索引。
    * attrType描述被索引属性的类型，attrLength描述被索引属性的长度
    */
-  RC create(
-      const char *file_name, AttrType attr_type, int attr_length, int internal_max_size = -1, int leaf_max_size = -1);
+  RC create(const char *file_name, AttrType attr_type, int attr_length, bool is_unique, int internal_max_size = -1,
+      int leaf_max_size = -1);  // bplus_tree_test 单元测试需要该接口
+  RC create(const char *file_name, const std::vector<AttrType> &attr_type, const std::vector<int> &attr_length,
+      bool is_unique, int internal_max_size = -1, int leaf_max_size = -1);
 
   /**
    * 打开名为fileName的索引文件。

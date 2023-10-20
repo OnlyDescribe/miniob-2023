@@ -13,6 +13,7 @@ See the Mulan PSL v2 for more details. */
 //
 
 #include <utility>
+#include <vector>
 
 #include "sql/operator/update_logical_operator.h"
 #include "sql/operator/update_physical_operator.h"
@@ -126,7 +127,9 @@ RC PhysicalPlanGenerator::create_plan(TableGetLogicalOperator &table_get_oper, u
       }
 
       const Field &field = field_expr->field();
-      index = table->find_index_by_field(field.field_name());
+      std::vector<std::string> field_name;
+      field_name.push_back(std::string{field.field_name()});
+      index = table->find_index_by_field(field_name);  // TODO(oldcb): 最左匹配
       if (nullptr != index) {
         break;
       }
