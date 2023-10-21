@@ -7,9 +7,8 @@ class Trx;
 class UpdatePhysicalOperator : public PhysicalOperator
 {
 public:
-  UpdatePhysicalOperator(Table *table, const Value *values, const FieldMeta *field_metas, int value_amount)
-      : table_(table), values_(values), field_metas_(field_metas), value_amount_(value_amount)
-  {}
+  UpdatePhysicalOperator(
+      Table *table, const std::vector<const Value *> &values, const std::vector<const FieldMeta *> &field_metas);
 
   virtual ~UpdatePhysicalOperator() = default;
 
@@ -23,9 +22,9 @@ public:
 
 private:
   Table *table_ = nullptr;
-  const Value *values_ = nullptr;
-  const FieldMeta *field_metas_ = nullptr;
-  int value_amount_ = 0;
+  std::vector<const Value *> values_;
+  std::vector<const FieldMeta *> field_metas_;
+  std::vector<int> index_field_metas_;
 
   Trx *trx_ = nullptr;
 };

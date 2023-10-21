@@ -126,15 +126,24 @@ struct DeleteSqlNode
   std::vector<ConditionSqlNode> conditions;
 };
 
+// 表示 Update 语句中 SET 的赋值
+struct AssignmentSqlNode
+{
+  std::string attribute_name;  ///< 属性名, 因为只支持单表, 不需要RelAttrSqlNode类型
+  Value value;                 ///< 值
+  // TODO(oldcb): 支持表达式
+};
+
 /**
  * @brief 描述一个update语句
  * @ingroup SQLParser
  */
 struct UpdateSqlNode
 {
-  std::string relation_name;   ///< Relation to update
-  std::string attribute_name;  ///< 更新的字段，仅支持一个字段
-  Value value;                 ///< 更新的值，仅支持一个字段
+  // std::vector<std::string> attribute_names;  ///< 更新的字段，支持多字段
+  // std::vector<Value> values;           ///< 更新的值，支持多字段
+  std::string relation_name;                 ///< Relation to update
+  std::vector<AssignmentSqlNode> assignments;
   std::vector<ConditionSqlNode> conditions;
 };
 

@@ -123,6 +123,7 @@ union YYSTYPE
   std::vector<AttrInfoSqlNode> *    attr_infos;
   AttrInfoSqlNode *                 attr_info;
   Expression *                      expression;
+  AssignmentSqlNode *               assignment;
   std::vector<Expression *> *       expression_list;
   std::vector<Value> *              value_list;
   std::vector<ConditionSqlNode> *   condition_list;
@@ -131,10 +132,11 @@ union YYSTYPE
   char *                            string;
   std::vector<char *> *             string_list;
   std::vector<std::string> *        std_string_list;
+  std::vector<AssignmentSqlNode> *  assignment_list;
   int                               number;
   float                             floats;
 
-#line 138 "yacc_sql.hpp"
+#line 140 "yacc_sql.hpp"
 
 };
 typedef union YYSTYPE YYSTYPE;

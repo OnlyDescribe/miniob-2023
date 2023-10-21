@@ -220,11 +220,11 @@ RC LogicalPlanGenerator::create_plan(UpdateStmt *update_stmt, unique_ptr<Logical
     return rc;
   }
 
-  const Value *values_ = update_stmt->values();
-  const FieldMeta *field_metas_ = update_stmt->field_metas();
-  int value_amount_ = 1;
+  const std::vector<const Value *> &values_ = update_stmt->values();
+  const std::vector<const FieldMeta *> &field_metas_ = update_stmt->field_metas();
+
   unique_ptr<LogicalOperator> update_oper(
-      new UpdateLogicalOperator(table, values_, field_metas_, value_amount_));  // 需要将修改的字段和值放进去
+      new UpdateLogicalOperator(table, values_, field_metas_));  // 需要将修改的字段和值放进去
 
   if (predicate_oper) {
     predicate_oper->add_child(std::move(table_get_oper));

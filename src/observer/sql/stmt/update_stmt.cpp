@@ -17,9 +17,9 @@ See the Mulan PSL v2 for more details. */
 #include "sql/stmt/filter_stmt.h"
 #include "storage/db/db.h"
 
-UpdateStmt::UpdateStmt(
-    Table *table, const Value *values, const FieldMeta *field_metas, int value_amount, FilterStmt *filter_stmt)
-    : table_(table), values_(values), value_amount_(value_amount), field_metas_(field_metas), filter_stmt_(filter_stmt)
+UpdateStmt::UpdateStmt(Table *table, const std::vector<const Value *> &values,
+    const std::vector<const FieldMeta *> &field_metas, FilterStmt *filter_stmt)
+    : table_(table), values_(values), field_metas_(field_metas), filter_stmt_(filter_stmt)
 {}
 
 RC UpdateStmt::create(Db *db, const UpdateSqlNode &update, Stmt *&stmt)
@@ -38,9 +38,10 @@ RC UpdateStmt::create(Db *db, const UpdateSqlNode &update, Stmt *&stmt)
   }
 
   // 1. 处理更新字段
-  const Value *values = nullptr;
-  const FieldMeta *field_metas = nullptr;
-  const int value_amount = 1;  // TODO: 目前仅支持更新单字段, 支持更新多字段
+  std::vector<const Value *> values;
+  std::vector<const FieldMeta *> field_metas;
+
+  const int value_amount = update.assignments.size();
 
   const TableMeta &table_meta = table->table_meta();
   const int sys_field_num = table_meta.sys_field_num();
@@ -48,34 +49,44 @@ RC UpdateStmt::create(Db *db, const UpdateSqlNode &update, Stmt *&stmt)
 
   // 检查表中是否存在相应字段, 设置field_metas和values
   for (int i = 0; i < value_amount; ++i) {
-    const std::string &attribute_name = update.attribute_name;
+    const std::string &attribute_name = update.assignments[i].attribute_name;
+
     if (attribute_name.empty()) {
       LOG_WARN("invalid argument");
       return RC::INVALID_ARGUMENT;
     }
 
     bool field_found{false};
-    for (int i = sys_field_num; i < field_num; i++) {
-      if (0 != strcmp(table_meta.field(i)->name(), attribute_name.c_str())) {
+    for (int j = sys_field_num; j < field_num; j++) {
+      if (0 != strcmp(table_meta.field(j)->name(), attribute_name.c_str())) {
         continue;
       } else {
         field_found = true;
-        field_metas = table_meta.field(i);
-        // TODO(oldcb) 处理表达式: 子查询
-        values = &update.value;  // 注意update资源的生命周期
+        field_metas.push_back(table_meta.field(j));
         break;
       }
     }
+
+    // TODO(oldcb) 处理表达式: 子查询
+    values.push_back(&update.assignments[i].value);  // 注意update资源的生命周期
 
     if (!field_found) {
       LOG_WARN("no such table. db=%s, table_name=%s", db->name(), table_name);
       return RC::SCHEMA_TABLE_NOT_EXIST;
     }
+
+    // 检查字段和值类型是否冲突
+    ASSERT(!field_metas.empty(), "");
+    const AttrType value_type = update.assignments[i].value.attr_type();
+    const AttrType field_type = field_metas.back()->type();
+    if (field_type != value_type) {  // TODO try to convert the value type to field type
+      LOG_WARN("field type mismatch. table=%s, field=%s, field type=%d, value_type=%d",
+          table_name, field_metas.back()->name(), field_type, value_type);
+      return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+    }
   }
 
   // 2. 处理过滤条件
-  const std::vector<ConditionSqlNode> &conditions = update.conditions;
-
   std::unordered_map<std::string, Table *> table_map;
   table_map.insert(std::pair<std::string, Table *>(std::string(table_name), table));
   // create filter statement in `where` statement
@@ -89,6 +100,6 @@ RC UpdateStmt::create(Db *db, const UpdateSqlNode &update, Stmt *&stmt)
   }
 
   // 3. everything alright
-  stmt = new UpdateStmt(table, values, field_metas, value_amount, filter_stmt);
+  stmt = new UpdateStmt(table, values, field_metas, filter_stmt);
   return RC::SUCCESS;
 }

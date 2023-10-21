@@ -5,6 +5,25 @@
 #include "storage/trx/trx.h"
 #include "sql/stmt/update_stmt.h"
 
+UpdatePhysicalOperator::UpdatePhysicalOperator(
+    Table *table, const std::vector<const Value *> &values, const std::vector<const FieldMeta *> &field_metas)
+    : table_(table), values_(values), field_metas_(field_metas)
+{  // 找到需要修改的字段是第几个
+  index_field_metas_.reserve(field_metas_.size());
+  for (const auto &field_meta : field_metas_) {
+    int field_index;
+    const std::vector<FieldMeta> &table_field_metas = *table_->table_meta().field_metas();
+    auto it = std::find_if(table_field_metas.begin(),
+        table_field_metas.end(),
+        [update_field_meta = field_meta](const FieldMeta &meta) { return meta.name() == update_field_meta->name(); });
+
+    ASSERT(it != table_field_metas.end(), "failed to get field index");
+    field_index = std::distance(table_field_metas.begin(), it);
+    field_index -= table_->table_meta().sys_field_num();
+    index_field_metas_.push_back(field_index);
+  }
+}
+
 RC UpdatePhysicalOperator::open(Trx *trx)
 {
   ASSERT(children_.size() == 1, "update operator must has one child");
@@ -36,17 +55,6 @@ RC UpdatePhysicalOperator::next()
 
   PhysicalOperator *child = children_[0].get();
 
-  // 找到需要修改的字段是第几个
-  int field_index;
-  const std::vector<FieldMeta> &field_metas_vec = *table_->table_meta().field_metas();
-  auto it = std::find_if(field_metas_vec.begin(),
-      field_metas_vec.end(),
-      [field_metas_ = this->field_metas_](const FieldMeta &meta) { return meta.name() == field_metas_->name(); });
-
-  ASSERT(it != field_metas_vec.end(), "failed to get field index");
-  field_index = std::distance(field_metas_vec.begin(), it);
-  field_index -= table_->table_meta().sys_field_num();
-
   // next
   while (RC::SUCCESS == (rc = child->next())) {
     Tuple *tuple = child->current_tuple();
@@ -68,19 +76,22 @@ RC UpdatePhysicalOperator::next()
 
     // 替换得到新Tuple
     Record new_record;
+    Value cell;
 
     std::vector<Value> values;
-    Value cell;
     int value_num = row_tuple->cell_num();
     values.reserve(value_num);
-    for (int i = 0; i < value_num; ++i) {
+
+    for (int i = 0, j = 0; i < value_num; ++i) {
       row_tuple->cell_at(i, cell);
-      if (field_index == i) {
-        values.push_back(*values_);
+      if (index_field_metas_[j] == i) {
+        values.push_back(*values_[j]);
+        ++j;
       } else {
         values.push_back(cell);
       }
     }
+
     RC rc = table_->make_record(value_num, values.data(), new_record);
     if (rc != RC::SUCCESS) {
       LOG_WARN("failed to make record. rc=%s", strrc(rc));

@@ -110,6 +110,7 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
   std::vector<AttrInfoSqlNode> *    attr_infos;
   AttrInfoSqlNode *                 attr_info;
   Expression *                      expression;
+  AssignmentSqlNode *               assignment;
   std::vector<Expression *> *       expression_list;
   std::vector<Value> *              value_list;
   std::vector<ConditionSqlNode> *   condition_list;
@@ -118,6 +119,7 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
   char *                            string;
   std::vector<char *> *             string_list;
   std::vector<std::string> *        std_string_list;
+  std::vector<AssignmentSqlNode> *  assignment_list;
   int                               number;
   float                             floats;
 }
@@ -147,6 +149,7 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
 %type <rel_attr_list>       attr_list
 %type <expression>          expression
 %type <expression_list>     expression_list
+%type <assignment_list>     assignment_list
 %type <sql_node>            calc_stmt
 %type <sql_node>            select_stmt
 %type <sql_node>            insert_stmt
@@ -271,10 +274,10 @@ create_index_stmt:    /*create index 语句的语法解析树*/
       create_index.relation_name = $5;
       create_index.is_unique = false;
       
-      std::vector<std::string> *attribute_name_vec = $8;
+      std::vector<std::string> *attribute_names = $8;
 
-      if (attribute_name_vec != nullptr) {
-        create_index.attribute_name.swap(*attribute_name_vec);
+      if (attribute_names != nullptr) {
+        create_index.attribute_name.swap(*attribute_names);
       }
 
       create_index.attribute_name.emplace_back($7);
@@ -293,10 +296,10 @@ create_index_stmt:    /*create index 语句的语法解析树*/
       create_index.relation_name = $6;
       create_index.is_unique = true;
       
-      std::vector<std::string> *attribute_name_vec = $9;
+      std::vector<std::string> *attribute_names = $9;
 
-      if (attribute_name_vec != nullptr) {
-        create_index.attribute_name.swap(*attribute_name_vec);
+      if (attribute_names != nullptr) {
+        create_index.attribute_name.swap(*attribute_names);
       }
 
       create_index.attribute_name.emplace_back($8);
@@ -464,21 +467,59 @@ delete_stmt:    /*  delete 语句的语法解析树*/
       free($3);
     }
     ;
+
 update_stmt:      /*  update 语句的语法解析树*/
-    UPDATE ID SET ID EQ value where 
+    UPDATE ID SET ID EQ value assignment_list where 
     {
       $$ = new ParsedSqlNode(SCF_UPDATE);
       $$->update.relation_name = $2;
-      $$->update.attribute_name = $4;
-      $$->update.value = *$6;
+
       if ($7 != nullptr) {
-        $$->update.conditions.swap(*$7);
+        $$->update.assignments.swap(*$7);
         delete $7;
       }
+      if ($8 != nullptr) {
+        $$->update.conditions.swap(*$8);
+        delete $8;
+      }
+
+      AssignmentSqlNode node = {
+        .attribute_name = std::string{$4},
+        .value = *$6
+      };
+
+      $$->update.assignments.push_back(std::move(node));
+      std::reverse($$->update.assignments.begin(), $$->update.assignments.end());
+
       free($2);
       free($4);
+      free($6);
     }
     ;
+assignment_list:
+    /* empty */
+    {
+      $$ = nullptr;
+    }
+    | COMMA ID EQ value assignment_list
+    {
+      if ($5 != nullptr) {
+        $$ = $5;
+      } else {
+        $$ = new std::vector<AssignmentSqlNode>;
+      }
+
+      AssignmentSqlNode node = {
+        .attribute_name = std::string{$2},
+        .value = *$4
+      };
+
+      $$->push_back(std::move(node));
+      delete $2;
+      delete $4;
+    }
+    ;
+
 select_stmt:        /*  select 语句的语法解析树*/
     SELECT select_attr FROM ID rel_list where
     {

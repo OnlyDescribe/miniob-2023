@@ -483,7 +483,7 @@ TEST(test_bplus_tree, test_chars)
     rid.page_num = 0;
     rid.slot_num = i;
     rc = handler->insert_entry(keys[i], &rid);
-    // ASSERT_EQ(RC::SUCCESS, rc);
+    ASSERT_EQ(RC::SUCCESS, rc);
   }
 
   LOG_INFO("begin to print bplus tree of chars");
