@@ -84,16 +84,19 @@ public:
         } break;
         case FLOATS: {
           res = common::compare_float((void *)(pos + v1), (void *)(pos + v2));
+          break;
         }
         case CHARS: {
           res = common::compare_string((void *)(pos + v1), attr_length_[i], (void *)(pos + v2), attr_length_[i]);
+          break;
         }
         case DATES: {
           res = common::compare_date((void *)(pos + v1), (void *)(pos + v2));
+          break;
         }
         default: {
           ASSERT(false, "unknown attr type. %d", attr_type_[i]);
-          // LOG_ERROR("unknown attr type. %d", attr_type_[i]);
+          LOG_ERROR("unknown attr type. %d", attr_type_[i]);
           return 0;
         }
       }
