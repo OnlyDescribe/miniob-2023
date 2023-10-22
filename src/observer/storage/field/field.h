@@ -14,6 +14,7 @@ See the Mulan PSL v2 for more details. */
 
 #pragma once
 
+#include "sql/parser/parse_defs.h"
 #include "storage/table/table.h"
 #include "storage/field/field_meta.h"
 
@@ -25,7 +26,10 @@ class Field
 {
 public:
   Field() = default;
-  Field(const Table *table, const FieldMeta *field) : table_(table), field_(field) {}
+  // TODO: 感觉表示该字段是否需要聚合字段放在这里不合理
+  Field(const Table *table, const FieldMeta *field, AggrFuncType aggr_type = AggrFuncType::INVALID)
+      : table_(table), field_(field), aggr_type_(aggr_type)
+  {}
   Field(const Field &) = default;
 
   const Table *table() const { return table_; }
@@ -38,13 +42,19 @@ public:
 
   void set_table(const Table *table) { this->table_ = table; }
   void set_field(const FieldMeta *field) { this->field_ = field; }
-
+  void set_aggr(AggrFuncType aggr_type) { aggr_type_ = aggr_type; }
   void set_int(Record &record, int value);
+
   int get_int(const Record &record);
+
+  bool with_aggr() const { return aggr_type_ != AggrFuncType::INVALID; }
+
+  AggrFuncType get_aggr_type() const { return aggr_type_; }
 
   const char *get_data(const Record &record);
 
 private:
   const Table *table_ = nullptr;
   const FieldMeta *field_ = nullptr;
+  AggrFuncType aggr_type_ = AggrFuncType::INVALID;
 };

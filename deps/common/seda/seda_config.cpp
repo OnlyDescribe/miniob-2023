@@ -240,7 +240,7 @@ SedaConfig::status_t SedaConfig::init_thread_pool()
       std::string &thread_name = name_list[pos];
 
       // get count number
-      key = COUNT;
+      key = COUNT_STRING;
       std::string count_str = get_properties()->get(key, default_cpu_num_str, thread_name);
 
       int thread_count = 1;

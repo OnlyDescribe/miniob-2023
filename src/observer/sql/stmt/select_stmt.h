@@ -42,6 +42,8 @@ public:
   static RC create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt);
 
 public:
+  void set_is_aggregation_stmt(bool is_aggregation_stmt) { is_aggregation_stmt_ = is_aggregation_stmt; }
+  bool is_aggregation_stmt() const { return is_aggregation_stmt_; }
   const std::vector<Table *> &tables() const { return tables_; }
   const std::vector<Field> &query_fields() const { return query_fields_; }
   FilterStmt *filter_stmt() const { return filter_stmt_; }
@@ -50,4 +52,5 @@ private:
   std::vector<Field> query_fields_;
   std::vector<Table *> tables_;
   FilterStmt *filter_stmt_ = nullptr;
+  bool is_aggregation_stmt_{false};
 };

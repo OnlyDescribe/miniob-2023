@@ -24,6 +24,7 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/join_logical_operator.h"
 #include "sql/operator/project_logical_operator.h"
 #include "sql/operator/explain_logical_operator.h"
+#include "sql/operator/aggregation_logical_operator.h"
 #include "sql/operator/update_logical_operator.h"
 
 #include "sql/stmt/stmt.h"
@@ -115,19 +116,38 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
     return rc;
   }
 
-  unique_ptr<LogicalOperator> project_oper(new ProjectLogicalOperator(all_fields));
+  // 自低向上，构建logic_tree
+  unique_ptr<LogicalOperator> top_op;
   if (predicate_oper) {
     if (table_oper) {
       predicate_oper->add_child(std::move(table_oper));
     }
-    project_oper->add_child(std::move(predicate_oper));
+    top_op = move(predicate_oper);
   } else {
-    if (table_oper) {
-      project_oper->add_child(std::move(table_oper));
-    }
+    top_op = move(table_oper);
   }
 
-  logical_operator.swap(project_oper);
+  // 聚合 logic_op，直接使用构造
+  if (select_stmt->is_aggregation_stmt()) {
+    unique_ptr<LogicalOperator> aggr_oper = make_unique<AggregationLogicalOperator>();
+    std::vector<std::unique_ptr<Expression>> expressions;
+    for (const auto &field : all_fields) {
+      if (field.with_aggr()) {
+        expressions.emplace_back(std::make_unique<AggretationExpr>(field, field.get_aggr_type()));
+      }
+    }
+    static_cast<AggregationLogicalOperator *>(aggr_oper.get())->set_aggregation_expr(std::move(expressions));
+    aggr_oper->add_child(std::move(top_op));
+    top_op.swap(aggr_oper);
+  } else {
+    unique_ptr<LogicalOperator> project_oper(new ProjectLogicalOperator(all_fields));
+    if (top_op) {
+      project_oper->add_child(std::move(top_op));
+    }
+    top_op.swap(project_oper);
+  }
+
+  logical_operator.swap(top_op);
   return RC::SUCCESS;
 }
 

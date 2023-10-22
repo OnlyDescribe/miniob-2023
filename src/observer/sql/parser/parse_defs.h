@@ -28,6 +28,20 @@ class Expression;
  */
 
 /**
+ * @description: 聚合运算符
+ */
+enum class AggrFuncType
+{
+  INVALID,
+  MAX,
+  MIN,
+  SUM,
+  AVG,
+  COUNT,
+  COUNT_STAR
+};
+
+/**
  * @brief 描述一个属性
  * @ingroup SQLParser
  * @details 属性，或者说字段(column, field)
@@ -38,6 +52,8 @@ struct RelAttrSqlNode
 {
   std::string relation_name;   ///< relation name (may be NULL) 表名
   std::string attribute_name;  ///< attribute name              属性名
+  AggrFuncType aggr_type = AggrFuncType::INVALID;     // 聚合类型
+  std::vector<std::string> aggregates;          // 聚合字段
 };
 
 /**
@@ -92,6 +108,18 @@ struct SelectSqlNode
   std::vector<RelAttrSqlNode> attributes;    ///< attributes in select clause
   std::vector<std::string> relations;        ///< 查询的表
   std::vector<ConditionSqlNode> conditions;  ///< 查询条件，使用AND串联起来多个条件
+
+  bool IsAttributesVailid()
+  {
+    int relattr_cnt = 0;
+    for (const auto &node : attributes) {
+      if (node.aggr_type == AggrFuncType::INVALID) {
+        relattr_cnt++;
+      }
+    }
+    return relattr_cnt == 0 || (relattr_cnt == static_cast<int>(attributes.size()));
+  }
+
 };
 
 /**

@@ -70,41 +70,46 @@ extern int yydebug;
     DELETE = 271,                  /* DELETE  */
     UPDATE = 272,                  /* UPDATE  */
     LBRACE = 273,                  /* LBRACE  */
-    RBRACE = 274,                  /* RBRACE  */
-    COMMA = 275,                   /* COMMA  */
-    TRX_BEGIN = 276,               /* TRX_BEGIN  */
-    TRX_COMMIT = 277,              /* TRX_COMMIT  */
-    TRX_ROLLBACK = 278,            /* TRX_ROLLBACK  */
-    INT_T = 279,                   /* INT_T  */
-    STRING_T = 280,                /* STRING_T  */
-    FLOAT_T = 281,                 /* FLOAT_T  */
-    DATE_T = 282,                  /* DATE_T  */
-    HELP = 283,                    /* HELP  */
-    EXIT = 284,                    /* EXIT  */
-    DOT = 285,                     /* DOT  */
-    INTO = 286,                    /* INTO  */
-    VALUES = 287,                  /* VALUES  */
-    FROM = 288,                    /* FROM  */
-    WHERE = 289,                   /* WHERE  */
-    AND = 290,                     /* AND  */
-    SET = 291,                     /* SET  */
-    ON = 292,                      /* ON  */
-    LOAD = 293,                    /* LOAD  */
-    DATA = 294,                    /* DATA  */
-    INFILE = 295,                  /* INFILE  */
-    EXPLAIN = 296,                 /* EXPLAIN  */
-    EQ = 297,                      /* EQ  */
-    LT = 298,                      /* LT  */
-    GT = 299,                      /* GT  */
-    LE = 300,                      /* LE  */
-    GE = 301,                      /* GE  */
-    NE = 302,                      /* NE  */
-    NUMBER = 303,                  /* NUMBER  */
-    FLOAT = 304,                   /* FLOAT  */
-    ID = 305,                      /* ID  */
-    SSS = 306,                     /* SSS  */
-    DATE = 307,                    /* DATE  */
-    UMINUS = 308                   /* UMINUS  */
+    AGGR_MAX = 274,                /* AGGR_MAX  */
+    AGGR_MIN = 275,                /* AGGR_MIN  */
+    AGGR_SUM = 276,                /* AGGR_SUM  */
+    AGGR_AVG = 277,                /* AGGR_AVG  */
+    AGGR_COUNT = 278,              /* AGGR_COUNT  */
+    RBRACE = 279,                  /* RBRACE  */
+    COMMA = 280,                   /* COMMA  */
+    TRX_BEGIN = 281,               /* TRX_BEGIN  */
+    TRX_COMMIT = 282,              /* TRX_COMMIT  */
+    TRX_ROLLBACK = 283,            /* TRX_ROLLBACK  */
+    INT_T = 284,                   /* INT_T  */
+    STRING_T = 285,                /* STRING_T  */
+    FLOAT_T = 286,                 /* FLOAT_T  */
+    DATE_T = 287,                  /* DATE_T  */
+    HELP = 288,                    /* HELP  */
+    EXIT = 289,                    /* EXIT  */
+    DOT = 290,                     /* DOT  */
+    INTO = 291,                    /* INTO  */
+    VALUES = 292,                  /* VALUES  */
+    FROM = 293,                    /* FROM  */
+    WHERE = 294,                   /* WHERE  */
+    AND = 295,                     /* AND  */
+    SET = 296,                     /* SET  */
+    ON = 297,                      /* ON  */
+    LOAD = 298,                    /* LOAD  */
+    DATA = 299,                    /* DATA  */
+    INFILE = 300,                  /* INFILE  */
+    EXPLAIN = 301,                 /* EXPLAIN  */
+    EQ = 302,                      /* EQ  */
+    LT = 303,                      /* LT  */
+    GT = 304,                      /* GT  */
+    LE = 305,                      /* LE  */
+    GE = 306,                      /* GE  */
+    NE = 307,                      /* NE  */
+    NUMBER = 308,                  /* NUMBER  */
+    FLOAT = 309,                   /* FLOAT  */
+    ID = 310,                      /* ID  */
+    SSS = 311,                     /* SSS  */
+    DATE = 312,                    /* DATE  */
+    UMINUS = 313                   /* UMINUS  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -113,12 +118,13 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 104 "yacc_sql.y"
+#line 110 "yacc_sql.y"
 
   ParsedSqlNode *                   sql_node;
   ConditionSqlNode *                condition;
   Value *                           value;
   enum CompOp                       comp;
+  enum AggrFuncType aggr_func_type;
   RelAttrSqlNode *                  rel_attr;
   std::vector<AttrInfoSqlNode> *    attr_infos;
   AttrInfoSqlNode *                 attr_info;
@@ -135,8 +141,9 @@ union YYSTYPE
   std::vector<AssignmentSqlNode> *  assignment_list;
   int                               number;
   float                             floats;
+  std::vector<std::string>*         field_or_star_list;
 
-#line 140 "yacc_sql.hpp"
+#line 147 "yacc_sql.hpp"
 
 };
 typedef union YYSTYPE YYSTYPE;

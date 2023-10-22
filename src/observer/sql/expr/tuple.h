@@ -358,3 +358,51 @@ private:
   Tuple *left_ = nullptr;
   Tuple *right_ = nullptr;
 };
+
+/**
+ * @brief 聚合后的tuple
+ * @ingroup Tuple
+ * @details 在aggregation 算子中使用
+ */
+class AggregationTuple : public Tuple
+{
+public:
+  AggregationTuple(const std::vector<Value>& aggregations, const std::vector<Field>& fields)
+      : aggregations_(std::move(aggregations)), fields_(std::move(fields))
+  {}
+  virtual ~AggregationTuple() = default;
+
+  int cell_num() const override { return static_cast<int>(aggregations_.size()); }
+
+  RC cell_at(int index, Value &value) const override
+  {
+    if (index >= 0 && index < aggregations_.size()) {
+      value = aggregations_[index];
+      return RC::SUCCESS;
+    }
+
+    return RC::NOTFOUND;
+  }
+
+  RC find_cell(const TupleCellSpec &spec, Value &value) const override
+  {
+    assert(aggregations_.size() == fields_.size());
+    for (int i = 0; i < fields_.size(); i++) {
+      // if (field.equal(spec.)
+      const auto &field = fields_[i];
+      if (!strcmp(spec.table_name(), field.table_name())) {
+        if (!strcmp(spec.field_name(), field.field_name())) {
+          value = aggregations_[i];
+          return RC::SUCCESS;
+        }
+      }
+    }
+    return RC::NOTFOUND;
+  }
+
+private:
+  std::vector<Value> aggregations_;
+  // 聚合的字段
+  std::vector<Field> fields_;
+  // std::vector<std::unique_ptr<Expression>> aggr_exprs_;
+};

@@ -70,6 +70,12 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
         DELETE
         UPDATE
         LBRACE
+        AGGR_MAX 
+        AGGR_MIN 
+        AGGR_SUM
+        AGGR_AVG
+        AGGR_COUNT
+        /* AGGR_COUNT_STAR */
         RBRACE
         COMMA
         TRX_BEGIN
@@ -106,6 +112,7 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
   ConditionSqlNode *                condition;
   Value *                           value;
   enum CompOp                       comp;
+  enum AggrFuncType aggr_func_type;
   RelAttrSqlNode *                  rel_attr;
   std::vector<AttrInfoSqlNode> *    attr_infos;
   AttrInfoSqlNode *                 attr_info;
@@ -122,6 +129,7 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
   std::vector<AssignmentSqlNode> *  assignment_list;
   int                               number;
   float                             floats;
+  std::vector<std::string>*         field_or_star_list;
 }
 
 %token <number> NUMBER
@@ -135,10 +143,13 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
 %type <number>              type
 %type <condition>           condition
 %type <value>               value
+%type <string>              field_or_star
+%type <field_or_star_list>  field_or_star_list
 %type <number>              number
 %type <comp>                comp_op
 %type <std_string_list>     id_list
 %type <rel_attr>            rel_attr
+%type <aggr_func_type>      aggr_func_type
 %type <attr_infos>          attr_def_list
 %type <attr_info>           attr_def
 %type <value_list>          value_list
@@ -527,6 +538,9 @@ select_stmt:        /*  select 语句的语法解析树*/
       if ($2 != nullptr) {
         $$->selection.attributes.swap(*$2);
         delete $2;
+        if (!$$->selection.IsAttributesVailid()) {
+          yyerror(&@$, sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
+        }
       }
       if ($5 != nullptr) {
         $$->selection.relations.swap(*$5);
@@ -613,7 +627,43 @@ select_attr:
       delete $1;
     }
     ;
-
+aggr_func_type: 
+    AGGR_MAX { $$ = AggrFuncType::MAX; }
+    | AGGR_MIN { $$ = AggrFuncType::MIN; }
+    | AGGR_SUM { $$ = AggrFuncType::SUM; }
+    | AGGR_AVG { $$ = AggrFuncType::AVG; }
+    | AGGR_COUNT { $$ = AggrFuncType::COUNT; }
+    ;
+field_or_star:
+  '*' {
+    $$ = "*";
+  }
+  | ID {
+    $$ = $1;
+  }
+  ;
+/* TODO: 可能有内存泄漏 */
+field_or_star_list:
+    /* empty */
+    {
+      $$ = nullptr;
+    }
+    | field_or_star field_or_star_list {
+      $$ = new std::vector<std::string>;
+      $$->emplace_back($1);
+      if ($2 != nullptr) {
+        $$->insert($$->end(), $2->begin(), $2->end());
+      }
+    }
+    | COMMA field_or_star field_or_star_list {
+      if ($3 != nullptr) {
+        $$ = $3;
+      } else {
+        $$ = new std::vector<std::string>;
+      }
+      $$->emplace_back($2);
+    }
+    ;
 rel_attr:
     ID {
       $$ = new RelAttrSqlNode;
@@ -627,8 +677,15 @@ rel_attr:
       free($1);
       free($3);
     }
+    | aggr_func_type LBRACE field_or_star_list RBRACE {
+      $$ = new RelAttrSqlNode;
+      $$->aggr_type = $1;
+      if ($3 != nullptr) {
+        $$->aggregates = *$3;
+        delete $3;
+      }
+    }
     ;
-
 attr_list:
     /* empty */
     {

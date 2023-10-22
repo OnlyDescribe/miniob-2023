@@ -326,3 +326,23 @@ RC ArithmeticExpr::try_get_value(Value &value) const
 
   return calc_value(left_value, right_value, value);
 }
+
+RC AggretationExpr::get_value(const Tuple &tuple, Value &value) const
+{
+  RC rc = RC::SUCCESS;
+  switch (aggr_func_type_) {
+    case AggrFuncType::MIN:
+    case AggrFuncType::MAX:
+    case AggrFuncType::SUM:
+    case AggrFuncType::AVG: 
+      rc = tuple.find_cell(TupleCellSpec(field_.table_name(), field_.field_name()), value);
+      break;
+    case AggrFuncType::COUNT: 
+    case AggrFuncType::COUNT_STAR: 
+      value.set_int(1); 
+      break;
+    default: 
+      break;
+  }
+  return rc;
+}

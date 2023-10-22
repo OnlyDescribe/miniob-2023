@@ -16,6 +16,7 @@ See the Mulan PSL v2 for more details. */
 
 #include <string.h>
 #include <memory>
+#include <unordered_map>
 #include <string>
 
 #include "storage/field/field.h"
@@ -23,6 +24,14 @@ See the Mulan PSL v2 for more details. */
 #include "common/log/log.h"
 
 class Tuple;
+const static std::unordered_map<AggrFuncType, std::string> AggretationExprStr = {
+  { AggrFuncType::MAX, "MAX" },
+  { AggrFuncType::MIN, "MIN" },
+  { AggrFuncType::AVG, "AVG" },
+  { AggrFuncType::SUM, "SUM" },
+  { AggrFuncType::COUNT, "COUNT" },
+  { AggrFuncType::COUNT_STAR, "COUNT" },
+};
 
 /**
  * @defgroup Expression
@@ -36,13 +45,14 @@ class Tuple;
 enum class ExprType
 {
   NONE,
-  STAR,         ///< 星号，表示所有字段
-  FIELD,        ///< 字段。在实际执行时，根据行数据内容提取对应字段的值
-  VALUE,        ///< 常量值
-  CAST,         ///< 需要做类型转换的表达式
-  COMPARISON,   ///< 需要做比较的表达式
-  CONJUNCTION,  ///< 多个表达式使用同一种关系(AND或OR)来联结
-  ARITHMETIC,   ///< 算术运算
+  STAR,          ///< 星号，表示所有字段
+  FIELD,         ///< 字段。在实际执行时，根据行数据内容提取对应字段的值
+  VALUE,         ///< 常量值
+  AGGRFUNCTION,  /// < 聚合表达式
+  CAST,          ///< 需要做类型转换的表达式
+  COMPARISON,    ///< 需要做比较的表达式
+  CONJUNCTION,   ///< 多个表达式使用同一种关系(AND或OR)来联结
+  ARITHMETIC,    ///< 算术运算
 };
 
 /**
@@ -296,4 +306,48 @@ private:
   Type arithmetic_type_;
   std::unique_ptr<Expression> left_;
   std::unique_ptr<Expression> right_;
+};
+
+/**
+ * @brief 聚合表达式
+ * 表达对某个字段的聚合操作, max(id) 由聚合函数和字段两部分组成
+ */
+class AggretationExpr : public Expression
+{
+public:
+  AggretationExpr(Field field, AggrFuncType aggr_func_type) : field_(field), aggr_func_type_(aggr_func_type) {}
+  RC get_value(const Tuple &tuple, Value &value) const;
+
+  RC try_get_value(Value &value) const { return RC::UNIMPLENMENT; }
+
+  /**
+   * @brief 表达式的类型
+   * 可以根据表达式类型来转换为具体的子类
+   */
+  ExprType type() const { return ExprType::AGGRFUNCTION; }
+
+  /**
+   * @brief 表达式值的类型
+   * @details 一个表达式运算出结果后，只有一个值
+   */
+  AttrType value_type() const { return field_.attr_type(); };
+
+  AggrFuncType aggr_type() { return aggr_func_type_; }
+
+  Field filed() const { return field_; }
+
+  static std::string to_string(const Field& field, AggrFuncType aggr_func_type) {
+    auto it = AggretationExprStr.find(aggr_func_type);
+    if (it == AggretationExprStr.end()) {
+      return "";
+    }
+    if (aggr_func_type == AggrFuncType::COUNT_STAR) {
+      return it->second + "(*)";
+    }
+    return it->second + "(" + field.field_name() + ")";
+  }
+
+private:
+  AggrFuncType aggr_func_type_;
+  Field field_;
 };
