@@ -74,7 +74,7 @@ public:
   int operator()(const char *v1, const char *v2) const
   {
     int pos{0};
-    int res;
+    int res{0};
 
     // TODO(oldcb): 支持null类型
     for (int i = 0; i < attr_type_.size(); ++i) {
@@ -141,6 +141,8 @@ public:
   int operator()(const char *v1, const char *v2) const
   {
     int result = attr_comparator_(v1, v2);
+
+    // 如果是唯一索引, 那么判断树中节点的唯一依据是字段值
     if (is_unique_ || result != 0) {
       return result;
     }

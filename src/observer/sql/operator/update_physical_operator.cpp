@@ -95,6 +95,8 @@ RC UpdatePhysicalOperator::next()
     RC rc = table_->make_record(value_num, values.data(), new_record);
     if (rc != RC::SUCCESS) {
       LOG_WARN("failed to make record. rc=%s", strrc(rc));
+      // 注意失败后要回滚, 保证一次更新操作(删除+插入)是"原子"的
+      trx_->insert_record(table_, old_record);
       return rc;
     }
 
@@ -102,6 +104,9 @@ RC UpdatePhysicalOperator::next()
     rc = trx_->insert_record(table_, new_record);
     if (rc != RC::SUCCESS) {
       LOG_WARN("failed to insert record by transaction. rc=%s", strrc(rc));
+      // 注意失败后要回滚, 保证一次更新操作(删除+插入)是"原子"的
+      trx_->insert_record(table_, old_record);
+      return rc;
     }
   }
 

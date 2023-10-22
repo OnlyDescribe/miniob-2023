@@ -241,19 +241,32 @@ RC Table::insert_record(Record &record)
     return rc;
   }
 
-  rc = insert_entry_of_indexes(record.data(), record.rid());
-  if (rc != RC::SUCCESS) {  // 可能出现了键值重复
-    RC rc2 = delete_entry_of_indexes(record.data(), record.rid(), false /*error_on_not_exists*/);
-    if (rc2 != RC::SUCCESS) {
-      LOG_ERROR("Failed to rollback index data when insert index entries failed. table name=%s, rc=%d:%s",
+  // rc = insert_entry_of_indexes(record.data(), record.rid());
+  for (Index *index : indexes_) {
+    rc = index->insert_entry(record.data(), &record.rid());
+    if (rc != RC::SUCCESS) {
+      // 注意 KeyComparator, 如果是唯一索引, 则只比较索引字段; 而忽略rid
+      // 此时不应从索引中删除对应的entry; 否则会删除已存在的索引叶节点, 即使是不同的rid
+      if (!index->index_meta().is_unique()) {
+        RC rc2 = delete_entry_of_indexes(record.data(), record.rid(), false /*error_on_not_exists*/);
+        // 可能出现了键值重复
+        if (rc2 != RC::SUCCESS) {
+          LOG_ERROR("Failed to rollback index data when insert index entries failed. table name=%s, rc=%d:%s",
                 name(), rc2, strrc(rc2));
+        }
+      }
+      break;
     }
-    rc2 = record_handler_->delete_record(&record.rid());
+  }
+
+  if (rc != RC::SUCCESS) {
+    RC rc2 = record_handler_->delete_record(&record.rid());
     if (rc2 != RC::SUCCESS) {
       LOG_PANIC("Failed to rollback record data when insert index entries failed. table name=%s, rc=%d:%s",
                 name(), rc2, strrc(rc2));
     }
   }
+
   return rc;
 }
 
