@@ -83,9 +83,50 @@ ComparisonExpr::ComparisonExpr(CompOp comp, unique_ptr<Expression> left, unique_
 
 ComparisonExpr::~ComparisonExpr() {}
 
+bool ComparisonExpr::is_like(const std::string& s, const std::string& p) const {
+    int n = s.size(), m = p.size();
+    // 动态规划
+    vector<vector<bool>> f(n + 1, vector<bool>(m + 1));
+    f[0][0] = true;
+    for (int i = 1; i <= m; i++) {
+        if (p[i - 1] != '%') break;
+        f[0][i] = true;
+    }
+    for (int i = 1; i <= n; i++) {
+        for (int j = 1; j <= m; j++) {
+            if (p[j - 1] == '%') {
+                int k = j - 1;
+                while (k >= 0 && p[k] == '%') k--;
+                if (k < 0) {
+                    f[i][j] = true;
+                } else {
+                    for (int u = 0; u < i; u++) {
+                        if (s[u] == p[k] || p[k] == '_') {
+                            f[i][j] = f[i][j] | f[u][k];
+                        }
+                    }
+                }
+            } else if (p[j - 1] == '_') {
+                f[i][j] = f[i - 1][j - 1];
+            } else {
+                f[i][j] = (s[i - 1] == p[j - 1] && f[i - 1][j - 1]);
+            }
+        }
+    }
+    return f[n][m];
+}
+
 RC ComparisonExpr::compare_value(const Value &left, const Value &right, bool &result) const
 {
   RC rc = RC::SUCCESS;
+  if (comp_ == LIKE || comp_ == NOT_LIKE) {
+    if (left.attr_type() != AttrType::CHARS || right.attr_type() != AttrType::CHARS) {
+      result = false;
+    }
+    result = is_like(left.get_string(), right.get_string());
+    if (comp_ == NOT_LIKE) result = !result;
+    return rc;
+  }
   int cmp_result = left.compare(right);
   result = false;
   switch (comp_) {

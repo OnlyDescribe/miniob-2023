@@ -210,6 +210,8 @@ public:
 
   AttrType value_type() const override { return BOOLEANS; }
 
+  bool is_like(const std::string& s, const std::string& pattern) const;
+
   CompOp comp() const { return comp_; }
 
   std::unique_ptr<Expression> &left() { return left_; }

@@ -105,6 +105,8 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
         LE
         GE
         NE
+        NOT
+        LIKE_CONDITION
 
 /** union 中定义各种数据类型，真实生成的代码也是union类型，所以不能有非POD类型的数据 **/
 %union {
@@ -745,7 +747,19 @@ condition_list:
     }
     ;
 condition:
-    rel_attr comp_op value
+    rel_attr NOT LIKE_CONDITION value
+    {
+      $$ = new ConditionSqlNode;
+      $$->left_is_attr = 1;
+      $$->left_attr = *$1;
+      $$->right_is_attr = 0;
+      $$->right_value = *$4;
+      $$->comp = NOT_LIKE;
+
+      delete $1;
+      delete $4;
+    }
+    | rel_attr comp_op value
     {
       $$ = new ConditionSqlNode;
       $$->left_is_attr = 1;
@@ -802,6 +816,7 @@ comp_op:
     | LE { $$ = LESS_EQUAL; }
     | GE { $$ = GREAT_EQUAL; }
     | NE { $$ = NOT_EQUAL; }
+    | LIKE_CONDITION { $$ = LIKE; }
     ;
 
 load_data_stmt:
