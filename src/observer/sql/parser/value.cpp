@@ -21,11 +21,11 @@ See the Mulan PSL v2 for more details. */
 #include "common/lang/string.h"
 
 // 注意这里的顺序应该与enum AttrType一一对应
-const char *ATTR_TYPE_NAME[] = {"undefined", "dates", "chars", "ints", "floats", "booleans"};
+const char *ATTR_TYPE_NAME[] = {"undefined", "dates", "chars", "texts", "ints", "floats", "booleans"};
 
 const char *attr_type_to_string(AttrType type)
 {
-  if (type >= UNDEFINED && type <= FLOATS) { // 新添加字段的时候搜索范围
+  if (type >= UNDEFINED && type <= FLOATS) {  // 新添加字段的时候搜索范围
     return ATTR_TYPE_NAME[type];
   }
   return "unknown";
@@ -60,7 +60,8 @@ Value::Value(const char *s, AttrType type)
 void Value::set_data(char *data, int length)
 {
   switch (attr_type_) {
-    case CHARS: {
+    case CHARS:
+    case TEXTS: {
       set_string(data, length);
     } break;
     case DATES: {
@@ -148,6 +149,10 @@ void Value::set_value(const Value &value)
     case CHARS: {
       set_string(value.get_string().c_str());
     } break;
+    case TEXTS: {
+      set_string(value.get_string().c_str());
+      set_type(value.attr_type_);
+    } break;
     case BOOLEANS: {
       set_boolean(value.get_boolean());
     } break;
@@ -166,7 +171,8 @@ void Value::set_value(const Value &value)
 const char *Value::data() const
 {
   switch (attr_type_) {
-    case CHARS: {
+    case CHARS:
+    case TEXTS: {
       return str_value_.c_str();
     } break;
     default: {
@@ -188,7 +194,8 @@ std::string Value::to_string() const
     case BOOLEANS: {
       os << num_value_.bool_value_;
     } break;
-    case CHARS: {
+    case CHARS:
+    case TEXTS: {
       os << str_value_;
     } break;
     case DATES: {
@@ -217,7 +224,8 @@ int Value::compare(const Value &other) const
       case FLOATS: {
         return common::compare_float((void *)&this->num_value_.float_value_, (void *)&other.num_value_.float_value_);
       } break;
-      case CHARS: {
+      case CHARS:
+      case TEXTS: {
         return common::compare_string((void *)this->str_value_.c_str(),
             this->str_value_.length(),
             (void *)other.str_value_.c_str(),
@@ -252,7 +260,8 @@ int Value::compare(const Value &other) const
 int Value::get_int() const
 {
   switch (attr_type_) {
-    case CHARS: {
+    case CHARS:
+    case TEXTS: {
       try {
         return (int)(std::stol(str_value_));
       } catch (std::exception const &ex) {
@@ -283,7 +292,8 @@ int Value::get_int() const
 float Value::get_float() const
 {
   switch (attr_type_) {
-    case CHARS: {
+    case CHARS:
+    case TEXTS: {
       try {
         return std::stof(str_value_);
       } catch (std::exception const &ex) {
@@ -316,7 +326,8 @@ std::string Value::get_string() const { return this->to_string(); }
 bool Value::get_boolean() const
 {
   switch (attr_type_) {
-    case CHARS: {
+    case CHARS:
+    case TEXTS: {
       try {
         float val = std::stof(str_value_);
         if (val >= EPSILON || val <= -EPSILON) {

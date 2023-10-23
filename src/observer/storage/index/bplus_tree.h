@@ -85,7 +85,8 @@ public:
           res = common::compare_float((void *)(pos + v1), (void *)(pos + v2));
           break;
         }
-        case CHARS: {
+        case CHARS:
+        case TEXTS: {
           res = common::compare_string((void *)(pos + v1), attr_length_[i], (void *)(pos + v2), attr_length_[i]);
           break;
         }
@@ -189,7 +190,8 @@ public:
         case FLOATS: {
           return std::to_string(*(float *)v);
         }
-        case CHARS: {
+        case CHARS:
+        case TEXTS: {
           std::string str;
           for (int j = 0; j < attr_length_[i]; j++) {
             if (v[j] == 0) {

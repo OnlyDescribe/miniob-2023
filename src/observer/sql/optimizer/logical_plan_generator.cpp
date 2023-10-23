@@ -186,8 +186,9 @@ RC LogicalPlanGenerator::create_plan(InsertStmt *insert_stmt, unique_ptr<Logical
 {
   Table *table = insert_stmt->table();
   vector<Value> values(insert_stmt->values(), insert_stmt->values() + insert_stmt->value_amount());
-
-  InsertLogicalOperator *insert_operator = new InsertLogicalOperator(table, values);
+  // 避免多一次的拷贝, 但还是有一次拷贝
+  // TODO(oldcb): 性能优化, 避免values值拷贝
+  InsertLogicalOperator *insert_operator = new InsertLogicalOperator(table, std::move(values));
   logical_operator.reset(insert_operator);
   return RC::SUCCESS;
 }

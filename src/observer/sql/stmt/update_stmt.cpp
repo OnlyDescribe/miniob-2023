@@ -22,7 +22,7 @@ UpdateStmt::UpdateStmt(Table *table, const std::vector<const Value *> &values,
     : table_(table), values_(values), field_metas_(field_metas), filter_stmt_(filter_stmt)
 {}
 
-RC UpdateStmt::create(Db *db, const UpdateSqlNode &update, Stmt *&stmt)
+RC UpdateStmt::create(Db *db, UpdateSqlNode &update, Stmt *&stmt)
 {
   const char *table_name = update.relation_name.c_str();
   if (nullptr == db || nullptr == table_name) {
@@ -67,9 +67,6 @@ RC UpdateStmt::create(Db *db, const UpdateSqlNode &update, Stmt *&stmt)
       }
     }
 
-    // TODO(oldcb) 处理表达式: 子查询
-    values.push_back(&update.assignments[i].value);  // 注意update资源的生命周期
-
     if (!field_found) {
       LOG_WARN("no such table. db=%s, table_name=%s", db->name(), table_name);
       return RC::SCHEMA_TABLE_NOT_EXIST;
@@ -79,11 +76,20 @@ RC UpdateStmt::create(Db *db, const UpdateSqlNode &update, Stmt *&stmt)
     ASSERT(!field_metas.empty(), "");
     const AttrType value_type = update.assignments[i].value.attr_type();
     const AttrType field_type = field_metas.back()->type();
-    if (field_type != value_type) {  // TODO try to convert the value type to field type
-      LOG_WARN("field type mismatch. table=%s, field=%s, field type=%d, value_type=%d",
+    if (field_type != value_type) {
+      // 因为更新操作的词法解析无法判断字符串是TEXTS还是CHARS
+      // 目前可能会出现值 TEXTS 类型而字段是 CHARS 类型
+      if (field_type == AttrType::TEXTS && value_type == AttrType::CHARS) {
+        update.assignments[i].value.set_type(AttrType::TEXTS);
+      } else {
+        LOG_WARN("field type mismatch. table=%s, field=%s, field type=%d, value_type=%d",
           table_name, field_metas.back()->name(), field_type, value_type);
-      return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+        return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+      }
     }
+
+    // TODO(oldcb) 处理表达式: 子查询
+    values.push_back(&update.assignments[i].value);  // 注意update资源的生命周期
   }
 
   // 2. 处理过滤条件
