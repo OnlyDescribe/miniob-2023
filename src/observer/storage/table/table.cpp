@@ -15,6 +15,7 @@ See the Mulan PSL v2 for more details. */
 #include <limits.h>
 #include <string.h>
 #include <algorithm>
+#include <utility>
 
 #include "common/defs.h"
 #include "storage/field/field_meta.h"
@@ -272,7 +273,7 @@ RC Table::insert_record(Record &record)
 
 RC Table::visit_record(const RID &rid, bool readonly, std::function<void(Record &)> visitor)
 {
-  return record_handler_->visit_record(rid, readonly, visitor);
+  return record_handler_->visit_record(rid, readonly, std::move(visitor));
 }
 
 RC Table::get_record(const RID &rid, Record &record)
@@ -551,7 +552,9 @@ Index *Table::find_index(const char *index_name) const
 Index *Table::find_index_by_field(const std::vector<std::string> &field_names) const
 {
   const TableMeta &table_meta = this->table_meta();
-  const IndexMeta *index_meta = table_meta.find_index_by_field(field_names);
+  const IndexMeta *index_meta{nullptr};
+
+  index_meta = table_meta.find_index_by_field(field_names);
   if (index_meta != nullptr) {
     return this->find_index(index_meta->name());
   }

@@ -1663,7 +1663,7 @@ RC BplusTreeScanner::open(const char *left_user_key, int left_len, bool left_inc
   } else {
 
     char *fixed_left_key = const_cast<char *>(left_user_key);
-    if (tree_handler_.file_header_.attr_type[0] == CHARS) {  // TODO(oldcb): null 使用bitmap时, 应该取attr_type[0]
+    if (tree_handler_.file_header_.attr_type[0] == CHARS) {  // TODO(oldcb): null 使用bitmap时, 应该取attr_type[1]
       bool should_inclusive_after_fix = false;
       rc = fix_user_key(left_user_key, left_len, true /*greater*/, &fixed_left_key, &should_inclusive_after_fix);
       if (rc != RC::SUCCESS) {
@@ -1757,7 +1757,7 @@ RC BplusTreeScanner::open(const char *left_user_key, int left_len, bool left_inc
     current_frame_ = nullptr;
   }
 
-  return RC::SUCCESS;
+  return RC:: SUCCESS;
 }
 
 void BplusTreeScanner::fetch_item(RID &rid)

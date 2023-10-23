@@ -368,7 +368,7 @@ class AggregationTuple : public Tuple
 {
 public:
   AggregationTuple(const std::vector<Value>& aggregations, const std::vector<Field>& fields)
-      : aggregations_(std::move(aggregations)), fields_(std::move(fields))
+      : aggregations_(aggregations), fields_(fields)
   {}
   virtual ~AggregationTuple() = default;
 

@@ -12,6 +12,8 @@ See the Mulan PSL v2 for more details. */
 // Created by Wangyunlai on 2022/12/14.
 //
 
+#include <algorithm>
+#include <iterator>
 #include <utility>
 #include <vector>
 
@@ -102,6 +104,24 @@ RC PhysicalPlanGenerator::create_plan(TableGetLogicalOperator &table_get_oper, u
 
   Index *index = nullptr;
   ValueExpr *value_expr = nullptr;
+
+  struct FieldValueExpPair
+  {
+    Field field;
+    ValueExpr *value;
+  };
+
+  // TODO(oldcb): 考虑过滤条件中出现多次相同字段
+
+  // 根据values相应的字段的offset排序, 参考B+树的 KeyComparator
+  // 因为索引判断key的大小的字段是按照表字段的顺序
+  auto comp = [](const FieldValueExpPair &lhs, const FieldValueExpPair &rhs) {
+    return lhs.field.meta()->offset() < rhs.field.meta()->offset();
+  };
+  std::set<FieldValueExpPair, decltype(comp)> field_valexp_pairs;
+  std::vector<std::string> field_names;
+  field_names.reserve(predicates.size());
+
   for (auto &expr : predicates) {
     if (expr->type() == ExprType::COMPARISON) {
       auto comparison_expr = static_cast<ComparisonExpr *>(expr.get());
@@ -133,22 +153,40 @@ RC PhysicalPlanGenerator::create_plan(TableGetLogicalOperator &table_get_oper, u
       }
 
       const Field &field = field_expr->field();
-      std::vector<std::string> field_name;
-      field_name.push_back(std::string{field.field_name()});
-      index = table->find_index_by_field(field_name);  // TODO(oldcb): 最左匹配
+
+      field_valexp_pairs.insert({field, value_expr});
+
+      // 从过滤条件中, 生成按照表顺序的字段
+      field_names.clear();
+      std::transform(field_valexp_pairs.begin(),
+          field_valexp_pairs.end(),
+          std::back_inserter(field_names),
+          [](const FieldValueExpPair &p) { return std::string{p.field.field_name()}; });
+
+      // 寻找对应存在当前字段的索引
+      index = table->find_index_by_field(field_names);  // 不考虑最左匹配, 字段全部匹配就走索引
+                                                        // TODO(oldcb): 最左匹配
       if (nullptr != index) {
         break;
       }
     }
   }
 
-  if (index != nullptr) {
+  // 重要! 注意删除不能走索引扫描
+  // 因为如果删超过一半节点的相同record, 会导致B+树节点合并
+  if (table_get_oper.readonly() && index != nullptr) {
     ASSERT(value_expr != nullptr, "got an index but value expr is null ?");
 
-    // TODO(oldcb): 最左匹配
-    const Value &value = value_expr->get_value();
+    std::vector<Value> values;
+    values.reserve(field_valexp_pairs.size());
+    std::transform(field_valexp_pairs.begin(),
+        field_valexp_pairs.end(),
+        std::back_inserter(values),
+        [](const FieldValueExpPair &v) { return v.value->get_value(); });
+
+    // 走联合索引
     IndexScanPhysicalOperator *index_scan_oper = new IndexScanPhysicalOperator(
-        table, index, table_get_oper.readonly(), &value, true /*left_inclusive*/, &value, true /*right_inclusive*/);
+        table, index, table_get_oper.readonly(), values, true /*left_inclusive*/, values, true /*right_inclusive*/);
 
     index_scan_oper->set_predicates(std::move(predicates));
     oper = unique_ptr<PhysicalOperator>(index_scan_oper);

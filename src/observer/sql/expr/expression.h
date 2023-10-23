@@ -18,6 +18,7 @@ See the Mulan PSL v2 for more details. */
 #include <memory>
 #include <unordered_map>
 #include <string>
+#include <utility>
 
 #include "storage/field/field.h"
 #include "sql/parser/value.h"
@@ -99,7 +100,7 @@ public:
    * @brief 表达式的名字，比如是字段名称，或者用户在执行SQL语句时输入的内容
    */
   virtual std::string name() const { return name_; }
-  virtual void set_name(std::string name) { name_ = name; }
+  virtual void set_name(std::string name) { name_ = std::move(name); }
 
 private:
   std::string name_;
@@ -315,7 +316,7 @@ private:
 class AggretationExpr : public Expression
 {
 public:
-  AggretationExpr(Field field, AggrFuncType aggr_func_type) : field_(field), aggr_func_type_(aggr_func_type) {}
+  AggretationExpr(Field field, AggrFuncType aggr_func_type) : aggr_func_type_(aggr_func_type), field_(field) {}
   RC get_value(const Tuple &tuple, Value &value) const;
 
   RC try_get_value(Value &value) const { return RC::UNIMPLENMENT; }

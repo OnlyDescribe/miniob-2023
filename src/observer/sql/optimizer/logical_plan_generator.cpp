@@ -122,9 +122,9 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
     if (table_oper) {
       predicate_oper->add_child(std::move(table_oper));
     }
-    top_op = move(predicate_oper);
+    top_op = std::move(predicate_oper);
   } else {
-    top_op = move(table_oper);
+    top_op = std::move(table_oper);
   }
 
   // 聚合 logic_op，直接使用构造

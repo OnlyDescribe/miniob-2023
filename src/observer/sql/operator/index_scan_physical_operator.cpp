@@ -15,22 +15,19 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/index_scan_physical_operator.h"
 #include "storage/index/index.h"
 #include "storage/trx/trx.h"
+#include <numeric>
 
-IndexScanPhysicalOperator::IndexScanPhysicalOperator(Table *table, Index *index, bool readonly, const Value *left_value,
-    bool left_inclusive, const Value *right_value, bool right_inclusive)
+IndexScanPhysicalOperator::IndexScanPhysicalOperator(Table *table, Index *index, bool readonly,
+    const std::vector<Value> &left_values, bool left_inclusive, const std::vector<Value> &right_values,
+    bool right_inclusive)
     : table_(table),
       index_(index),
       readonly_(readonly),
+      left_values_(left_values),
+      right_values_(right_values),
       left_inclusive_(left_inclusive),
       right_inclusive_(right_inclusive)
-{
-  if (left_value) {
-    left_value_ = *left_value;
-  }
-  if (right_value) {
-    right_value_ = *right_value;
-  }
-}
+{}
 
 RC IndexScanPhysicalOperator::open(Trx *trx)
 {
@@ -38,12 +35,26 @@ RC IndexScanPhysicalOperator::open(Trx *trx)
     return RC::INTERNAL;
   }
 
-  IndexScanner *index_scanner = index_->create_scanner(left_value_.data(),
-      left_value_.length(),
-      left_inclusive_,
-      right_value_.data(),
-      right_value_.length(),
-      right_inclusive_);
+  auto make_key = [](const std::vector<Value> &values) -> char * {
+    int total_length =
+        std::accumulate(values.begin(), values.end(), 0, [](int sum, const Value &val) { return sum + val.length(); });
+    char *key = new char[total_length];
+    int offset{0};
+    for (const Value &val : values) {
+      memcpy(key + offset, val.data(), val.length());
+      offset += val.length();
+    }
+    return key;
+  };
+  char *left_key = make_key(left_values_);
+  char *right_key = make_key(right_values_);
+
+  IndexScanner *index_scanner = index_->create_scanner(
+      left_key, left_values_[0].length(), left_inclusive_, right_key, right_values_[0].length(), right_inclusive_);
+
+  delete[] left_key;
+  delete[] right_key;
+
   if (nullptr == index_scanner) {
     LOG_WARN("failed to create index scanner");
     return RC::INTERNAL;

@@ -54,7 +54,6 @@ enum class BplusTreeOperationType
 class AttrComparator
 {
 public:
-  // TODO NULL
   void init(const std::vector<AttrType> &type, const std::vector<int> &length)
   {
     attr_type_ = type;

@@ -25,8 +25,8 @@ See the Mulan PSL v2 for more details. */
 class IndexScanPhysicalOperator : public PhysicalOperator
 {
 public:
-  IndexScanPhysicalOperator(Table *table, Index *index, bool readonly, const Value *left_value, bool left_inclusive,
-      const Value *right_value, bool right_inclusive);
+  IndexScanPhysicalOperator(Table *table, Index *index, bool readonly, const std::vector<Value> &left_values,
+      bool left_inclusive, const std::vector<Value> &right_values, bool right_inclusive);
 
   virtual ~IndexScanPhysicalOperator() = default;
 
@@ -58,8 +58,8 @@ private:
   Record current_record_;
   RowTuple tuple_;
 
-  Value left_value_;
-  Value right_value_;
+  std::vector<Value> left_values_;
+  std::vector<Value> right_values_;
   bool left_inclusive_ = false;
   bool right_inclusive_ = false;
 

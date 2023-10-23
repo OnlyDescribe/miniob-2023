@@ -160,14 +160,21 @@ const IndexMeta *TableMeta::find_index_by_field(const std::vector<std::string> &
     int field_num = fields.size();
     int index_field_num = index_fields.size();
 
+    // 完全匹配
     if (field_num != index_field_num) {
       continue;
     }
 
+    // 支持联合索引
+    bool found = true;
     for (int i = 0; i < field_num; ++i) {
-      if (0 == fields[i].compare(index_fields[i])) {
-        return &index;
+      if (0 != fields[i].compare(index_fields[i])) {
+        found = false;
+        break;
       }
+    }
+    if (found) {
+      return &index;
     }
   }
   return nullptr;
