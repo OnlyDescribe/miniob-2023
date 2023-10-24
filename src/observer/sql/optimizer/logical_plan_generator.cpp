@@ -90,6 +90,14 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
 
   const std::vector<Table *> &tables = select_stmt->tables();
   const std::vector<Field> &all_fields = select_stmt->query_fields();
+  // 连表条件
+  const auto& join_on_units = select_stmt->join_on_stmt()->join_units();
+
+  if (!join_on_units.empty() && join_on_units.size() + 1 != tables.size()) {
+    return RC::JOIN_ERROR;
+  }
+  int join_on_units_index = 0;
+  
   for (Table *table : tables) {
     std::vector<Field> fields;
     for (const Field &field : all_fields) {
@@ -106,6 +114,13 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
       join_oper->add_child(std::move(table_oper));
       join_oper->add_child(std::move(table_get_oper));
       table_oper = unique_ptr<LogicalOperator>(join_oper);
+      // 连表条件设置为hashjoin
+      if (join_on_units_index < join_on_units.size()) {
+        join_oper->add_expression(std::make_unique<FieldExpr>(join_on_units[join_on_units_index]->left().field));
+        join_oper->add_expression(std::make_unique<FieldExpr>(join_on_units[join_on_units_index]->right().field));
+        join_oper->set_type(LogicalOperatorType::HAHS_JOIN);
+        join_on_units_index++;
+      }
     }
   }
 

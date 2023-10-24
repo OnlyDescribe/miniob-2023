@@ -13,7 +13,9 @@ See the Mulan PSL v2 for more details. */
 //
 
 #pragma once
+#include <memory>
 
+#include "sql/expr/expression.h"
 #include "sql/operator/logical_operator.h"
 
 /**
@@ -25,9 +27,17 @@ class JoinLogicalOperator : public LogicalOperator
 {
 public:
   JoinLogicalOperator() = default;
+
   virtual ~JoinLogicalOperator() = default;
 
-  LogicalOperatorType type() const override { return LogicalOperatorType::JOIN; }
+  LogicalOperatorType type() const override { return type_; }
+
+  void set_type(LogicalOperatorType type) { type_ = type; }
+
+  void add_expression(std::unique_ptr<Expression> &&expression) {
+    expressions_.emplace_back(std::move(expression));
+  }
 
 private:
+  LogicalOperatorType type_{LogicalOperatorType::JOIN};
 };

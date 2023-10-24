@@ -38,6 +38,7 @@ enum class LogicalOperatorType
   PROJECTION,   ///< 投影，就是select
   AGGREGATION,  ///< 聚合
   JOIN,         ///< 连接
+  HAHS_JOIN,    ///< hash join连表
   INSERT,       ///< 插入
   DELETE,       ///< 删除，删除可能会有子查询
   UPDATE,       ///< 更新

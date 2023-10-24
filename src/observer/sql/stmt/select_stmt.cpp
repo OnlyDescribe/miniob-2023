@@ -140,7 +140,7 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
 
       Table *table = tables[0];
       const FieldMeta *field_meta = table->table_meta().field(relation_attr.attribute_name.c_str());
-      if (nullptr == field_meta && aggr_type != AggrFuncType::COUNT_STAR) {
+      if (nullptr == field_meta) {
         LOG_WARN("no such field. field=%s.%s.%s", db->name(), table->name(), relation_attr.attribute_name.c_str());
         return RC::SCHEMA_FIELD_MISSING;
       }
@@ -174,11 +174,24 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
     return rc;
   }
 
+  // create join on statement
+  JoinOnStmt *join_on_stmt = nullptr;
+  rc = JoinOnStmt::create(db,
+      default_table,
+      &table_map,
+      select_sql.join_conds.data(),
+      static_cast<int>(select_sql.join_conds.size()),
+      join_on_stmt);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("cannot construct filter stmt");
+    return rc;
+  }
+
   // everything alright
   SelectStmt *select_stmt = new SelectStmt();
-  // TODO add expression copy
   select_stmt->tables_.swap(tables);
   select_stmt->query_fields_.swap(query_fields);
+  select_stmt->join_on_stmt_ = join_on_stmt;
   select_stmt->filter_stmt_ = filter_stmt;
   select_stmt->set_is_aggregation_stmt(aggr_field_cnt > 0);
 

@@ -130,3 +130,83 @@ RC NestedLoopJoinPhysicalOperator::right_next()
   joined_tuple_.set_right(right_tuple_);
   return rc;
 }
+
+HashJoinPhysicalOperator::HashJoinPhysicalOperator() {}
+
+RC HashJoinPhysicalOperator::open(Trx* trx) {
+  if (children_.size() != 2) {
+    LOG_WARN("nlj operator should have 2 children");
+    return RC::INTERNAL;
+  }
+  RC rc = RC::SUCCESS;
+  left_ = children_[0].get();
+  right_ = children_[1].get();
+
+  rc = right_->open(trx);
+  right_results_ = std::queue<Tuple*>();
+  if (rc != RC::SUCCESS || left_->open(trx) != RC::SUCCESS) {
+    return rc;
+  }
+  // TODO: 可能有左表达式和右表达式相反的情况, 事先做交换
+  mp_.clear();
+  while ((rc = right_->next()) == RC::SUCCESS) {
+    auto right_tuple = right_->current_tuple();
+    Value value;
+    rc = right_expression()->get_value(*right_tuple, value);
+    mp_[value].push_back(right_tuple);
+  }
+  for(auto&[k, vec]: mp_) {
+    std::cout << k.to_string() << ":" << std::endl;
+    for (Tuple* t: vec) {
+      std::cout << t->to_string() << std::endl;
+    }
+  }
+  trx_ = trx;
+  return RC::SUCCESS;
+}
+
+RC HashJoinPhysicalOperator::next() {
+  RC rc = RC::SUCCESS;
+  while (right_results_.empty()) {
+    rc = left_->next();
+    left_tuple_ = left_->current_tuple();
+    if (rc == RC::RECORD_EOF) {
+      return rc;
+    }
+    Value value;
+    rc = left_expression()->get_value(*left_tuple_, value);
+    if (rc != RC::SUCCESS) {
+      return rc;
+    }
+    auto it = mp_.find(value);
+    if (it != mp_.end()) {
+      for (Tuple* right_tuple: it->second) {
+        std::cout << value.to_string() << " " << right_tuple->to_string() << std::endl;
+        right_results_.push(right_tuple);
+      }
+      break;
+    }
+  } 
+  if (left_tuple_ == nullptr || right_results_.empty()) {
+    return RC::RECORD_EOF;
+  }
+  joined_tuple_.set_left(left_tuple_);
+  joined_tuple_.set_right(right_results_.front());
+  right_results_.pop();
+
+  return rc;
+}
+RC HashJoinPhysicalOperator::close() {
+  RC rc = left_->close();
+  if (left_->close() != RC::SUCCESS) {
+    LOG_WARN("failed to close left oper. rc=%s", strrc(rc));
+  }
+  RC rc2 = right_->close();
+  if (right_->close() != RC::SUCCESS) {
+    LOG_WARN("failed to close right oper. rc=%s", strrc(rc2));
+  }
+  return RC::SUCCESS;
+};
+Tuple* HashJoinPhysicalOperator::current_tuple() {
+  return &joined_tuple_;
+}
