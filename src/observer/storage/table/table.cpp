@@ -591,7 +591,27 @@ RC Table::delete_record(const Record &record)
         strrc(rc));
   }
   rc = record_handler_->delete_record(&record.rid());
-  // TODO(oldcb): 注意要把溢出页的内存回收
+
+  // 把溢出页的内存回收
+  const int sys_field_num = table_meta_.sys_field_num();
+  const int field_num = table_meta_.field_num();
+  const std::vector<FieldMeta> *fieldmetas = table_meta_.field_metas();
+  for (int i = sys_field_num; i < field_num; i++) {
+    auto &meta = (*fieldmetas)[i];
+    if (meta.type() == AttrType::TEXTS) {
+      // 从record中取出溢出页号
+      PageNum page_num;
+      int record_offset{0};
+      memcpy(&page_num, record.data() + meta.offset() + record_offset, sizeof(PageNum));
+
+      while (page_num != 0) {
+        data_buffer_pool_->dispose_page(page_num);
+        record_offset += sizeof(PageNum);
+        memcpy(&page_num, record.data() + meta.offset() + record_offset, sizeof(PageNum));
+      }
+    }
+  }
+
   return rc;
 }
 
