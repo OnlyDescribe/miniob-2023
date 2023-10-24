@@ -383,7 +383,8 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
       int record_offset{0};
       int frame_offset{0};
       // 将 text 字段的内容拷贝到溢出页中
-      while ((data_len + sizeof(PageHeader) + 1) >= BP_PAGE_SIZE) {
+      // 注意: 杜绝 UB
+      while ((data_len + sizeof(PageHeader) + 1) > BP_PAGE_SIZE) {
         data_len -= BP_PAGE_SIZE;
 
         // 分配 frame
@@ -583,16 +584,6 @@ RC Table::create_index(Trx *trx, const std::vector<FieldMeta> &field_meta, const
 RC Table::delete_record(const Record &record)
 {
   RC rc = RC::SUCCESS;
-  for (Index *index : indexes_) {
-    rc = index->delete_entry(record.data(), &record.rid());
-    ASSERT(RC::SUCCESS == rc,
-        "failed to delete entry from index. table name=%s, index name=%s, rid=%s, rc=%s",
-        name(),
-        index->index_meta().name(),
-        record.rid().to_string().c_str(),
-        strrc(rc));
-  }
-  rc = record_handler_->delete_record(&record.rid());
 
   // 把溢出页的内存回收
   const int sys_field_num = table_meta_.sys_field_num();
@@ -614,6 +605,17 @@ RC Table::delete_record(const Record &record)
     }
   }
 
+  for (Index *index : indexes_) {
+    rc = index->delete_entry(record.data(), &record.rid());
+    ASSERT(RC::SUCCESS == rc,
+        "failed to delete entry from index. table name=%s, index name=%s, rid=%s, rc=%s",
+        name(),
+        index->index_meta().name(),
+        record.rid().to_string().c_str(),
+        strrc(rc));
+  }
+
+  rc = record_handler_->delete_record(&record.rid());
   return rc;
 }
 
