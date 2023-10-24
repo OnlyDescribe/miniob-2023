@@ -404,7 +404,7 @@ attr_def:
       $$->name = $1;
       if($$->type == AttrType::TEXTS)
       {
-        $$->length = 64; // 字段长度为64， 在record中存储为16个指向文本数据的溢出页
+        $$->length = 128; // 字段长度为64， 在record中存储为32个指向文本数据的溢出页
       }
       else{
         $$->length = 4;
