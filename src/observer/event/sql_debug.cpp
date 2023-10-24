@@ -40,7 +40,7 @@ void sql_debug(const char *fmt, ...)
 
   SqlDebug &sql_debug = request->sql_debug();
 
-  const int buffer_size = 4096;
+  const int buffer_size = 40960;
   char *str = new char[buffer_size];
 
   va_list ap;
