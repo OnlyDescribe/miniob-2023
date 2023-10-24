@@ -85,13 +85,18 @@ public:
           res = common::compare_float((void *)(pos + v1), (void *)(pos + v2));
           break;
         }
-        case CHARS:
-        case TEXTS: {
+        case CHARS: {
           res = common::compare_string((void *)(pos + v1), attr_length_[i], (void *)(pos + v2), attr_length_[i]);
           break;
         }
         case DATES: {
           res = common::compare_date((void *)(pos + v1), (void *)(pos + v2));
+          break;
+        }
+        case TEXTS: {
+          // TODO(oldcb): TEXTS的索引比较
+          LOG_ERROR("暂且不支持. %d", attr_type_[i]);
+          res = common::compare_string((void *)(pos + v1), attr_length_[i], (void *)(pos + v2), attr_length_[i]);
           break;
         }
         default: {

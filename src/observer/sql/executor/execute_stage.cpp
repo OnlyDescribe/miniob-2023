@@ -71,7 +71,7 @@ RC ExecuteStage::handle_request_with_physical_operator(SQLStageEvent *sql_event)
       bool with_table_name = select_stmt->tables().size() > 1;
 
       for (const Field &field : select_stmt->query_fields()) {
-        char* field_name = nullptr;
+        char *field_name = nullptr;
         if (select_stmt->is_aggregation_stmt()) {
           schema.append_cell(AggretationExpr::to_string(field, field.get_aggr_type()).c_str());
         } else {
@@ -81,9 +81,7 @@ RC ExecuteStage::handle_request_with_physical_operator(SQLStageEvent *sql_event)
             schema.append_cell(field.field_name());
           }
         }
-
       }
-      
     } break;
 
     case StmtType::CALC: {

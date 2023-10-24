@@ -127,7 +127,7 @@ union YYSTYPE
   ConditionSqlNode *                condition;
   Value *                           value;
   enum CompOp                       comp;
-  enum AggrFuncType aggr_func_type;
+  enum AggrFuncType                 aggr_func_type;
   RelAttrSqlNode *                  rel_attr;
   std::vector<AttrInfoSqlNode> *    attr_infos;
   AttrInfoSqlNode *                 attr_info;

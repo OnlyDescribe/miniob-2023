@@ -92,6 +92,9 @@ RC insert_record_from_file(
         }
       } break;
       case CHARS: {
+        record_values[i].set_text(file_value.c_str());
+      } break;
+      case TEXTS: {
         record_values[i].set_string(file_value.c_str());
       } break;
       case DATES: {

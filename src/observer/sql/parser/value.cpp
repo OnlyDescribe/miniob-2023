@@ -60,9 +60,11 @@ Value::Value(const char *s, AttrType type)
 void Value::set_data(char *data, int length)
 {
   switch (attr_type_) {
-    case CHARS:
-    case TEXTS: {
+    case CHARS: {
       set_string(data, length);
+    } break;
+    case TEXTS: {
+      set_text(data);
     } break;
     case DATES: {
       // set_date(data);
@@ -137,6 +139,13 @@ void Value::set_date(int date)
   length_ = sizeof(date);
 }
 
+void Value::set_text(const char *s)
+{
+  attr_type_ = TEXTS;
+  str_value_.assign(s);
+  length_ = str_value_.length();
+}
+
 void Value::set_value(const Value &value)
 {
   switch (value.attr_type_) {
@@ -150,8 +159,7 @@ void Value::set_value(const Value &value)
       set_string(value.get_string().c_str());
     } break;
     case TEXTS: {
-      set_string(value.get_string().c_str());
-      set_type(value.attr_type_);
+      set_text(value.get_string().c_str());
     } break;
     case BOOLEANS: {
       set_boolean(value.get_boolean());

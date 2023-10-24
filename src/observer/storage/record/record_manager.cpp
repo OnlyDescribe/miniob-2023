@@ -60,6 +60,13 @@ void RecordPageIterator::init(RecordPageHandler &record_page_handler, SlotNum st
   page_num_ = record_page_handler.get_page_num();
   bitmap_.init(record_page_handler.bitmap_, record_page_handler.page_header_->record_capacity);
   next_slot_num_ = bitmap_.next_setted_bit(start_slot_num);
+
+  // 注意: 如果是为text字段设计的溢出页则应跳过该页面
+  // 这里设计这个iterator 的 next_slot_num_ 为 -1 即可
+  PageHeader *page_header = record_page_handler_->page_header_;
+  if (page_header->is_overflow) {
+    next_slot_num_ = -1;
+  }
 }
 
 bool RecordPageIterator::has_next() { return -1 != next_slot_num_; }
