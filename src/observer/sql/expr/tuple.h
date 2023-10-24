@@ -182,7 +182,7 @@ public:
         record_offset += sizeof(PageNum);
         memcpy(&page_num, this->record_->data() + field_meta->offset() + record_offset, sizeof(PageNum));
       }
-      cell.set_data((char *)texts.data(), 0);
+      cell.set_data(texts.c_str(), 0);
     } else {
       cell.set_data(this->record_->data() + field_meta->offset(), field_meta->len());
     }
