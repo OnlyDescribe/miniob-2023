@@ -401,7 +401,7 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
         memset(frame->data(), 0, BP_PAGE_SIZE);
         memcpy(frame->data(), &page_header, sizeof(PageHeader));  // 最开始放溢出页
         memcpy(frame->data() + sizeof(PageHeader), value.data() + frame_offset, BP_PAGE_SIZE - sizeof(PageHeader));
-        frame_offset += BP_PAGE_SIZE;
+        frame_offset += (BP_PAGE_SIZE - sizeof(PageHeader));
 
         // 将 record 对应 text 字段位置的内容设置为溢出页的页号
         memcpy(record_data + field->offset() + record_offset, &page_num, sizeof(PageNum));
