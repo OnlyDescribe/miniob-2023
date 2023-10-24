@@ -384,8 +384,8 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
       int frame_offset{0};
       // 将 text 字段的内容拷贝到溢出页中
       // 注意: 杜绝 UB
-      const int COPY_SIZE = BP_PAGE_SIZE - sizeof(PageHeader);
-      while ((data_len + sizeof(PageHeader) + 1) > BP_PAGE_SIZE) {
+      const int COPY_SIZE = BP_PAGE_DATA_SIZE - sizeof(PageHeader);
+      while ((data_len + sizeof(PageHeader) + 1) > BP_PAGE_DATA_SIZE) {
         data_len -= COPY_SIZE;
 
         // 分配 frame
@@ -399,7 +399,7 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
         // 写 text 数据到溢出页
         frame->write_latch();
 
-        memset(frame->data(), 0, BP_PAGE_SIZE);
+        memset(frame->data(), 0, BP_PAGE_DATA_SIZE);
         memcpy(frame->data(), &page_header, sizeof(PageHeader));  // 最开始放溢出页
         memcpy(frame->data() + sizeof(PageHeader), value.data() + frame_offset, COPY_SIZE);
         frame_offset += COPY_SIZE;
@@ -428,7 +428,7 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
 
       frame->write_latch();
 
-      memset(frame->data(), 0, BP_PAGE_SIZE);
+      memset(frame->data(), 0, BP_PAGE_DATA_SIZE);
       memcpy(frame->data(), &page_header, sizeof(PageHeader));  // 最开始放溢出页
       memcpy(frame->data() + sizeof(PageHeader), value.data() + frame_offset, data_len + 1);
 
