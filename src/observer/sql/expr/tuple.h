@@ -171,7 +171,7 @@ public:
         data_buffer_pool->get_this_page(page_num, &frame);
 
         std::string text;
-        text.assign((char *)frame->data() + sizeof(PageHeader));
+        text.assign((char *)frame->data() + sizeof(PageHeader)); // read_latch?
         texts += text;
 
         frame->unpin();
