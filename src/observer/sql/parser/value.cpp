@@ -260,6 +260,12 @@ int Value::compare(const Value &other) const
     float this_data = this->get_float();
     float other_data = other.get_float();
     return common::compare_float((void *)&this_data, (void *)&other_data);
+  } else if ((this->attr_type_ == CHARS || this->attr_type_ == TEXTS) &&
+             (other.attr_type_ == CHARS || other.attr_type_ == TEXTS)) {
+    return common::compare_string((void *)this->str_value_.c_str(),
+        this->str_value_.length(),
+        (void *)other.str_value_.c_str(),
+        other.str_value_.length());
   }
   LOG_WARN("not supported");
   return -1;  // TODO return rc?
