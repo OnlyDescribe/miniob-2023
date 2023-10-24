@@ -94,7 +94,8 @@ public:
   const char *name() const;
 
   const TableMeta &table_meta() const;
-
+  DiskBufferPool *data_buffer_pool() { return data_buffer_pool_; }  // 为了让tuple能根据这个从表中拿到溢出页
+  const DiskBufferPool *data_buffer_pool() const { return data_buffer_pool_; }
   RC sync();
 
 private:

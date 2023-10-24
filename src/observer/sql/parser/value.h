@@ -26,6 +26,7 @@ enum AttrType
   UNDEFINED,
   DATES,     ///< 日期类型
   CHARS,     ///< 字符串类型
+  TEXTS,     ///< 文本类型
   INTS,      ///< 整数类型(4字节)
   FLOATS,    ///< 浮点数类型(4字节)
   BOOLEANS,  ///< boolean类型，当前不是由parser解析出来的，是程序内部使用的
@@ -63,6 +64,7 @@ public:
   void set_string(const char *s, int len = 0);
   void set_date(const char *s);
   void set_date(int date);
+  void set_text(const char *s);
   void set_value(const Value &value);
 
   // add 函数
@@ -71,14 +73,10 @@ public:
     if (a.attr_type() == b.attr_type()) {
       // 只支持三种
       switch (a.attr_type()) {
-        case AttrType::INTS: 
-          return Value(a.get_int() + b.get_int());
-        case AttrType::FLOATS: 
-          return Value(a.get_float() + b.get_float());
-        case AttrType::BOOLEANS: 
-          return Value(a.get_int() + b.get_int());
-        default: 
-          break;
+        case AttrType::INTS: return Value(a.get_int() + b.get_int());
+        case AttrType::FLOATS: return Value(a.get_float() + b.get_float());
+        case AttrType::BOOLEANS: return Value(a.get_int() + b.get_int());
+        default: break;
       }
     }
     throw std::runtime_error("Unsupported types for operation.");

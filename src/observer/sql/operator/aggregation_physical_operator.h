@@ -12,6 +12,7 @@ See the Mulan PSL v2 for more details. */
 
 #include <unordered_map>
 
+#include "common/log/log.h"
 #include "sql/operator/table_scan_physical_operator.h"
 #include "storage/record/record_manager.h"
 #include "common/rc.h"
@@ -61,6 +62,7 @@ struct hash<AggregateKey> {
         case AttrType::BOOLEANS:
           valueHash = std::hash<bool>{}(value.get_boolean());
         default:
+          LOG_WARN("Unsupported field type");
           break;
         }
         // 组合哈希值

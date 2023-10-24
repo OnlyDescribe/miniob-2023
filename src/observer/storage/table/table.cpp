@@ -18,6 +18,9 @@ See the Mulan PSL v2 for more details. */
 #include <utility>
 
 #include "common/defs.h"
+#include "common/rc.h"
+#include "sql/parser/value.h"
+#include "storage/buffer/page.h"
 #include "storage/field/field_meta.h"
 #include "storage/table/table.h"
 #include "storage/table/table_meta.h"
@@ -236,6 +239,7 @@ RC Table::open(const char *meta_file, const char *base_dir)
 RC Table::insert_record(Record &record)
 {
   RC rc = RC::SUCCESS;
+
   rc = record_handler_->insert_record(record.data(), table_meta_.record_size(), &record.rid());
   if (rc != RC::SUCCESS) {
     LOG_ERROR("Insert record failed. table name=%s, rc=%s", table_meta_.name(), strrc(rc));
@@ -246,9 +250,14 @@ RC Table::insert_record(Record &record)
   for (Index *index : indexes_) {
     rc = index->insert_entry(record.data(), &record.rid());
     if (rc != RC::SUCCESS) {
-      // 注意 KeyComparator, 如果是唯一索引, 则只比较索引字段; 而忽略rid
-      // 此时不应从索引中删除对应的entry; 否则会删除已存在的索引叶节点, 即使是不同的rid
-      if (!index->index_meta().is_unique()) {
+      if (index->index_meta().is_unique()) {
+        // 注意 KeyComparator, 如果是唯一索引, 则只比较索引字段; 而忽略rid
+        // 此时不应从索引中删除对应的entry; 否则会删除已存在的索引叶节点, 即使是不同的rid
+        // TODO(oldcb): 唯一索引的回滚处理比较麻烦
+        if (rc != RC::RECORD_DUPLICATE_KEY) {
+          LOG_ERROR("Unprocessable situation; the unique index cannot currently be rolled back. table name=%s, rc=%s", table_meta_.name(), strrc(rc));
+        }
+      } else {
         RC rc2 = delete_entry_of_indexes(record.data(), record.rid(), false /*error_on_not_exists*/);
         // 可能出现了键值重复
         if (rc2 != RC::SUCCESS) {
@@ -359,7 +368,83 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
         copy_len = data_len + 1;
       }
     }
-    memcpy(record_data + field->offset(), value.data(), copy_len);
+
+    // 处理 text 字段, 设计当前文件下的溢出页
+    if (field->type() == AttrType::TEXTS) {
+      size_t data_len = value.length();
+      Frame *frame = nullptr;
+
+      memset(record_data + field->offset(), 0, copy_len);
+
+      // 设置溢出页的页头
+      PageHeader page_header;
+      page_header.is_overflow = true;
+
+      int record_offset{0};
+      int frame_offset{0};
+      // 将 text 字段的内容拷贝到溢出页中
+      // 注意: 杜绝 UB
+      while ((data_len + sizeof(PageHeader) + 1) > BP_PAGE_SIZE) {
+        data_len -= BP_PAGE_SIZE;
+
+        // 分配 frame
+        RC ret = data_buffer_pool_->allocate_page(&frame);
+        if (ret != RC::SUCCESS) {
+          LOG_ERROR("Failed to allocate page while inserting record. ret:%d", ret);
+          return ret;
+        }
+        PageNum page_num = frame->page_num();
+
+        // 写 text 数据到溢出页
+        frame->write_latch();
+
+        memset(frame->data(), 0, BP_PAGE_SIZE);
+        memcpy(frame->data(), &page_header, sizeof(PageHeader));  // 最开始放溢出页
+        memcpy(frame->data() + sizeof(PageHeader), value.data() + frame_offset, BP_PAGE_SIZE - sizeof(PageHeader));
+        frame_offset += BP_PAGE_SIZE;
+
+        // 将 record 对应 text 字段位置的内容设置为溢出页的页号
+        memcpy(record_data + field->offset() + record_offset, &page_num, sizeof(PageNum));
+        record_offset += sizeof(PageNum);
+
+        ret = data_buffer_pool_->flush_page(*frame);
+        if (ret != RC::SUCCESS) {
+          LOG_ERROR("Failed to flush page header %d:%d.", data_buffer_pool_->file_desc(), page_num);
+          return ret;
+        }
+        frame->unpin();
+
+        frame->write_unlatch();
+      }
+
+      RC ret = data_buffer_pool_->allocate_page(&frame);
+      if (ret != RC::SUCCESS) {
+        LOG_ERROR("Failed to allocate page while inserting record. ret:%d", ret);
+        return ret;
+      }
+
+      PageNum page_num = frame->page_num();
+
+      frame->write_latch();
+
+      memset(frame->data(), 0, BP_PAGE_SIZE);
+      memcpy(frame->data(), &page_header, sizeof(PageHeader));  // 最开始放溢出页
+      memcpy(frame->data() + sizeof(PageHeader), value.data() + frame_offset, data_len + 1);
+
+      ret = data_buffer_pool_->flush_page(*frame);
+      if (ret != RC::SUCCESS) {
+        LOG_ERROR("Failed to flush page header %d:%d.", data_buffer_pool_->file_desc(), page_num);
+        return ret;
+      }
+      frame->unpin();
+
+      frame->write_unlatch();
+
+      memcpy(record_data + field->offset() + record_offset, &page_num, sizeof(PageNum));
+
+    } else {
+      memcpy(record_data + field->offset(), value.data(), copy_len);
+    }
   }
 
   record.set_data_owner(record_data, record_size);
@@ -500,6 +585,27 @@ RC Table::create_index(Trx *trx, const std::vector<FieldMeta> &field_meta, const
 RC Table::delete_record(const Record &record)
 {
   RC rc = RC::SUCCESS;
+
+  // 把溢出页的内存回收
+  const int sys_field_num = table_meta_.sys_field_num();
+  const int field_num = table_meta_.field_num();
+  const std::vector<FieldMeta> *fieldmetas = table_meta_.field_metas();
+  for (int i = sys_field_num; i < field_num; i++) {
+    auto &meta = (*fieldmetas)[i];
+    if (meta.type() == AttrType::TEXTS) {
+      // 从record中取出溢出页号
+      PageNum page_num;
+      int record_offset{0};
+      memcpy(&page_num, record.data() + meta.offset() + record_offset, sizeof(PageNum));
+
+      while (page_num != 0) {
+        data_buffer_pool_->dispose_page(page_num);
+        record_offset += sizeof(PageNum);
+        memcpy(&page_num, record.data() + meta.offset() + record_offset, sizeof(PageNum));
+      }
+    }
+  }
+
   for (Index *index : indexes_) {
     rc = index->delete_entry(record.data(), &record.rid());
     ASSERT(RC::SUCCESS == rc,
@@ -509,6 +615,7 @@ RC Table::delete_record(const Record &record)
         record.rid().to_string().c_str(),
         strrc(rc));
   }
+
   rc = record_handler_->delete_record(&record.rid());
   return rc;
 }

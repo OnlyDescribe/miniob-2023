@@ -93,6 +93,12 @@ public:
           res = common::compare_date((void *)(pos + v1), (void *)(pos + v2));
           break;
         }
+        case TEXTS: {
+          // TODO(oldcb): TEXTS的索引比较
+          LOG_ERROR("暂且不支持. %d", attr_type_[i]);
+          res = common::compare_string((void *)(pos + v1), attr_length_[i], (void *)(pos + v2), attr_length_[i]);
+          break;
+        }
         default: {
           ASSERT(false, "unknown attr type. %d", attr_type_[i]);
           LOG_ERROR("unknown attr type. %d", attr_type_[i]);
@@ -189,7 +195,8 @@ public:
         case FLOATS: {
           return std::to_string(*(float *)v);
         }
-        case CHARS: {
+        case CHARS:
+        case TEXTS: {
           std::string str;
           for (int j = 0; j < attr_length_[i]; j++) {
             if (v[j] == 0) {

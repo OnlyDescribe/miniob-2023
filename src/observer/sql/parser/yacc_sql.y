@@ -83,6 +83,7 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
         TRX_ROLLBACK
         INT_T
         STRING_T
+        TEXT_T
         FLOAT_T
         DATE_T
         HELP
@@ -114,7 +115,7 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
   ConditionSqlNode *                condition;
   Value *                           value;
   enum CompOp                       comp;
-  enum AggrFuncType aggr_func_type;
+  enum AggrFuncType                 aggr_func_type;
   RelAttrSqlNode *                  rel_attr;
   std::vector<AttrInfoSqlNode> *    attr_infos;
   AttrInfoSqlNode *                 attr_info;
@@ -401,7 +402,13 @@ attr_def:
       $$ = new AttrInfoSqlNode;
       $$->type = (AttrType)$2;
       $$->name = $1;
-      $$->length = 4;
+      if($$->type == AttrType::TEXTS)
+      {
+        $$->length = 68; // 字段长度为68， 在record中存储为16+1个指向文本数据的溢出页
+      }
+      else{
+        $$->length = 4;
+      }
       free($1);
     }
     ;
@@ -409,10 +416,11 @@ number:
     NUMBER {$$ = $1;}
     ;
 type:
-    INT_T      { $$=INTS; }
-    | STRING_T { $$=CHARS; }
-    | FLOAT_T  { $$=FLOATS; }
-    | DATE_T   { $$=DATES; }
+    INT_T      { $$=AttrType::INTS; }
+    | STRING_T { $$=AttrType::CHARS; }
+    | TEXT_T   { $$=AttrType::TEXTS; }
+    | FLOAT_T  { $$=AttrType::FLOATS; }
+    | DATE_T   { $$=AttrType::DATES; }
     ;
 insert_stmt:        /*insert   语句的语法解析树*/
     INSERT INTO ID VALUES LBRACE value value_list RBRACE 
@@ -455,6 +463,9 @@ value:
     }
     |SSS {
       char *tmp = common::substr($1,1,strlen($1)-2);
+      if(strlen(tmp)>65535){
+        yyerror(&@$, sql_string, sql_result, scanner, "invalid text", SCF_INVALID);
+      }
       $$ = new Value(tmp);
       free(tmp);
     }

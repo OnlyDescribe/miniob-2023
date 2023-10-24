@@ -15,6 +15,7 @@ See the Mulan PSL v2 for more details. */
 #pragma once
 
 #include <memory>
+#include <type_traits>
 #include <vector>
 #include <string>
 
@@ -23,7 +24,10 @@ See the Mulan PSL v2 for more details. */
 #include "sql/parser/parse.h"
 #include "sql/parser/value.h"
 #include "sql/expr/expression.h"
+#include "storage/buffer/disk_buffer_pool.h"
+#include "storage/buffer/frame.h"
 #include "storage/record/record.h"
+#include "storage/record/record_manager.h"
 
 class Table;
 
@@ -153,7 +157,35 @@ public:
     FieldExpr *field_expr = speces_[index];
     const FieldMeta *field_meta = field_expr->field().meta();
     cell.set_type(field_meta->type());
-    cell.set_data(this->record_->data() + field_meta->offset(), field_meta->len());
+
+    // 如果字段是文本, 需要从表中的对应的溢出页取数据
+    if (field_meta->type() == AttrType::TEXTS) {
+      Frame *frame = nullptr;
+      std::string texts;  // 文本内容
+
+      PageNum page_num;  // 溢出页号
+      int record_offset{0};
+      memcpy(&page_num,
+          this->record_->data() + field_meta->offset() + record_offset,
+          sizeof(PageNum));  // 溢出页号保存在record中
+      while (page_num != 0) {
+        DiskBufferPool *data_buffer_pool = const_cast<DiskBufferPool *>(table_->data_buffer_pool());
+        data_buffer_pool->get_this_page(page_num, &frame);
+
+        std::string text;
+        frame->read_latch();
+        text.assign((char *)frame->data() + sizeof(PageHeader));
+        frame->unpin();
+        frame->read_unlatch();
+        texts += text;
+
+        record_offset += sizeof(PageNum);
+        memcpy(&page_num, this->record_->data() + field_meta->offset() + record_offset, sizeof(PageNum));
+      }
+      cell.set_data((char *)texts.data(), 0);
+    } else {
+      cell.set_data(this->record_->data() + field_meta->offset(), field_meta->len());
+    }
     return RC::SUCCESS;
   }
 
@@ -367,7 +399,7 @@ private:
 class AggregationTuple : public Tuple
 {
 public:
-  AggregationTuple(const std::vector<Value>& aggregations, const std::vector<Field>& fields)
+  AggregationTuple(const std::vector<Value> &aggregations, const std::vector<Field> &fields)
       : aggregations_(aggregations), fields_(fields)
   {}
   virtual ~AggregationTuple() = default;
