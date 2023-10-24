@@ -161,20 +161,24 @@ public:
     // 如果字段是文本, 需要从表中的对应的溢出页取数据
     if (field_meta->type() == AttrType::TEXTS) {
       Frame *frame = nullptr;
-      std::string texts; // 文本内容
+      std::string texts;  // 文本内容
 
-      PageNum page_num; // 溢出页号
+      PageNum page_num;  // 溢出页号
       int record_offset{0};
-      memcpy(&page_num, this->record_->data() + field_meta->offset() + record_offset, sizeof(PageNum)); // 溢出页号保存在record中
+      memcpy(&page_num,
+          this->record_->data() + field_meta->offset() + record_offset,
+          sizeof(PageNum));  // 溢出页号保存在record中
       while (page_num != 0) {
         DiskBufferPool *data_buffer_pool = const_cast<DiskBufferPool *>(table_->data_buffer_pool());
         data_buffer_pool->get_this_page(page_num, &frame);
 
         std::string text;
-        text.assign((char *)frame->data() + sizeof(PageHeader)); // read_latch?
+        frame->read_latch();
+        text.assign((char *)frame->data() + sizeof(PageHeader));
+        frame->unpin();
+        frame->read_unlatch();
         texts += text;
 
-        frame->unpin();
         record_offset += sizeof(PageNum);
         memcpy(&page_num, this->record_->data() + field_meta->offset() + record_offset, sizeof(PageNum));
       }

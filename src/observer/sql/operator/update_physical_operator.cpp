@@ -83,11 +83,11 @@ RC UpdatePhysicalOperator::next()
     values.reserve(value_num);
 
     for (int i = 0, j = 0; i < value_num; ++i) {
-      row_tuple->cell_at(i, cell);
       if (index_field_metas_[j] == i) {
         values.push_back(*values_[j]);
         ++j;
       } else {
+        row_tuple->cell_at(i, cell);
         values.push_back(cell);
       }
     }

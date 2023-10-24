@@ -396,14 +396,12 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
         PageNum page_num = frame->page_num();
 
         // 写 text 数据到溢出页
-        // frame->write_latch();
+        frame->write_latch();
 
         memset(frame->data(), 0, BP_PAGE_SIZE);
         memcpy(frame->data(), &page_header, sizeof(PageHeader));  // 最开始放溢出页
         memcpy(frame->data() + sizeof(PageHeader), value.data() + frame_offset, BP_PAGE_SIZE - sizeof(PageHeader));
         frame_offset += BP_PAGE_SIZE;
-
-        // frame->write_unlatch();
 
         // 将 record 对应 text 字段位置的内容设置为溢出页的页号
         memcpy(record_data + field->offset() + record_offset, &page_num, sizeof(PageNum));
@@ -415,6 +413,8 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
           return ret;
         }
         frame->unpin();
+
+        frame->write_unlatch();
       }
 
       RC ret = data_buffer_pool_->allocate_page(&frame);
@@ -425,15 +425,11 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
 
       PageNum page_num = frame->page_num();
 
-      // frame->write_latch();
+      frame->write_latch();
 
       memset(frame->data(), 0, BP_PAGE_SIZE);
       memcpy(frame->data(), &page_header, sizeof(PageHeader));  // 最开始放溢出页
       memcpy(frame->data() + sizeof(PageHeader), value.data() + frame_offset, data_len + 1);
-
-      // frame->write_unlatch();
-
-      memcpy(record_data + field->offset() + record_offset, &page_num, sizeof(PageNum));
 
       ret = data_buffer_pool_->flush_page(*frame);
       if (ret != RC::SUCCESS) {
@@ -441,6 +437,11 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
         return ret;
       }
       frame->unpin();
+
+      frame->write_unlatch();
+
+      memcpy(record_data + field->offset() + record_offset, &page_num, sizeof(PageNum));
+
     } else {
       memcpy(record_data + field->offset(), value.data(), copy_len);
     }

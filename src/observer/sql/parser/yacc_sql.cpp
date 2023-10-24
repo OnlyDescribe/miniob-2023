@@ -1988,7 +1988,7 @@ yyreduce:
       (yyval.attr_info)->name = (yyvsp[-1].string);
       if((yyval.attr_info)->type == AttrType::TEXTS)
       {
-        (yyval.attr_info)->length = 128; // 字段长度为64， 在record中存储为32个指向文本数据的溢出页
+        (yyval.attr_info)->length = 68; // 字段长度为68， 在record中存储为16+1个指向文本数据的溢出页
       }
       else{
         (yyval.attr_info)->length = 4;
