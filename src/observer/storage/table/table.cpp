@@ -553,7 +553,6 @@ RC Table::create_index(Trx *trx, std::vector<FieldMeta> &field_meta, const char 
     field_index -= table_meta_.sys_field_num();  // 需要考虑sys_field
     field_id.push_back(field_index);
   }
-  field_id.push_back(table_meta_.field_metas()->size() - 1);  // do nothing
 
   // 创建索引相关数据
   BplusTreeIndex *index = new BplusTreeIndex();
