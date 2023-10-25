@@ -377,6 +377,8 @@ RC PhysicalPlanGenerator::create_plan(JoinLogicalOperator &join_oper, unique_ptr
     ptr->set_expressions(std::move(join_oper.expressions()));
   } else {
     join_physical_oper = std::make_unique<NestedLoopJoinPhysicalOperator>();
+    auto ptr = static_cast<NestedLoopJoinPhysicalOperator*>(join_physical_oper.get());
+    ptr->set_expressions(std::move(join_oper.expressions()));
   }
 
   for (auto &child_oper : child_opers) {

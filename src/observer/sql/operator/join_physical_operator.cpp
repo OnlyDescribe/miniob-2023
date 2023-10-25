@@ -34,6 +34,28 @@ RC NestedLoopJoinPhysicalOperator::open(Trx *trx)
   return rc;
 }
 
+RC NestedLoopJoinPhysicalOperator::predicate() {
+  RC rc = RC::SUCCESS;
+  if (!expressions_.empty()) {
+    Value left_value;
+    rc = left_expression()->get_value(*left_tuple_, left_value);
+    if (rc != RC::SUCCESS) {
+      return rc;
+    }
+
+    Value right_value;
+    right_expression()->get_value(*right_tuple_, right_value);
+    if (rc != RC::SUCCESS) {
+      return rc;
+    }
+
+    if (left_value.compare(right_value) != 0) {
+      return RC::NOT_MATHCH;
+    } 
+  }
+  return rc;
+}
+
 RC NestedLoopJoinPhysicalOperator::next()
 {
   bool left_need_step = (left_tuple_ == nullptr);
@@ -49,6 +71,10 @@ RC NestedLoopJoinPhysicalOperator::next()
         return rc;
       }
     } else {
+      rc = predicate();
+      if (rc == RC::NOT_MATHCH) {
+        rc = next();
+      }
       return rc;  // got one tuple from right
     }
   }
@@ -61,6 +87,16 @@ RC NestedLoopJoinPhysicalOperator::next()
   }
 
   rc = right_next();
+
+  if (rc != RC::SUCCESS) {
+    return rc;
+  }
+
+  rc = predicate();
+  if (rc == RC::NOT_MATHCH) {
+    rc = next();
+  }
+  
   return rc;
 }
 
@@ -155,12 +191,12 @@ RC HashJoinPhysicalOperator::open(Trx* trx) {
     rc = right_expression()->get_value(*right_tuple, value);
     mp_[value].push_back(right_tuple);
   }
-  for(auto&[k, vec]: mp_) {
-    std::cout << k.to_string() << ":" << std::endl;
-    for (Tuple* t: vec) {
-      std::cout << t->to_string() << std::endl;
-    }
-  }
+  // for(auto&[k, vec]: mp_) {
+  //   std::cout << k.to_string() << ":" << std::endl;
+  //   for (Tuple* t: vec) {
+  //     std::cout << t->to_string() << std::endl;
+  //   }
+  // }
   trx_ = trx;
   return RC::SUCCESS;
 }
@@ -181,7 +217,6 @@ RC HashJoinPhysicalOperator::next() {
     auto it = mp_.find(value);
     if (it != mp_.end()) {
       for (Tuple* right_tuple: it->second) {
-        std::cout << value.to_string() << " " << right_tuple->to_string() << std::endl;
         right_results_.push(right_tuple);
       }
       break;
