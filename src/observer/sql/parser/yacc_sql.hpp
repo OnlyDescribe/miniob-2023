@@ -106,15 +106,16 @@ extern int yydebug;
     GE = 307,                      /* GE  */
     NE = 308,                      /* NE  */
     NOT = 309,                     /* NOT  */
-    DEFAULT = 310,                 /* DEFAULT  */
-    NULL_T = 311,                  /* NULL_T  */
-    LIKE_CONDITION = 312,          /* LIKE_CONDITION  */
-    NUMBER = 313,                  /* NUMBER  */
-    FLOAT = 314,                   /* FLOAT  */
-    ID = 315,                      /* ID  */
-    SSS = 316,                     /* SSS  */
-    DATE = 317,                    /* DATE  */
-    UMINUS = 318                   /* UMINUS  */
+    IS = 310,                      /* IS  */
+    DEFAULT = 311,                 /* DEFAULT  */
+    NULL_T = 312,                  /* NULL_T  */
+    LIKE_CONDITION = 313,          /* LIKE_CONDITION  */
+    NUMBER = 314,                  /* NUMBER  */
+    FLOAT = 315,                   /* FLOAT  */
+    ID = 316,                      /* ID  */
+    SSS = 317,                     /* SSS  */
+    DATE = 318,                    /* DATE  */
+    UMINUS = 319                   /* UMINUS  */
   };
   typedef enum yytokentype yytoken_kind_t;
 #endif
@@ -123,7 +124,7 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 115 "yacc_sql.y"
+#line 116 "yacc_sql.y"
 
   ParsedSqlNode *                   sql_node;
   ConditionSqlNode *                condition;
@@ -148,7 +149,7 @@ union YYSTYPE
   float                             floats;
   std::vector<std::string>*         field_or_star_list;
 
-#line 152 "yacc_sql.hpp"
+#line 153 "yacc_sql.hpp"
 
 };
 typedef union YYSTYPE YYSTYPE;

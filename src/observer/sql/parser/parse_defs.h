@@ -70,6 +70,8 @@ enum CompOp
   GREAT_THAN,   ///< ">"
   LIKE,         ///< "like"
   NOT_LIKE,     ///< "not like"
+  IS_NULL,      ///< "is null"
+  IS_NOT_NULL,  ///< "is not null"
   NO_OP
 };
 
@@ -216,7 +218,6 @@ struct DropTableSqlNode
  * @brief 描述一个create index语句
  * @ingroup SQLParser
  * @details 创建索引时，需要指定索引名，表名，字段名。
- * 正常的SQL语句中，一个索引可能包含了多个字段，这里仅支持一个字段。
  */
 struct CreateIndexSqlNode
 {

@@ -253,7 +253,7 @@ RC Table::insert_record(Record &record)
       if (index->index_meta().is_unique()) {
         // 注意 KeyComparator, 如果是唯一索引, 则只比较索引字段; 而忽略rid
         // 此时不应从索引中删除对应的entry; 否则会删除已存在的索引叶节点, 即使是不同的rid
-        // TODO(oldcb): 唯一索引的回滚处理比较麻烦
+        // TODO(oldcb): 唯一索引的回滚处理比较麻烦(需要比较rid, 要特殊处理)
         if (rc != RC::RECORD_DUPLICATE_KEY) {
           LOG_ERROR("Unprocessable situation; the unique index cannot currently be rolled back. table name=%s, rc=%s", table_meta_.name(), strrc(rc));
         }
@@ -512,7 +512,7 @@ RC Table::get_record_scanner(RecordFileScanner &scanner, Trx *trx, bool readonly
   return rc;
 }
 
-RC Table::create_index(Trx *trx, const std::vector<FieldMeta> &field_meta, const char *index_name, bool is_unique)
+RC Table::create_index(Trx *trx, std::vector<FieldMeta> &field_meta, const char *index_name, bool is_unique)
 {
   if (common::is_blank(index_name)) {
     LOG_INFO("Invalid input arguments, table name is %s, index_name is blank", name());
@@ -531,10 +531,34 @@ RC Table::create_index(Trx *trx, const std::vector<FieldMeta> &field_meta, const
     return rc;
   }
 
+  // field_meta 最后面放 bitmap
+  // 注意: 是 [index fields] [bitmap] 的结构
+  field_meta.push_back(*table_meta_.null_field());
+
+  // 计算每个field对应在表中是第几个字段(id)
+  std::vector<int> field_id;
+  field_id.reserve(field_meta.size() + 1);
+  for (const FieldMeta &meta : field_meta) {
+    int field_index;
+    const std::vector<FieldMeta> &table_field_metas = *table_meta_.field_metas();
+    auto it = std::find_if(table_field_metas.begin(), table_field_metas.end(), [meta](const FieldMeta &m) {
+      if (strcmp(m.name(), meta.name()) == 0) {
+        return true;
+      }
+      return false;
+    });
+
+    ASSERT(it != table_field_metas.end(), "failed to get field index");
+    field_index = std::distance(table_field_metas.begin(), it);
+    field_index -= table_meta_.sys_field_num();  // 需要考虑sys_field
+    field_id.push_back(field_index);
+  }
+  field_id.push_back(table_meta_.field_metas()->size() - 1);  // do nothing
+
   // 创建索引相关数据
   BplusTreeIndex *index = new BplusTreeIndex();
   std::string index_file = table_index_file(base_dir_.c_str(), name(), index_name);
-  rc = index->create(index_file.c_str(), new_index_meta, field_meta);
+  rc = index->create(index_file.c_str(), new_index_meta, field_meta, field_id);
   if (rc != RC::SUCCESS) {
     delete index;
     LOG_ERROR("Failed to create bplus tree index. file name=%s, rc=%d:%s", index_file.c_str(), rc, strrc(rc));

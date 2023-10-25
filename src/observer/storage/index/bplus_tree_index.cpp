@@ -17,7 +17,8 @@ See the Mulan PSL v2 for more details. */
 
 BplusTreeIndex::~BplusTreeIndex() noexcept { close(); }
 
-RC BplusTreeIndex::create(const char *file_name, const IndexMeta &index_meta, const std::vector<FieldMeta> &field_metas)
+RC BplusTreeIndex::create(const char *file_name, const IndexMeta &index_meta, const std::vector<FieldMeta> &field_metas,
+    const std::vector<int> &field_ids)
 {
   if (inited_) {
     LOG_WARN("Failed to create index due to the index has been created before. file_name:%s, index:%s",
@@ -30,6 +31,7 @@ RC BplusTreeIndex::create(const char *file_name, const IndexMeta &index_meta, co
 
   std::vector<AttrType> attr_type;
   std::vector<int> attr_length;
+  std::vector<int> attr_id;
   attr_type.reserve(field_metas.size());
   attr_length.reserve(field_metas.size());
   for (int i = 0; i < field_metas.size(); ++i) {
@@ -37,7 +39,7 @@ RC BplusTreeIndex::create(const char *file_name, const IndexMeta &index_meta, co
     attr_length.push_back(field_metas[i].len());
   }
 
-  RC rc = index_handler_.create(file_name, attr_type, attr_length, index_meta.is_unique());
+  RC rc = index_handler_.create(file_name, attr_type, attr_length, field_ids, index_meta.is_unique());
   if (RC::SUCCESS != rc) {
     LOG_WARN("Failed to create index_handler, file_name:%s, index:%s, rc:%s",
         file_name,
@@ -96,6 +98,7 @@ RC BplusTreeIndex::insert_entry(const char *record, const RID *rid)
   char *key = new char[len];
 
   // 根据 field_metas 将需要索引的字段提取合并
+  // 并把 null的 bitmap 插入到了最后
   // TODO(oldcb): null
   int pos{0};
   for (const auto &field_meta : field_metas_) {
@@ -118,6 +121,7 @@ RC BplusTreeIndex::delete_entry(const char *record, const RID *rid)
   char *key = new char[len];
 
   // 根据 field_metas 将需要索引的字段提取合并
+  // 并把 null的 bitmap 插入到了最后
   int pos{0};
   for (const auto &field_meta : field_metas_) {
     memcpy(key + pos, record + field_meta.offset(), field_meta.len());

@@ -13,9 +13,14 @@ UpdatePhysicalOperator::UpdatePhysicalOperator(
   for (const auto &field_meta : field_metas_) {
     int field_index;
     const std::vector<FieldMeta> &table_field_metas = *table_->table_meta().field_metas();
-    auto it = std::find_if(table_field_metas.begin(),
-        table_field_metas.end(),
-        [update_field_meta = field_meta](const FieldMeta &meta) { return meta.name() == update_field_meta->name(); });
+    auto it = std::find_if(
+        table_field_metas.begin(), table_field_metas.end(), [update_field_meta = field_meta](const FieldMeta &meta) {
+          if (strcmp(meta.name(), update_field_meta->name()) == 0) {
+            return true;
+          }
+          return false;
+          // return meta.name() == update_field_meta->name();
+        });
 
     ASSERT(it != table_field_metas.end(), "failed to get field index");
     field_index = std::distance(table_field_metas.begin(), it);
@@ -86,7 +91,7 @@ RC UpdatePhysicalOperator::next()
     Value cell;
 
     std::vector<Value> values;
-    int value_num = row_tuple->cell_num() - sys_field_num; // row_tuple中应该包含系统字段
+    int value_num = row_tuple->cell_num() - sys_field_num;  // row_tuple中应该包含系统字段
     values.reserve(value_num);
 
     for (int i = 0, j = 0; i < value_num; ++i) {

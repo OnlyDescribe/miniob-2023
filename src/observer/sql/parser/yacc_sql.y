@@ -107,6 +107,7 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
         GE
         NE
         NOT
+        IS
         DEFAULT
         NULL_T
         LIKE_CONDITION
@@ -846,6 +847,28 @@ condition:
 
       delete $1;
       delete $3;
+    }
+    | value IS NULL_T
+    {
+      $$ = new ConditionSqlNode;
+      $$->left_is_attr = 0;
+      $$->left_value = *$1;
+      $$->right_is_attr = 0;
+      $$->right_value = Value(AttrType::NULLS);
+      $$->comp = CompOp::IS_NULL;
+
+      delete $1;
+    }
+    | value IS NOT NULL_T
+    {
+      $$ = new ConditionSqlNode;
+      $$->left_is_attr = 0;
+      $$->left_value = *$1;
+      $$->right_is_attr = 0;
+      $$->right_value = Value(AttrType::NULLS);
+      $$->comp = CompOp::IS_NOT_NULL;
+
+      delete $1;
     }
     ;
 

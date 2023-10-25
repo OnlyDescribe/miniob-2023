@@ -273,17 +273,25 @@ int Value::compare(const Value &other) const
   } else if (this->attr_type_ == FLOATS && other.attr_type_ == INTS) {
     float other_data = other.num_value_.int_value_;
     return common::compare_float((void *)&this->num_value_.float_value_, (void *)&other_data);
-  } else if ((this->attr_type_ == DATES || this->attr_type_ == INTS || this->attr_type_ == FLOATS) &&
-             (other.attr_type_ == DATES || other.attr_type_ == INTS || other.attr_type_ == FLOATS)) {
+  }
+  // common comparison for DATES and INTS and FLOATS
+  else if ((this->attr_type_ == DATES || this->attr_type_ == INTS || this->attr_type_ == FLOATS) &&
+           (other.attr_type_ == DATES || other.attr_type_ == INTS || other.attr_type_ == FLOATS)) {
     float this_data = this->get_float();
     float other_data = other.get_float();
     return common::compare_float((void *)&this_data, (void *)&other_data);
-  } else if ((this->attr_type_ == CHARS || this->attr_type_ == TEXTS) &&
-             (other.attr_type_ == CHARS || other.attr_type_ == TEXTS)) {
+  }
+  // common comparison for CHARS and TEXTS
+  else if ((this->attr_type_ == CHARS || this->attr_type_ == TEXTS) &&
+           (other.attr_type_ == CHARS || other.attr_type_ == TEXTS)) {
     return common::compare_string((void *)this->str_value_.c_str(),
         this->str_value_.length(),
         (void *)other.str_value_.c_str(),
         other.str_value_.length());
+  }
+  // common comparison for NULLS
+  else if (this->attr_type_ == NULLS || other.attr_type_ == NULLS) {
+    LOG_WARN("can not compare");
   }
   LOG_WARN("not supported");
   return -1;  // TODO return rc?

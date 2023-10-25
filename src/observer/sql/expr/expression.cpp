@@ -119,14 +119,25 @@ bool ComparisonExpr::is_like(const std::string& s, const std::string& p) const {
 RC ComparisonExpr::compare_value(const Value &left, const Value &right, bool &result) const
 {
   RC rc = RC::SUCCESS;
+  // LIKE
   if (comp_ == LIKE || comp_ == NOT_LIKE) {
     if (left.attr_type() != AttrType::CHARS || right.attr_type() != AttrType::CHARS) {
       result = false;
     }
     result = is_like(left.get_string(), right.get_string());
-    if (comp_ == NOT_LIKE) result = !result;
+    if (comp_ == NOT_LIKE)
+      result = !result;
     return rc;
   }
+
+  // NULL
+  if ((left.attr_type() == AttrType::NULLS || right.attr_type() == AttrType::NULLS) && comp_ != IS_NULL &&
+      comp_ != IS_NOT_NULL) {
+    result = false;
+    return rc;
+  }
+
+  // Compare
   int cmp_result = left.compare(right);
   result = false;
   switch (comp_) {
@@ -147,6 +158,20 @@ RC ComparisonExpr::compare_value(const Value &left, const Value &right, bool &re
     } break;
     case GREAT_THAN: {
       result = (cmp_result > 0);
+    } break;
+    case IS_NULL: {
+      if (left.attr_type() == AttrType::NULLS) {
+        result = true;
+      } else {
+        result = false;
+      }
+    } break;
+    case IS_NOT_NULL: {
+      if (left.attr_type() != AttrType::NULLS) {
+        result = true;
+      } else {
+        result = false;
+      }
     } break;
     default: {
       LOG_WARN("unsupported comparison. %d", comp_);

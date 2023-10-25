@@ -689,16 +689,19 @@ RC BplusTreeHandler::sync()
 RC BplusTreeHandler::create(const char *file_name, AttrType attr_type, int attr_length, bool is_unique,
     int internal_max_size, int leaf_max_size)
 {
+  const std::vector<int> attr_id;  // 不起作用
   return create(file_name,
       std::vector<AttrType>{attr_type},
       std::vector<int>{attr_length},
+      attr_id,
       is_unique,
       internal_max_size,
       leaf_max_size);
 }
 
 RC BplusTreeHandler::create(const char *file_name, const std::vector<AttrType> &attr_type,
-    const std::vector<int> &attr_length, bool is_unique, int internal_max_size /* = -1*/, int leaf_max_size /* = -1 */)
+    const std::vector<int> &attr_length, const std::vector<int> &attr_id, bool is_unique,
+    int internal_max_size /* = -1*/, int leaf_max_size /* = -1 */)
 {
   BufferPoolManager &bpm = BufferPoolManager::instance();
   RC rc = bpm.create_file(file_name);
@@ -737,6 +740,7 @@ RC BplusTreeHandler::create(const char *file_name, const std::vector<AttrType> &
   for (int i = 0; i < attr_type.size(); ++i) {
     file_header->attr_length[i] = attr_length[i];
     file_header->attr_type[i] = attr_type[i];
+    file_header->attr_id[i] = attr_id[i];
     index_attr_length += attr_length[i];
   }
   file_header->is_unique = is_unique;
@@ -768,7 +772,7 @@ RC BplusTreeHandler::create(const char *file_name, const std::vector<AttrType> &
     return RC::NOMEM;
   }
 
-  key_comparator_.init(attr_type, attr_length, is_unique);
+  key_comparator_.init(attr_type, attr_length, attr_id, is_unique);
   key_printer_.init(attr_type, attr_length);
 
   this->sync();
@@ -817,14 +821,17 @@ RC BplusTreeHandler::open(const char *file_name)
 
   std::vector<AttrType> attr_type;
   std::vector<int> attr_length;
+  std::vector<int> attr_id;
   attr_type.reserve(file_header_.attr_num);
   attr_length.reserve(file_header_.attr_num);
+  attr_id.reserve(file_header_.attr_num);
   for (int i = 0; i < file_header_.attr_num; ++i) {
     attr_type.push_back(file_header_.attr_type[i]);
     attr_length.push_back(file_header_.attr_length[i]);
+    attr_id.push_back(file_header_.attr_id[i]);
   }
 
-  key_comparator_.init(attr_type, attr_length, file_header_.is_unique);
+  key_comparator_.init(attr_type, attr_length, attr_id, file_header_.is_unique);
   key_printer_.init(attr_type, attr_length);
   LOG_INFO("Successfully open index %s", file_name);
   return RC::SUCCESS;
@@ -1319,6 +1326,7 @@ MemPoolItem::unique_ptr BplusTreeHandler::make_key(const char *user_key, const R
   for (int i = 0; i < file_header_.attr_num; ++i) {
     index_attr_length += file_header_.attr_length[i];
   }
+  // [index fields] [bitmap of record]
   memcpy(static_cast<char *>(key.get()), user_key, index_attr_length);
   memcpy(static_cast<char *>(key.get()) + index_attr_length, &rid, sizeof(rid));
   return key;
@@ -1757,7 +1765,7 @@ RC BplusTreeScanner::open(const char *left_user_key, int left_len, bool left_inc
     current_frame_ = nullptr;
   }
 
-  return RC:: SUCCESS;
+  return RC::SUCCESS;
 }
 
 void BplusTreeScanner::fetch_item(RID &rid)
