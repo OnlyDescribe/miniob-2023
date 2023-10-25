@@ -107,6 +107,8 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
         GE
         NE
         NOT
+        DEFAULT
+        NULL_T
         LIKE_CONDITION
 
 /** union 中定义各种数据类型，真实生成的代码也是union类型，所以不能有非POD类型的数据 **/
@@ -383,6 +385,29 @@ attr_def_list:
       } else {
         $$ = new std::vector<AttrInfoSqlNode>;
       }
+      $2->is_not_null = false;
+      $$->emplace_back(*$2);
+      delete $2;
+    }
+    | COMMA attr_def DEFAULT NULL_T attr_def_list
+    {
+      if ($5 != nullptr) {
+        $$ = $5;
+      } else {
+        $$ = new std::vector<AttrInfoSqlNode>;
+      }
+      $2->is_not_null = false;
+      $$->emplace_back(*$2);
+      delete $2;
+    }
+    | COMMA attr_def NOT NULL_T attr_def_list
+    {
+      if ($5 != nullptr) {
+        $$ = $5;
+      } else {
+        $$ = new std::vector<AttrInfoSqlNode>;
+      }
+      $2->is_not_null = true;
       $$->emplace_back(*$2);
       delete $2;
     }
@@ -463,11 +488,15 @@ value:
     }
     |SSS {
       char *tmp = common::substr($1,1,strlen($1)-2);
-      if(strlen(tmp)>65535){
+      if(strlen(tmp) > 65535){
         yyerror(&@$, sql_string, sql_result, scanner, "invalid text", SCF_INVALID);
       }
       $$ = new Value(tmp);
       free(tmp);
+    }
+    |NULL_T {
+      $$ = new Value(AttrType::NULLS);
+      @$ = @1;
     }
     |DATE {
       char *tmp = common::substr($1,1,strlen($1)-2);

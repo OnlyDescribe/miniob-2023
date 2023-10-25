@@ -24,6 +24,7 @@ See the Mulan PSL v2 for more details. */
 enum AttrType
 {
   UNDEFINED,
+  NULLS,     ///< NULL类型
   DATES,     ///< 日期类型
   CHARS,     ///< 字符串类型
   TEXTS,     ///< 文本类型
@@ -51,6 +52,7 @@ public:
   explicit Value(bool val);
   explicit Value(const char *s, int len = 0);
   explicit Value(const char *s, AttrType type);
+  explicit Value(AttrType type);
 
   Value(const Value &other) = default;
   Value &operator=(const Value &other) = default;
@@ -58,6 +60,7 @@ public:
   void set_type(AttrType type) { this->attr_type_ = type; }
   void set_data(char *data, int length);
   void set_data(const char *data, int length) { this->set_data(const_cast<char *>(data), length); }
+  void set_null();
   void set_int(int val);
   void set_float(float val);
   void set_boolean(bool val);

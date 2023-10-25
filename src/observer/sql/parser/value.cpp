@@ -21,7 +21,7 @@ See the Mulan PSL v2 for more details. */
 #include "common/lang/string.h"
 
 // 注意这里的顺序应该与enum AttrType一一对应
-const char *ATTR_TYPE_NAME[] = {"undefined", "dates", "chars", "texts", "ints", "floats", "booleans"};
+const char *ATTR_TYPE_NAME[] = {"undefined", "nulls", "dates", "chars", "texts", "ints", "floats", "booleans"};
 
 const char *attr_type_to_string(AttrType type)
 {
@@ -52,6 +52,15 @@ Value::Value(const char *s, AttrType type)
 {
   if (type == AttrType::DATES) {
     set_date(s);
+  } else {
+    LOG_WARN("unknown data type: %d", type);
+  }
+}
+
+Value::Value(AttrType type)
+{
+  if (type == AttrType::NULLS) {
+    set_null();
   } else {
     LOG_WARN("unknown data type: %d", type);
   }
@@ -88,6 +97,12 @@ void Value::set_data(char *data, int length)
     } break;
   }
 }
+void Value::set_null()
+{
+  attr_type_ = NULLS;
+  length_ = 0;
+}
+
 void Value::set_int(int val)
 {
   attr_type_ = INTS;
