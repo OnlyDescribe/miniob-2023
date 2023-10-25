@@ -95,6 +95,17 @@ struct ConditionSqlNode
 };
 
 /**
+ * @description: 把 SelectSqlNode 所有表join起来的条件
+ * 一个N 个表，N-1个条件
+ * @return {*}
+ */
+
+struct JoinSqlNode {
+  std::vector<std::string> relations;      // 需要join的表
+  std::vector<std::vector<ConditionSqlNode>> join_conds;  // 把表join起来的条件, 
+};
+
+/**
  * @brief 描述一个select语句
  * @ingroup SQLParser
  * @details 一个正常的select语句描述起来比这个要复杂很多，这里做了简化。
@@ -110,6 +121,7 @@ struct SelectSqlNode
   std::vector<RelAttrSqlNode> attributes;    ///< attributes in select clause
   std::vector<std::string> relations;        ///< 查询的表
   std::vector<ConditionSqlNode> conditions;  ///< 查询条件，使用AND串联起来多个条件
+  std::vector<std::vector<ConditionSqlNode>> join_conds;       ///< 做连接时，把relations连接起来的条件。
 
   bool IsAttributesVailid()
   {

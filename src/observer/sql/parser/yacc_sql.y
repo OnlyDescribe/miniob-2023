@@ -75,8 +75,9 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
         AGGR_SUM
         AGGR_AVG
         AGGR_COUNT
-        /* AGGR_COUNT_STAR */
         RBRACE
+        INNER
+        JOIN
         COMMA
         TRX_BEGIN
         TRX_COMMIT
@@ -117,6 +118,7 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
   enum CompOp                       comp;
   enum AggrFuncType                 aggr_func_type;
   RelAttrSqlNode *                  rel_attr;
+  JoinSqlNode *                     joins;
   std::vector<AttrInfoSqlNode> *    attr_infos;
   AttrInfoSqlNode *                 attr_info;
   Expression *                      expression;
@@ -160,6 +162,7 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
 %type <condition_list>      condition_list
 %type <rel_attr_list>       select_attr
 %type <relation_list>       rel_list
+%type <joins>               inner_join
 %type <rel_attr_list>       attr_list
 %type <expression>          expression
 %type <expression_list>     expression_list
@@ -543,9 +546,49 @@ assignment_list:
       delete $4;
     }
     ;
-
+inner_join:   // in
+    {
+      $$ = nullptr;
+    }
+    | INNER JOIN ID ON condition_list inner_join
+    {
+      $$ = new JoinSqlNode;
+      $$->relations.emplace_back($3);
+      $$->join_conds.push_back(*$5);
+      if ($6 != nullptr) {
+        $$->relations.insert($$->relations.end(), $6->relations.begin(), $6->relations.end());
+        $$->join_conds.insert($$->join_conds.end(), $6->join_conds.begin(), $6->join_conds.end());
+        delete $6;
+      }
+      delete $3;
+      delete $5;
+    }
+    ;
 select_stmt:        /*  select 语句的语法解析树*/
-    SELECT select_attr FROM ID rel_list where
+    SELECT select_attr FROM ID inner_join where 
+    {
+      $$ = new ParsedSqlNode(SCF_SELECT);
+      if ($2 != nullptr) {
+        $$->selection.attributes.swap(*$2);
+        delete $2;
+        if (!$$->selection.IsAttributesVailid()) {
+          yyerror(&@$, sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
+        }
+      }
+      // 还需要连接的一个表时relations
+      $$->selection.relations.push_back($4);
+      if ($5 != nullptr) {
+        $$->selection.relations.insert($$->selection.relations.end(), $5->relations.begin(), $5->relations.end());
+        $$->selection.join_conds.insert($$->selection.join_conds.end(), $5->join_conds.begin(), $5->join_conds.end());
+        delete $5;
+      }
+      if ($6 != nullptr) {
+        $$->selection.conditions.swap(*$6);
+        delete $6;
+      }
+      delete $4;
+    }
+    | SELECT select_attr FROM ID rel_list where
     {
       $$ = new ParsedSqlNode(SCF_SELECT);
       if ($2 != nullptr) {

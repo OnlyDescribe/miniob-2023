@@ -9,7 +9,7 @@
 clog
 *.data
 *.table
-test.sql
+*.sql
 ./docs/doxy/
 build/*
 build_*

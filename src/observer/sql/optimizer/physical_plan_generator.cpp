@@ -81,6 +81,7 @@ RC PhysicalPlanGenerator::create(LogicalOperator &logical_operator, unique_ptr<P
       return create_plan(static_cast<ExplainLogicalOperator &>(logical_operator), oper);
     } break;
 
+    case LogicalOperatorType::HASH_JOIN:
     case LogicalOperatorType::JOIN: {
       return create_plan(static_cast<JoinLogicalOperator &>(logical_operator), oper);
     } break;
@@ -369,7 +370,19 @@ RC PhysicalPlanGenerator::create_plan(JoinLogicalOperator &join_oper, unique_ptr
     return RC::INTERNAL;
   }
 
-  unique_ptr<PhysicalOperator> join_physical_oper(new NestedLoopJoinPhysicalOperator);
+  unique_ptr<PhysicalOperator> join_physical_oper;
+  if (join_oper.type() == LogicalOperatorType::HASH_JOIN) {
+    join_physical_oper = std::make_unique<HashJoinPhysicalOperator>();
+    auto ptr = static_cast<HashJoinPhysicalOperator*>(join_physical_oper.get());
+    ptr->set_left_expressions(std::move(join_oper.left_exprs));
+    ptr->set_right_expressions(std::move(join_oper.right_exprs));
+    // ptr->set_expressions(std::move(join_oper.expressions()));
+  } else {
+    join_physical_oper = std::make_unique<NestedLoopJoinPhysicalOperator>();
+    auto ptr = static_cast<NestedLoopJoinPhysicalOperator*>(join_physical_oper.get());
+    ptr->set_expressions(std::move(join_oper.expressions()));
+  }
+
   for (auto &child_oper : child_opers) {
     unique_ptr<PhysicalOperator> child_physical_oper;
     rc = create(*child_oper, child_physical_oper);

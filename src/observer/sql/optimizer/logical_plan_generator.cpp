@@ -90,6 +90,14 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
 
   const std::vector<Table *> &tables = select_stmt->tables();
   const std::vector<Field> &all_fields = select_stmt->query_fields();
+  // 连表条件
+  const auto& join_on_units = select_stmt->join_on_stmt()->join_units();
+
+  if (!join_on_units.empty() && join_on_units.size() + 1 != tables.size()) {
+    return RC::JOIN_ERROR;
+  }
+  int join_on_units_index = 0;
+  
   for (Table *table : tables) {
     std::vector<Field> fields;
     for (const Field &field : all_fields) {
@@ -106,6 +114,36 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
       join_oper->add_child(std::move(table_oper));
       join_oper->add_child(std::move(table_get_oper));
       table_oper = unique_ptr<LogicalOperator>(join_oper);
+      // 连表条件设置为hashjoin, 里面的连接条件都是等于
+      if (join_on_units_index < join_on_units.size()) {
+        auto& units = join_on_units[join_on_units_index];
+        std::vector<std::unique_ptr<Expression>> left_expressions;
+        std::vector<std::unique_ptr<Expression>> right_expressions;
+        // std::vector<unique_ptr<Expression>> cmp_exprs;
+        for (int i = 0; i < units.size(); i++) {
+          const JoinOnObj &join_on_obj_left = units[i]->left();
+          const JoinOnObj &join_on_obj_right = units[i]->right();
+
+          unique_ptr<Expression> left(join_on_obj_left.is_attr
+                                          ? static_cast<Expression *>(new FieldExpr(join_on_obj_left.field))
+                                          : static_cast<Expression *>(new ValueExpr(join_on_obj_left.value)));
+
+          unique_ptr<Expression> right(join_on_obj_right.is_attr
+                                          ? static_cast<Expression *>(new FieldExpr(join_on_obj_right.field))
+                                          : static_cast<Expression *>(new ValueExpr(join_on_obj_right.value)));
+
+          // TODO: 左右表达式可能需要换
+          left_expressions.emplace_back(std::move(left));
+          right_expressions.emplace_back(std::move(right));
+          // ComparisonExpr *cmp_expr = new ComparisonExpr(units[i]->comp(), std::move(left), std::move(right));
+          // cmp_exprs.emplace_back(cmp_expr);
+        }
+        join_oper->left_exprs.swap(left_expressions);
+        join_oper->right_exprs.swap(right_expressions);
+        // join_oper->set_expressions(std::move(cmp_exprs));
+        join_oper->set_type(LogicalOperatorType::HASH_JOIN);
+        join_on_units_index++;
+      }
     }
   }
 
@@ -156,16 +194,16 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
   std::vector<unique_ptr<Expression>> cmp_exprs;
   const std::vector<FilterUnit *> &filter_units = filter_stmt->filter_units();
   for (const FilterUnit *filter_unit : filter_units) {
-    const FilterObj &filter_obj_left = filter_unit->left();
-    const FilterObj &filter_obj_right = filter_unit->right();
+    const FilterObj &join_on_obj_left = filter_unit->left();
+    const FilterObj &join_on_obj_right = filter_unit->right();
 
-    unique_ptr<Expression> left(filter_obj_left.is_attr
-                                    ? static_cast<Expression *>(new FieldExpr(filter_obj_left.field))
-                                    : static_cast<Expression *>(new ValueExpr(filter_obj_left.value)));
+    unique_ptr<Expression> left(join_on_obj_left.is_attr
+                                    ? static_cast<Expression *>(new FieldExpr(join_on_obj_left.field))
+                                    : static_cast<Expression *>(new ValueExpr(join_on_obj_left.value)));
 
-    unique_ptr<Expression> right(filter_obj_right.is_attr
-                                     ? static_cast<Expression *>(new FieldExpr(filter_obj_right.field))
-                                     : static_cast<Expression *>(new ValueExpr(filter_obj_right.value)));
+    unique_ptr<Expression> right(join_on_obj_right.is_attr
+                                     ? static_cast<Expression *>(new FieldExpr(join_on_obj_right.field))
+                                     : static_cast<Expression *>(new ValueExpr(join_on_obj_right.value)));
 
     ComparisonExpr *cmp_expr = new ComparisonExpr(filter_unit->comp(), std::move(left), std::move(right));
     cmp_exprs.emplace_back(cmp_expr);
@@ -173,7 +211,6 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
 
   unique_ptr<PredicateLogicalOperator> predicate_oper;
   if (!cmp_exprs.empty()) {
-    // TODO: 可能有OR连接
     unique_ptr<ConjunctionExpr> conjunction_expr(new ConjunctionExpr(ConjunctionExpr::Type::AND, cmp_exprs));
     predicate_oper = unique_ptr<PredicateLogicalOperator>(new PredicateLogicalOperator(std::move(conjunction_expr)));
   }

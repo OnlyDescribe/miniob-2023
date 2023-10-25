@@ -140,7 +140,7 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
 
       Table *table = tables[0];
       const FieldMeta *field_meta = table->table_meta().field(relation_attr.attribute_name.c_str());
-      if (nullptr == field_meta && aggr_type != AggrFuncType::COUNT_STAR) {
+      if (nullptr == field_meta) {
         LOG_WARN("no such field. field=%s.%s.%s", db->name(), table->name(), relation_attr.attribute_name.c_str());
         return RC::SCHEMA_FIELD_MISSING;
       }
@@ -161,6 +161,7 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
     default_table = tables[0];
   }
 
+
   // create filter statement in `where` statement
   FilterStmt *filter_stmt = nullptr;
   RC rc = FilterStmt::create(db,
@@ -174,11 +175,49 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
     return rc;
   }
 
+  std::vector<std::vector<ConditionSqlNode>> conditions;
+
+  // 把joins里面, a.id > 3 这种condition 放到filter里面
+  for (int i = 0; i < select_sql.join_conds.size(); i++) {
+    std::vector<ConditionSqlNode> join_on_condtions;
+    for (auto condition: select_sql.join_conds[i]) {
+      if (condition.comp != CompOp::EQUAL_TO) {
+        // 这种先不支持
+        if (condition.left_is_attr && condition.right_is_attr) {
+          LOG_WARN("not support attr comp attr type");
+        } else {
+          FilterUnit* filter_unit = nullptr;
+          rc = FilterStmt::create_filter_unit(db, default_table, &table_map, condition, filter_unit);
+          if (rc != RC::SUCCESS) {
+            return rc;
+          }
+          filter_stmt->addFilterUnit(filter_unit);
+        }
+      } else {
+        join_on_condtions.push_back(condition);
+      }
+    }
+    conditions.emplace_back(std::move(join_on_condtions));
+  }
+
+  // create join on statement
+  JoinOnStmt *join_on_stmt = nullptr;
+  rc = JoinOnStmt::create(db,
+      default_table,
+      &table_map,
+      conditions.data(),
+      static_cast<int>(conditions.size()),
+      join_on_stmt);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("cannot construct filter stmt");
+    return rc;
+  }
+
   // everything alright
   SelectStmt *select_stmt = new SelectStmt();
-  // TODO add expression copy
   select_stmt->tables_.swap(tables);
   select_stmt->query_fields_.swap(query_fields);
+  select_stmt->join_on_stmt_ = join_on_stmt;
   select_stmt->filter_stmt_ = filter_stmt;
   select_stmt->set_is_aggregation_stmt(aggr_field_cnt > 0);
 

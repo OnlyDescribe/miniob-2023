@@ -19,10 +19,12 @@ See the Mulan PSL v2 for more details. */
 
 #include "common/rc.h"
 #include "sql/stmt/stmt.h"
+#include "sql/stmt/join_on_stmt.h"
 #include "storage/field/field.h"
 
 class FieldMeta;
 class FilterStmt;
+class JoinOnStmt;
 class Db;
 class Table;
 
@@ -47,10 +49,12 @@ public:
   const std::vector<Table *> &tables() const { return tables_; }
   const std::vector<Field> &query_fields() const { return query_fields_; }
   FilterStmt *filter_stmt() const { return filter_stmt_; }
+  JoinOnStmt *join_on_stmt() const { return join_on_stmt_; };
 
 private:
   std::vector<Field> query_fields_;
   std::vector<Table *> tables_;
   FilterStmt *filter_stmt_ = nullptr;
+  JoinOnStmt *join_on_stmt_ = nullptr;
   bool is_aggregation_stmt_{false};
 };

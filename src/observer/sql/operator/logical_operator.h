@@ -38,6 +38,7 @@ enum class LogicalOperatorType
   PROJECTION,   ///< 投影，就是select
   AGGREGATION,  ///< 聚合
   JOIN,         ///< 连接
+  HASH_JOIN,    ///< hash join连表
   INSERT,       ///< 插入
   DELETE,       ///< 删除，删除可能会有子查询
   UPDATE,       ///< 更新
@@ -59,6 +60,10 @@ public:
   void add_child(std::unique_ptr<LogicalOperator> oper);
   std::vector<std::unique_ptr<LogicalOperator>> &children() { return children_; }
   std::vector<std::unique_ptr<Expression>> &expressions() { return expressions_; }
+
+  void set_expressions(std::vector<std::unique_ptr<Expression>> &&expression) {
+    expressions_ = std::move(expression);
+  }
 
 protected:
   std::vector<std::unique_ptr<LogicalOperator>> children_;  ///< 子算子
