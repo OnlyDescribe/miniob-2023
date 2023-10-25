@@ -550,7 +550,7 @@ inner_join:   // in
     {
       $$ = nullptr;
     }
-    | INNER JOIN ID ON condition inner_join
+    | INNER JOIN ID ON condition_list inner_join
     {
       $$ = new JoinSqlNode;
       $$->relations.emplace_back($3);

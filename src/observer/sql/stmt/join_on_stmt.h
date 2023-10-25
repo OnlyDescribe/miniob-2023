@@ -42,6 +42,7 @@ struct JoinOnObj
 
 
 // a Join b on a.id = b.id, 表1和表2,
+// 可能会有 a.id = b.id and a.id > 3
 // 过滤条件为a.id = b.id
 class JoinOnUnit
 {
@@ -66,6 +67,7 @@ private:
 /**
  * @brief Join/谓词/过滤语句
  * @ingroup Statement
+ * 含有多个表join的units
  */
 class JoinOnStmt
 {
@@ -74,19 +76,19 @@ public:
   virtual ~JoinOnStmt();
 
 public:
-  const std::vector<JoinOnUnit *> &join_units() const { return join_units_; }
+  const std::vector<std::vector<JoinOnUnit*>> &join_units() const { return join_units_; }
 
 public:
   static RC create(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,
-      const ConditionSqlNode *conditions, int condition_num, JoinOnStmt *&stmt);
+      const std::vector<ConditionSqlNode> *conditions, int condition_num, JoinOnStmt *&stmt);
 
   static RC create_join_unit(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,
-      const ConditionSqlNode &condition, JoinOnUnit *&filter_unit);
+      const ConditionSqlNode &condition, JoinOnUnit *&joinon_unit);
   
 private:
   static RC get_table_and_field(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,
     const RelAttrSqlNode &attr, Table *&table, const FieldMeta *&field);
 
 private:
-  std::vector<JoinOnUnit *> join_units_;  // 默认当前都是AND关系
+  std::vector<std::vector<JoinOnUnit*>> join_units_;  // 默认当前都是AND关系
 };

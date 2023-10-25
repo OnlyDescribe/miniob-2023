@@ -18,28 +18,38 @@ See the Mulan PSL v2 for more details. */
 
 JoinOnStmt::~JoinOnStmt()
 {
-  for (JoinOnUnit *unit : join_units_) {
-    delete unit;
+  for (auto units: join_units_) {
+    for (auto unit: units) {
+      delete unit;
+    }
   }
   join_units_.clear();
 }
 
 RC JoinOnStmt::create(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,
-    const ConditionSqlNode *conditions, int condition_num, JoinOnStmt *&stmt)
+    const std::vector<ConditionSqlNode> *conditions, int condition_num, JoinOnStmt *&stmt)
 {
   RC rc = RC::SUCCESS;
   stmt = nullptr;
 
   JoinOnStmt *tmp_stmt = new JoinOnStmt();
+  // condition_num 个表
   for (int i = 0; i < condition_num; i++) {
-    JoinOnUnit *join_unit = nullptr;
-    rc = create_join_unit(db, default_table, tables, conditions[i], join_unit);
-    if (rc != RC::SUCCESS) {
-      delete tmp_stmt;
-      LOG_WARN("failed to create filter unit. condition index=%d", i);
-      return rc;
+    // 左表和右表的链接条件
+    std::vector<JoinOnUnit*> join_units;
+    
+    // 创建当前表的链接条件
+    for (int j = 0; j < conditions[i].size(); j++) {
+      JoinOnUnit* join_unit = new JoinOnUnit;
+      rc = create_join_unit(db, default_table, tables, conditions[i][j], join_unit);
+      if (rc != RC::SUCCESS) {
+        delete tmp_stmt;
+        LOG_WARN("failed to create filter unit. condition index=%d", i);
+        return rc;
+      }
+      join_units.push_back(join_unit);
     }
-    tmp_stmt->join_units_.push_back(join_unit);
+    tmp_stmt->join_units_.push_back(join_units);
   }
 
   stmt = tmp_stmt;

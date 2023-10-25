@@ -114,24 +114,34 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
       join_oper->add_child(std::move(table_oper));
       join_oper->add_child(std::move(table_get_oper));
       table_oper = unique_ptr<LogicalOperator>(join_oper);
-      // 连表条件设置为hashjoin
+      // 连表条件设置为hashjoin, 里面的连接条件都是等于
       if (join_on_units_index < join_on_units.size()) {
-        auto& join_unit = join_on_units[join_on_units_index];
+        auto& units = join_on_units[join_on_units_index];
+        std::vector<std::unique_ptr<Expression>> left_expressions;
+        std::vector<std::unique_ptr<Expression>> right_expressions;
+        // std::vector<unique_ptr<Expression>> cmp_exprs;
+        for (int i = 0; i < units.size(); i++) {
+          const JoinOnObj &join_on_obj_left = units[i]->left();
+          const JoinOnObj &join_on_obj_right = units[i]->right();
 
-        const JoinOnObj &join_on_obj_left = join_unit->left();
-        const JoinOnObj &join_on_obj_right = join_unit->right();
+          unique_ptr<Expression> left(join_on_obj_left.is_attr
+                                          ? static_cast<Expression *>(new FieldExpr(join_on_obj_left.field))
+                                          : static_cast<Expression *>(new ValueExpr(join_on_obj_left.value)));
 
-        unique_ptr<Expression> left(join_on_obj_left.is_attr
-                                        ? static_cast<Expression *>(new FieldExpr(join_on_obj_left.field))
-                                        : static_cast<Expression *>(new ValueExpr(join_on_obj_left.value)));
+          unique_ptr<Expression> right(join_on_obj_right.is_attr
+                                          ? static_cast<Expression *>(new FieldExpr(join_on_obj_right.field))
+                                          : static_cast<Expression *>(new ValueExpr(join_on_obj_right.value)));
 
-        unique_ptr<Expression> right(join_on_obj_right.is_attr
-                                        ? static_cast<Expression *>(new FieldExpr(join_on_obj_right.field))
-                                        : static_cast<Expression *>(new ValueExpr(join_on_obj_right.value)));
-
-        join_oper->add_expression(std::move(left));
-        join_oper->add_expression(std::move(right));
-        join_oper->set_type(LogicalOperatorType::JOIN);
+          // TODO: 左右表达式可能需要换
+          left_expressions.emplace_back(std::move(left));
+          right_expressions.emplace_back(std::move(right));
+          // ComparisonExpr *cmp_expr = new ComparisonExpr(units[i]->comp(), std::move(left), std::move(right));
+          // cmp_exprs.emplace_back(cmp_expr);
+        }
+        join_oper->left_exprs.swap(left_expressions);
+        join_oper->right_exprs.swap(right_expressions);
+        // join_oper->set_expressions(std::move(cmp_exprs));
+        join_oper->set_type(LogicalOperatorType::HASH_JOIN);
         join_on_units_index++;
       }
     }

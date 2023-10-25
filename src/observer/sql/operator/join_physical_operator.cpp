@@ -37,21 +37,17 @@ RC NestedLoopJoinPhysicalOperator::open(Trx *trx)
 RC NestedLoopJoinPhysicalOperator::predicate() {
   RC rc = RC::SUCCESS;
   if (!expressions_.empty()) {
-    Value left_value;
-    rc = left_expression()->get_value(*left_tuple_, left_value);
-    if (rc != RC::SUCCESS) {
-      return rc;
+    for (const auto& expression: expressions_) {
+      Value ret;
+      rc = expression->get_value(joined_tuple_, ret);
+      if (rc != RC::SUCCESS) {
+        return rc;
+      }
+      std::cout << joined_tuple_.to_string() << " " << ret.to_string() << std::endl;
+      if (!(ret == Value(true))) {
+        return RC::NOT_MATHCH;
+      }
     }
-
-    Value right_value;
-    right_expression()->get_value(*right_tuple_, right_value);
-    if (rc != RC::SUCCESS) {
-      return rc;
-    }
-
-    if (left_value.compare(right_value) != 0) {
-      return RC::NOT_MATHCH;
-    } 
   }
   return rc;
 }
@@ -187,16 +183,20 @@ RC HashJoinPhysicalOperator::open(Trx* trx) {
   mp_.clear();
   while ((rc = right_->next()) == RC::SUCCESS) {
     auto right_tuple = right_->current_tuple();
-    Value value;
-    rc = right_expression()->get_value(*right_tuple, value);
-    mp_[value].push_back(right_tuple);
+
+    std::vector<Value> values;
+    for (int i = 0; i < right_expressions_.size(); i++) {
+      Value value;
+      rc = right_expressions_[i]->get_value(*right_tuple, value);
+      if (rc != RC::SUCCESS) {
+        return rc;
+      }
+      values.emplace_back(value);
+    }
+    AggregateKey key;
+    key.group_bys_.swap(values);
+    mp_[key].push_back(right_tuple->copy_tuple());
   }
-  // for(auto&[k, vec]: mp_) {
-  //   std::cout << k.to_string() << ":" << std::endl;
-  //   for (Tuple* t: vec) {
-  //     std::cout << t->to_string() << std::endl;
-  //   }
-  // }
   trx_ = trx;
   return RC::SUCCESS;
 }
@@ -209,12 +209,18 @@ RC HashJoinPhysicalOperator::next() {
     if (rc == RC::RECORD_EOF) {
       return rc;
     }
-    Value value;
-    rc = left_expression()->get_value(*left_tuple_, value);
-    if (rc != RC::SUCCESS) {
-      return rc;
+    std::vector<Value> values;
+    for (int i = 0; i < left_expressions_.size(); i++) {
+      Value value;
+      rc = left_expressions_[i]->get_value(*left_tuple_, value);
+      if (rc != RC::SUCCESS) {
+        return rc;
+      }
+      values.emplace_back(value);
     }
-    auto it = mp_.find(value);
+    AggregateKey key;
+    key.group_bys_ .swap(values);
+    auto it = mp_.find(key);
     if (it != mp_.end()) {
       for (Tuple* right_tuple: it->second) {
         right_results_.push(right_tuple);

@@ -38,6 +38,10 @@ public:
     expressions_.emplace_back(std::move(expression));
   }
 
+  std::vector<std::unique_ptr<Expression>> left_exprs;
+  std::vector<std::unique_ptr<Expression>> right_exprs;
+
 private:
   LogicalOperatorType type_{LogicalOperatorType::JOIN};
+  
 };
