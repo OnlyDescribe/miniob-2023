@@ -97,6 +97,9 @@ public:
    */
   virtual RC find_cell(const TupleCellSpec &spec, Value &cell) const = 0;
 
+  // virtual std::shared_ptr<Tuple> copy_tuple() const = 0; // 换智能指针需要修改类内成员tuple为智能指针
+  virtual Tuple *copy_tuple() const = 0;
+
   virtual std::string to_string() const
   {
     std::string str;
@@ -115,6 +118,9 @@ public:
     }
     return str;
   }
+
+protected:
+  bool is_copy_ = false;  // 如果是copy的对象, 需要释放多余的资源(如new出来的record等)
 };
 
 /**
@@ -126,8 +132,13 @@ class RowTuple : public Tuple
 {
 public:
   RowTuple() = default;
+
   virtual ~RowTuple()
   {
+    if (is_copy_) {
+      delete record_;
+    }
+
     for (FieldExpr *spec : speces_) {
       delete spec;
     }
@@ -144,6 +155,9 @@ public:
       speces_.push_back(new FieldExpr(table, &field));
     }
   }
+  void set_table(const Table *table) { table_ = table; }
+
+  void set_speces(const std::vector<FieldExpr *> &speces) { speces_ = speces; }
 
   int cell_num() const override { return speces_.size(); }
 
@@ -182,7 +196,7 @@ public:
         record_offset += sizeof(PageNum);
         memcpy(&page_num, this->record_->data() + field_meta->offset() + record_offset, sizeof(PageNum));
       }
-      cell.set_data((char *)texts.data(), 0);
+      cell.set_data(texts.c_str(), 0);
     } else {
       cell.set_data(this->record_->data() + field_meta->offset(), field_meta->len());
     }
@@ -223,6 +237,29 @@ public:
 
   const Record &record() const { return *record_; }
 
+  Tuple *copy_tuple() const override
+  {
+    // record
+    RowTuple *tuple = new RowTuple();
+    Record *record = new Record(*record_);
+
+    // speces
+    std::vector<FieldExpr *> speces;
+
+    for (const FieldExpr *spece_ : speces_) {
+      FieldExpr *field_expr = new FieldExpr(spece_->field());
+      speces.push_back(field_expr);
+    }
+
+    tuple->set_table(table_);
+    tuple->set_record(record);
+    tuple->set_speces(speces);
+
+    tuple->is_copy_ = true;
+
+    return tuple;
+  }
+
 private:
   Record *record_ = nullptr;
   const Table *table_ = nullptr;
@@ -242,6 +279,10 @@ public:
   ProjectTuple() = default;
   virtual ~ProjectTuple()
   {
+    if (is_copy_) {
+      delete tuple_;
+    }
+
     for (TupleCellSpec *spec : speces_) {
       delete spec;
     }
@@ -249,6 +290,7 @@ public:
   }
 
   void set_tuple(Tuple *tuple) { this->tuple_ = tuple; }
+  void set_speces(const std::vector<TupleCellSpec *> &speces) { this->speces_ = speces; }
 
   void add_cell_spec(TupleCellSpec *spec) { speces_.push_back(spec); }
   int cell_num() const override { return speces_.size(); }
@@ -267,6 +309,27 @@ public:
   }
 
   RC find_cell(const TupleCellSpec &spec, Value &cell) const override { return tuple_->find_cell(spec, cell); }
+
+  Tuple *copy_tuple() const override
+  {
+    ProjectTuple *tuple = new ProjectTuple();
+
+    // speces
+    std::vector<TupleCellSpec *> speces;
+    for (const TupleCellSpec *spece_ : speces_) {
+      TupleCellSpec *field_expr = new TupleCellSpec(spece_->table_name(), spece_->field_name(), spece_->alias());
+      speces.push_back(field_expr);
+    }
+    tuple->set_speces(speces);
+
+    // tuple
+    Tuple *tuple_member = this->tuple_->copy_tuple();
+    tuple->set_tuple(tuple_member);
+
+    tuple->is_copy_ = true;
+
+    return tuple;
+  }
 
 #if 0
   RC cell_spec_at(int index, const TupleCellSpec *&spec) const override
@@ -312,6 +375,14 @@ public:
     return RC::NOTFOUND;
   }
 
+  // TODO
+  // 不能 Copy 应该, 因为成员对象是引用
+  Tuple *copy_tuple() const override
+  {
+    LOG_WARN("invalid");
+    return nullptr;
+  }
+
 private:
   const std::vector<std::unique_ptr<Expression>> &expressions_;
 };
@@ -340,6 +411,16 @@ public:
     return RC::SUCCESS;
   }
 
+  Tuple *copy_tuple() const override
+  {
+    ValueListTuple *tuple = new ValueListTuple();
+    tuple->set_cells(cells_);
+
+    tuple->is_copy_ = true;  // do nothing here
+
+    return tuple;
+  }
+
   virtual RC find_cell(const TupleCellSpec &spec, Value &cell) const override { return RC::INTERNAL; }
 
 private:
@@ -355,7 +436,13 @@ class JoinedTuple : public Tuple
 {
 public:
   JoinedTuple() = default;
-  virtual ~JoinedTuple() = default;
+  virtual ~JoinedTuple()
+  {
+    if (is_copy_) {
+      delete left_;
+      delete right_;
+    }
+  }
 
   void set_left(Tuple *left) { left_ = left; }
   void set_right(Tuple *right) { right_ = right; }
@@ -384,6 +471,19 @@ public:
     }
 
     return right_->find_cell(spec, value);
+  }
+
+  auto &get_left() const { return left_; }
+  auto &get_right() const { return right_; }
+
+  Tuple *copy_tuple() const override
+  {
+    JoinedTuple *tuple = new JoinedTuple();
+    tuple->set_left(left_->copy_tuple());
+    tuple->set_right(right_->copy_tuple());
+    tuple->is_copy_ = true;
+
+    return tuple;
   }
 
 private:
@@ -430,6 +530,13 @@ public:
       }
     }
     return RC::NOTFOUND;
+  }
+
+  Tuple *copy_tuple() const override
+  {
+    AggregationTuple *tuple = new AggregationTuple(aggregations_, fields_);
+    tuple->is_copy_ = true;  // do nothing here
+    return tuple;
   }
 
 private:
