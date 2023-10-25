@@ -208,6 +208,9 @@ std::string Value::to_string() const
 {
   std::stringstream os;
   switch (attr_type_) {
+    case NULLS: {
+      os << "NULL";
+    } break;
     case INTS: {
       os << num_value_.int_value_;
     } break;

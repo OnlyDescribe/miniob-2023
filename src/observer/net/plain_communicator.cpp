@@ -172,7 +172,7 @@ RC PlainCommunicator::write_result(SessionEvent *event, bool &need_disconnect)
       return rc;
     }
   }
-  writer_->flush(); // TODO handle error
+  writer_->flush();  // TODO handle error
   return rc;
 }
 
@@ -236,6 +236,7 @@ RC PlainCommunicator::write_result_internal(SessionEvent *event, bool &need_disc
     assert(tuple != nullptr);
 
     int cell_num = tuple->cell_num();
+    cell_num -= 1;  // 不显示 null字段
     for (int i = 0; i < cell_num; i++) {
       if (i != 0) {
         const char *delim = " | ";

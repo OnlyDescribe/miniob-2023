@@ -61,7 +61,7 @@ RC TableMeta::init(int32_t table_id, const char *name, int field_num, const Attr
   int trx_field_num = 0;
   const vector<FieldMeta> *trx_fields = TrxKit::instance()->trx_fields();
   if (trx_fields != nullptr) {
-    fields_.resize(field_num + trx_fields->size());
+    fields_.resize(field_num + trx_fields->size() + 1);  // 注意还有一个是null的bitmap字段
 
     for (size_t i = 0; i < trx_fields->size(); i++) {
       const FieldMeta &field_meta = (*trx_fields)[i];
@@ -76,7 +76,7 @@ RC TableMeta::init(int32_t table_id, const char *name, int field_num, const Attr
 
     trx_field_num = static_cast<int>(trx_fields->size());
   } else {
-    fields_.resize(field_num);
+    fields_.resize(field_num + 1);  // 注意还有一个是null的bitmap字段
   }
 
   for (int i = 0; i < field_num; i++) {

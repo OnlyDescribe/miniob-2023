@@ -145,7 +145,13 @@ public:
     speces_.clear();
   }
 
-  void set_record(Record *record) { this->record_ = record; }
+  void set_record(Record *record)
+  {
+    const FieldMeta *null_field = speces_.back()->field().meta();
+
+    this->bitmap_.init(record->data() + null_field->offset(), null_field->len());
+    this->record_ = record;
+  }
 
   void set_schema(const Table *table, const std::vector<FieldMeta> *fields)
   {
@@ -170,10 +176,16 @@ public:
 
     FieldExpr *field_expr = speces_[index];
     const FieldMeta *field_meta = field_expr->field().meta();
+
+    // 设置类型
     cell.set_type(field_meta->type());
 
-    // 如果字段是文本, 需要从表中的对应的溢出页取数据
-    if (field_meta->type() == AttrType::TEXTS) {
+    // 1. 判断是否是 NULL
+    if (bitmap_.get_bit(index)) {
+      cell.set_null();
+    }
+    // 2. 如果字段是文本, 需要从表中的对应的溢出页取数据
+    else if (field_meta->type() == AttrType::TEXTS) {
       Frame *frame = nullptr;
       std::string texts;  // 文本内容
 
@@ -197,7 +209,9 @@ public:
         memcpy(&page_num, this->record_->data() + field_meta->offset() + record_offset, sizeof(PageNum));
       }
       cell.set_data(texts.c_str(), 0);
-    } else {
+    }
+    // 3. 否则直接设置cell
+    else {
       cell.set_data(this->record_->data() + field_meta->offset(), field_meta->len());
     }
     return RC::SUCCESS;
@@ -237,6 +251,8 @@ public:
 
   const Record &record() const { return *record_; }
 
+  const common::Bitmap &bitmap() const { return bitmap_; }
+
   Tuple *copy_tuple() const override
   {
     // record
@@ -261,6 +277,7 @@ public:
   }
 
 private:
+  mutable common::Bitmap bitmap_;
   Record *record_ = nullptr;
   const Table *table_ = nullptr;
   std::vector<FieldExpr *> speces_;

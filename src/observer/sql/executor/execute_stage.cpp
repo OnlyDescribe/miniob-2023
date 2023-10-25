@@ -70,8 +70,12 @@ RC ExecuteStage::handle_request_with_physical_operator(SQLStageEvent *sql_event)
       SelectStmt *select_stmt = static_cast<SelectStmt *>(stmt);
       bool with_table_name = select_stmt->tables().size() > 1;
 
-      for (const Field &field : select_stmt->query_fields()) {
-        char *field_name = nullptr;
+      const std::vector<Field> &query_fields = select_stmt->query_fields();  // 注意最后一个字段是 null
+      // for (const Field &field : select_stmt->query_fields()) {
+      ASSERT(query_fields.size() > 1, "There may be no column corresponding to the null field");
+      for (auto iter = query_fields.begin(); iter != std::prev(query_fields.end()); ++iter) {
+        const Field &field = *iter;
+        // char *field_name = nullptr;
         if (select_stmt->is_aggregation_stmt()) {
           schema.append_cell(AggretationExpr::to_string(field, field.get_aggr_type()).c_str());
         } else {

@@ -19,7 +19,7 @@ UpdatePhysicalOperator::UpdatePhysicalOperator(
 
     ASSERT(it != table_field_metas.end(), "failed to get field index");
     field_index = std::distance(table_field_metas.begin(), it);
-    field_index -= table_->table_meta().sys_field_num();
+    field_index -= table_->table_meta().sys_field_num();  // 需要考虑sys_field
     index_field_metas_.push_back(field_index);
   }
 }
@@ -55,6 +55,8 @@ RC UpdatePhysicalOperator::next()
 
   PhysicalOperator *child = children_[0].get();
 
+  int sys_field_num = table_->table_meta().sys_field_num();
+
   // next
   while (RC::SUCCESS == (rc = child->next())) {
     Tuple *tuple = child->current_tuple();
@@ -63,8 +65,13 @@ RC UpdatePhysicalOperator::next()
       return rc;
     }
 
-    // 得到旧Tuple
+    // 得到需要删除的Tuple
     RowTuple *row_tuple = static_cast<RowTuple *>(tuple);
+
+    // // 得到旧bitmap
+    // int bitmap_size = row_tuple->bitmap().get_size();
+    // char *old_bitmap = new char[bitmap_size];
+    // memcpy(old_bitmap, row_tuple->bitmap().get_bitmap(), bitmap_size);
 
     // 删除旧Tuple
     Record &old_record = row_tuple->record();
@@ -79,7 +86,7 @@ RC UpdatePhysicalOperator::next()
     Value cell;
 
     std::vector<Value> values;
-    int value_num = row_tuple->cell_num();
+    int value_num = row_tuple->cell_num() - sys_field_num; // row_tuple中应该包含系统字段
     values.reserve(value_num);
 
     for (int i = 0, j = 0; i < value_num; ++i) {
@@ -93,6 +100,9 @@ RC UpdatePhysicalOperator::next()
     }
 
     RC rc = table_->make_record(value_num, values.data(), new_record);
+
+    // 设置 bitmap
+
     if (rc != RC::SUCCESS) {
       LOG_WARN("failed to make record. rc=%s", strrc(rc));
       // 注意失败后要回滚, 保证一次更新操作(删除+插入)是"原子"的
