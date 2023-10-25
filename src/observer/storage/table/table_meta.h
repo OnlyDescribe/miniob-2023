@@ -47,6 +47,7 @@ public:
   const FieldMeta *field(int index) const;
   const FieldMeta *field(const char *name) const;
   const FieldMeta *find_field_by_offset(int offset) const;
+  const FieldMeta *null_field() const;
   const std::vector<FieldMeta> *field_metas() const { return &fields_; }
   auto trx_fields() const -> const std::pair<const FieldMeta *, int>;
 

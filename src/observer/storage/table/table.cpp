@@ -348,9 +348,16 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
     const FieldMeta *field = table_meta_.field(i + normal_field_start_index);
     const Value &value = values[i];
     if (field->type() != value.attr_type()) {
-      LOG_ERROR("Invalid value type. table name =%s, field name=%s, type=%d, but given=%d",
+      if (value.attr_type() == AttrType::NULLS) {
+        if (field->is_not_null()) {
+          LOG_WARN("value can not be null.");
+          return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+        }
+      } else {
+        LOG_ERROR("Invalid value type. table name =%s, field name=%s, type=%d, but given=%d",
                 table_meta_.name(), field->name(), field->type(), value.attr_type());
-      return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+        return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+      }
     }
   }
 
@@ -358,10 +365,30 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
   int record_size = table_meta_.record_size();
   char *record_data = (char *)malloc(record_size);
 
+  const FieldMeta *null_field = table_meta_.null_field();
+  common::Bitmap bitmap(record_data + null_field->offset(), null_field->len());
+
   for (int i = 0; i < value_num; i++) {
     const FieldMeta *field = table_meta_.field(i + normal_field_start_index);
     const Value &value = values[i];
     size_t copy_len = field->len();
+
+    // 对 NULL 值进行检查, 并设置bitmap
+    if (value.attr_type() == AttrType::NULLS) {
+      if (field->is_not_null()) {
+        LOG_ERROR("Cannot be null. table name =%s, field name=%s, type=%d",
+          table_meta_.name(),
+          field->name(),
+          field->type());
+        return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+      }
+
+      bitmap.set_bit(normal_field_start_index + i);
+      memset(record_data + field->offset(), 0, copy_len);
+    } else {
+      bitmap.clear_bit(normal_field_start_index + i);
+    }
+
     if (field->type() == CHARS) {
       const size_t data_len = value.length();
       if (copy_len > data_len) {
