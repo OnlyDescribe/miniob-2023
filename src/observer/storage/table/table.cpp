@@ -248,6 +248,7 @@ RC Table::insert_record(Record &record)
 
   // rc = insert_entry_of_indexes(record.data(), record.rid());
   for (Index *index : indexes_) {
+    // 注意: 索引的fieldmeta是索引字段+null字段, table的fieldmeta是sys+user+null字段
     rc = index->insert_entry(record.data(), &record.rid());
     if (rc != RC::SUCCESS) {
       if (index->index_meta().is_unique()) {
@@ -338,7 +339,7 @@ const TableMeta &Table::table_meta() const { return table_meta_; }
 RC Table::make_record(int value_num, const Value *values, Record &record)
 {
   // 检查字段类型是否一致(还有null对应的bitmap字段)
-  if (value_num + table_meta_.sys_field_num() + 1 != table_meta_.field_num()) {
+  if (value_num + table_meta_.sys_field_num() + table_meta_.extra_field_num() != table_meta_.field_num()) {
     LOG_WARN("Input values don't match the table's schema, table name:%s", table_meta_.name());
     return RC::SCHEMA_FIELD_MISSING;
   }
@@ -471,7 +472,7 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
 
         memcpy(record_data + field->offset() + record_offset, &page_num, sizeof(PageNum));
 
-      } 
+      }
       // 1.2.2 非TEXT的非NULL值, 直接复制Value的data
       else {
         memcpy(record_data + field->offset(), value.data(), copy_len);
@@ -528,13 +529,6 @@ RC Table::create_index(Trx *trx, std::vector<FieldMeta> &field_meta, const char 
     return RC::INVALID_ARGUMENT;
   }
 
-  IndexMeta new_index_meta;
-  RC rc = new_index_meta.init(index_name, field_meta, is_unique);
-  if (rc != RC::SUCCESS) {
-    LOG_INFO("Failed to init IndexMeta in table:%s, index_name:%s", name(), index_name);
-    return rc;
-  }
-
   // field_meta 最后面放 bitmap
   // 注意: 是 [index fields] [bitmap] 的结构
   field_meta.push_back(*table_meta_.null_field());
@@ -556,6 +550,14 @@ RC Table::create_index(Trx *trx, std::vector<FieldMeta> &field_meta, const char 
     field_index = std::distance(table_field_metas.begin(), it);
     field_index -= table_meta_.sys_field_num();  // 需要考虑sys_field
     field_id.push_back(field_index);
+  }
+
+  // 初始化index_meta
+  IndexMeta new_index_meta;
+  RC rc = new_index_meta.init(index_name, field_meta, is_unique);
+  if (rc != RC::SUCCESS) {
+    LOG_INFO("Failed to init IndexMeta in table:%s, index_name:%s", name(), index_name);
+    return rc;
   }
 
   // 创建索引相关数据
@@ -643,7 +645,7 @@ RC Table::delete_record(const Record &record)
 
   // 把溢出页的内存回收
   const int sys_field_num = table_meta_.sys_field_num();
-  const int field_num = table_meta_.field_num();
+  const int field_num = table_meta_.field_num() - table_meta_.extra_field_num();
   const std::vector<FieldMeta> *fieldmetas = table_meta_.field_metas();
   for (int i = sys_field_num; i < field_num; i++) {
     auto &meta = (*fieldmetas)[i];

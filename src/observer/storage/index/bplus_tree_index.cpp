@@ -31,9 +31,9 @@ RC BplusTreeIndex::create(const char *file_name, const IndexMeta &index_meta, co
 
   std::vector<AttrType> attr_type;
   std::vector<int> attr_length;
-  std::vector<int> attr_id;
   attr_type.reserve(field_metas.size());
   attr_length.reserve(field_metas.size());
+  
   for (int i = 0; i < field_metas.size(); ++i) {
     attr_type.push_back(field_metas[i].type());
     attr_length.push_back(field_metas[i].len());
