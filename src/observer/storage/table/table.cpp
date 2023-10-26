@@ -373,8 +373,9 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
     const Value &value = values[i];
     size_t copy_len = field->len();
 
-    // 对 NULL 值进行检查, 并设置bitmap
+    // 1. 对 NULL 值进行检查
     if (value.attr_type() == AttrType::NULLS) {
+      // 1.1 值非NULL, 设置bitmap, 并赋值0
       if (field->is_not_null()) {
         LOG_ERROR("Cannot be null. table name =%s, field name=%s, type=%d",
           table_meta_.name(),
@@ -386,54 +387,78 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
       bitmap.set_bit(normal_field_start_index + i);
       memset(record_data + field->offset(), 0, copy_len);
     } else {
+      // 1.2 值非NULL, 设置bitmap, 继续赋值
       bitmap.clear_bit(normal_field_start_index + i);
-    }
 
-    if (field->type() == CHARS) {
-      const size_t data_len = value.length();
-      if (copy_len > data_len) {
-        copy_len = data_len + 1;
+      if (field->type() == CHARS) {
+        const size_t data_len = value.length();
+        if (copy_len > data_len) {
+          copy_len = data_len + 1;
+        }
       }
-    }
 
-    // 处理 text 字段, 设计当前文件下的溢出页
-    if (field->type() == AttrType::TEXTS) {
-      size_t data_len = value.length();
-      Frame *frame = nullptr;
+      // 1.2.1 处理 text 字段, 设计当前文件下的溢出页
+      if (field->type() == AttrType::TEXTS) {
+        size_t data_len = value.length();
+        Frame *frame = nullptr;
 
-      memset(record_data + field->offset(), 0, copy_len);
+        memset(record_data + field->offset(), 0, copy_len);
 
-      // 设置溢出页的页头
-      PageHeader page_header;
-      page_header.is_overflow = true;
+        // 设置溢出页的页头
+        PageHeader page_header;
+        page_header.is_overflow = true;
 
-      int record_offset{0};
-      int frame_offset{0};
-      // 将 text 字段的内容拷贝到溢出页中
-      // 注意: 杜绝 UB
-      const int COPY_SIZE = BP_PAGE_DATA_SIZE - sizeof(PageHeader);
-      while ((data_len + sizeof(PageHeader) + 1) > BP_PAGE_DATA_SIZE) {
-        data_len -= COPY_SIZE;
+        int record_offset{0};
+        int frame_offset{0};
+        // 将 text 字段的内容拷贝到溢出页中
+        // 注意: 杜绝 UB
+        const int COPY_SIZE = BP_PAGE_DATA_SIZE - sizeof(PageHeader);
+        while ((data_len + sizeof(PageHeader) + 1) > BP_PAGE_DATA_SIZE) {
+          data_len -= COPY_SIZE;
 
-        // 分配 frame
+          // 分配 frame
+          RC ret = data_buffer_pool_->allocate_page(&frame);
+          if (ret != RC::SUCCESS) {
+            LOG_ERROR("Failed to allocate page while inserting record. ret:%d", ret);
+            return ret;
+          }
+          PageNum page_num = frame->page_num();
+
+          // 写 text 数据到溢出页
+          frame->write_latch();
+
+          memset(frame->data(), 0, BP_PAGE_DATA_SIZE);
+          memcpy(frame->data(), &page_header, sizeof(PageHeader));  // 最开始放溢出页
+          memcpy(frame->data() + sizeof(PageHeader), value.data() + frame_offset, COPY_SIZE);
+          frame_offset += COPY_SIZE;
+
+          // 将 record 对应 text 字段位置的内容设置为溢出页的页号
+          memcpy(record_data + field->offset() + record_offset, &page_num, sizeof(PageNum));
+          record_offset += sizeof(PageNum);
+
+          ret = data_buffer_pool_->flush_page(*frame);
+          if (ret != RC::SUCCESS) {
+            LOG_ERROR("Failed to flush page header %d:%d.", data_buffer_pool_->file_desc(), page_num);
+            return ret;
+          }
+          frame->unpin();
+
+          frame->write_unlatch();
+        }
+
         RC ret = data_buffer_pool_->allocate_page(&frame);
         if (ret != RC::SUCCESS) {
           LOG_ERROR("Failed to allocate page while inserting record. ret:%d", ret);
           return ret;
         }
+
         PageNum page_num = frame->page_num();
 
-        // 写 text 数据到溢出页
         frame->write_latch();
 
         memset(frame->data(), 0, BP_PAGE_DATA_SIZE);
         memcpy(frame->data(), &page_header, sizeof(PageHeader));  // 最开始放溢出页
-        memcpy(frame->data() + sizeof(PageHeader), value.data() + frame_offset, COPY_SIZE);
-        frame_offset += COPY_SIZE;
-
-        // 将 record 对应 text 字段位置的内容设置为溢出页的页号
-        memcpy(record_data + field->offset() + record_offset, &page_num, sizeof(PageNum));
-        record_offset += sizeof(PageNum);
+        memcpy(frame->data() + sizeof(PageHeader), value.data() + frame_offset, data_len + 1);
 
         ret = data_buffer_pool_->flush_page(*frame);
         if (ret != RC::SUCCESS) {
@@ -443,35 +468,14 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
         frame->unpin();
 
         frame->write_unlatch();
+
+        memcpy(record_data + field->offset() + record_offset, &page_num, sizeof(PageNum));
+
+      } 
+      // 1.2.2 非TEXT的非NULL值, 直接复制Value的data
+      else {
+        memcpy(record_data + field->offset(), value.data(), copy_len);
       }
-
-      RC ret = data_buffer_pool_->allocate_page(&frame);
-      if (ret != RC::SUCCESS) {
-        LOG_ERROR("Failed to allocate page while inserting record. ret:%d", ret);
-        return ret;
-      }
-
-      PageNum page_num = frame->page_num();
-
-      frame->write_latch();
-
-      memset(frame->data(), 0, BP_PAGE_DATA_SIZE);
-      memcpy(frame->data(), &page_header, sizeof(PageHeader));  // 最开始放溢出页
-      memcpy(frame->data() + sizeof(PageHeader), value.data() + frame_offset, data_len + 1);
-
-      ret = data_buffer_pool_->flush_page(*frame);
-      if (ret != RC::SUCCESS) {
-        LOG_ERROR("Failed to flush page header %d:%d.", data_buffer_pool_->file_desc(), page_num);
-        return ret;
-      }
-      frame->unpin();
-
-      frame->write_unlatch();
-
-      memcpy(record_data + field->offset() + record_offset, &page_num, sizeof(PageNum));
-
-    } else {
-      memcpy(record_data + field->offset(), value.data(), copy_len);
     }
   }
 
