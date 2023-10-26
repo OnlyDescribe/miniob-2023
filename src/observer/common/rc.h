@@ -25,6 +25,7 @@ See the Mulan PSL v2 for more details. */
   DEFINE_RC(UNIMPLENMENT)                \
   DEFINE_RC(SQL_SYNTAX)                  \
   DEFINE_RC(INTERNAL)                    \
+  DEFINE_RC(NOT_MATHCH)                  \
   DEFINE_RC(NOMEM)                       \
   DEFINE_RC(NOTFOUND)                    \
   DEFINE_RC(EMPTY)                       \
@@ -59,6 +60,7 @@ See the Mulan PSL v2 for more details. */
   DEFINE_RC(LOCKED_UNLOCK)               \
   DEFINE_RC(LOCKED_NEED_WAIT)            \
   DEFINE_RC(LOCKED_CONCURRENCY_CONFLICT) \
+  DEFINE_RC(JOIN_ERROR)                  \
   DEFINE_RC(FILE_EXIST)                  \
   DEFINE_RC(FILE_NOT_EXIST)              \
   DEFINE_RC(FILE_NAME)                   \

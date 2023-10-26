@@ -75,13 +75,17 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
         AGGR_SUM
         AGGR_AVG
         AGGR_COUNT
-        /* AGGR_COUNT_STAR */
+        ASC
         RBRACE
+        INNER
+        JOIN
         COMMA
         TRX_BEGIN
         TRX_COMMIT
         TRX_ROLLBACK
         INT_T
+        ORDER
+        BY
         STRING_T
         TEXT_T
         FLOAT_T
@@ -120,7 +124,9 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
   enum CompOp                       comp;
   enum AggrFuncType                 aggr_func_type;
   RelAttrSqlNode *                  rel_attr;
+  JoinSqlNode *                     joins;
   std::vector<AttrInfoSqlNode> *    attr_infos;
+  std::vector<OrderBy> *            orderbys;
   AttrInfoSqlNode *                 attr_info;
   Expression *                      expression;
   AssignmentSqlNode *               assignment;
@@ -129,6 +135,7 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
   std::vector<ConditionSqlNode> *   condition_list;
   std::vector<RelAttrSqlNode> *     rel_attr_list;
   std::vector<std::string> *        relation_list;
+  WhereSqlNode *                    where_node;
   char *                            string;
   std::vector<char *> *             string_list;
   std::vector<std::string> *        std_string_list;
@@ -150,6 +157,7 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
 %type <condition>           condition
 %type <value>               value
 %type <string>              field_or_star
+%type <orderbys>            order_condtions
 %type <field_or_star_list>  field_or_star_list
 %type <number>              number
 %type <comp>                comp_op
@@ -159,10 +167,11 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
 %type <attr_infos>          attr_def_list
 %type <attr_info>           attr_def
 %type <value_list>          value_list
-%type <condition_list>      where
+%type <where_node>          where
 %type <condition_list>      condition_list
 %type <rel_attr_list>       select_attr
 %type <relation_list>       rel_list
+%type <joins>               inner_join
 %type <rel_attr_list>       attr_list
 %type <expression>          expression
 %type <expression_list>     expression_list
@@ -542,7 +551,7 @@ delete_stmt:    /*  delete 语句的语法解析树*/
       $$ = new ParsedSqlNode(SCF_DELETE);
       $$->deletion.relation_name = $3;
       if ($4 != nullptr) {
-        $$->deletion.conditions.swap(*$4);
+        $$->deletion.conditions.swap($4->conditions);
         delete $4;
       }
       free($3);
@@ -560,7 +569,7 @@ update_stmt:      /*  update 语句的语法解析树*/
         delete $7;
       }
       if ($8 != nullptr) {
-        $$->update.conditions.swap(*$8);
+        $$->update.conditions.swap($8->conditions);
         delete $8;
       }
 
@@ -600,9 +609,50 @@ assignment_list:
       delete $4;
     }
     ;
-
+inner_join:   // in
+    {
+      $$ = nullptr;
+    }
+    | INNER JOIN ID ON condition_list inner_join
+    {
+      $$ = new JoinSqlNode;
+      $$->relations.emplace_back($3);
+      $$->join_conds.push_back(*$5);
+      if ($6 != nullptr) {
+        $$->relations.insert($$->relations.end(), $6->relations.begin(), $6->relations.end());
+        $$->join_conds.insert($$->join_conds.end(), $6->join_conds.begin(), $6->join_conds.end());
+        delete $6;
+      }
+      delete $3;
+      delete $5;
+    }
+    ;
 select_stmt:        /*  select 语句的语法解析树*/
-    SELECT select_attr FROM ID rel_list where
+    SELECT select_attr FROM ID inner_join where
+    {
+      $$ = new ParsedSqlNode(SCF_SELECT);
+      if ($2 != nullptr) {
+        $$->selection.attributes.swap(*$2);
+        delete $2;
+        if (!$$->selection.IsAttributesVailid()) {
+          yyerror(&@$, sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
+        }
+      }
+      // 还需要连接的一个表时relations
+      $$->selection.relations.push_back($4);
+      if ($5 != nullptr) {
+        $$->selection.relations.insert($$->selection.relations.end(), $5->relations.begin(), $5->relations.end());
+        $$->selection.join_conds.insert($$->selection.join_conds.end(), $5->join_conds.begin(), $5->join_conds.end());
+        delete $5;
+      }
+      if ($6 != nullptr) {
+        $$->selection.conditions = std::move($6->conditions);
+        $$->selection.orderbys.swap($6->orderbys);
+        delete $6;
+      }
+      delete $4;
+    }
+    | SELECT select_attr FROM ID rel_list where
     {
       $$ = new ParsedSqlNode(SCF_SELECT);
       if ($2 != nullptr) {
@@ -620,7 +670,8 @@ select_stmt:        /*  select 语句的语法解析树*/
       std::reverse($$->selection.relations.begin(), $$->selection.relations.end());
 
       if ($6 != nullptr) {
-        $$->selection.conditions.swap(*$6);
+        $$->selection.conditions = std::move($6->conditions);
+        $$->selection.orderbys.swap($6->orderbys);
         delete $6;
       }
       free($4);
@@ -789,13 +840,70 @@ rel_list:
       free($2);
     }
     ;
+order_condtions:
+    {
+      $$ = nullptr;
+    }
+    | rel_attr order_condtions {
+      $$ = new vector<OrderBy>(1);
+      $$->back().attr = *$1;
+      $$->back().sort_type = SortType::ASC;
+      if ($2 != nullptr) {
+        $$->insert($$->end(), $2->begin(), $2->end());
+        delete $2;
+      }
+      delete $1;
+    }
+    | rel_attr DESC order_condtions {
+      $$ = new vector<OrderBy>(1);
+      $$->back().attr = *$1;
+      $$->back().sort_type = SortType::DESC;
+      if ($3 != nullptr) {
+        $$->insert($$->end(), $3->begin(), $3->end());
+        delete $3;
+      }
+      delete $1;
+    }
+    | rel_attr ASC order_condtions {
+      $$ = new vector<OrderBy>(1);
+      $$->back().attr = *$1;
+      $$->back().sort_type = SortType::ASC;
+      if ($3 != nullptr) {
+        $$->insert($$->end(), $3->begin(), $3->end());
+        delete $3;
+      }
+      delete $1;
+    }
+    | COMMA order_condtions {
+      $$ = $2;
+    } 
+    ;
 where:
     /* empty */
     {
       $$ = nullptr;
     }
     | WHERE condition_list {
-      $$ = $2;  
+      $$ = new WhereSqlNode;
+      $$->conditions = *$2;  
+      delete $2;
+    } 
+    /* TODO: ORDER BY order_condtions 这些语句放一个节点里面 */
+    | WHERE condition_list ORDER BY order_condtions {
+      $$ = new WhereSqlNode;
+      $$->conditions = *$2;  
+      if ($5 != nullptr) {
+        $$->orderbys = *$5;
+        delete $5;
+      }
+      delete $2;
+    } 
+    | ORDER BY order_condtions {
+      $$ = new WhereSqlNode;
+      if ($3 != nullptr) {
+        $$->orderbys = *$3;
+        delete $3;
+      }
     }
     ;
 condition_list:

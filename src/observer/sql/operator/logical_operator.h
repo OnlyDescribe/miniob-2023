@@ -16,6 +16,7 @@ See the Mulan PSL v2 for more details. */
 
 #include <memory>
 #include <vector>
+#include <string>
 
 #include "sql/expr/expression.h"
 
@@ -37,7 +38,9 @@ enum class LogicalOperatorType
   PREDICATE,    ///< 过滤，就是谓词
   PROJECTION,   ///< 投影，就是select
   AGGREGATION,  ///< 聚合
+  ORDER_BY,      ///< 聚合
   JOIN,         ///< 连接
+  HASH_JOIN,    ///< hash join连表
   INSERT,       ///< 插入
   DELETE,       ///< 删除，删除可能会有子查询
   UPDATE,       ///< 更新
@@ -56,9 +59,63 @@ public:
 
   virtual LogicalOperatorType type() const = 0;
 
+  virtual std::string to_string() {
+    switch (type()) {
+      case LogicalOperatorType::TABLE_GET:
+        return "TABLE_GET";
+      case LogicalOperatorType::PREDICATE:
+        return "PREDICATE";
+      case LogicalOperatorType::PROJECTION:
+        return "PROJECTION";
+      case LogicalOperatorType::AGGREGATION:
+        return "AGGREGATION";
+      case LogicalOperatorType::ORDER_BY:
+        return "ORDER_BY";
+      case LogicalOperatorType::JOIN:
+        return "JOIN";
+      case LogicalOperatorType::HASH_JOIN:
+        return "HASH_JOIN";
+      case LogicalOperatorType::INSERT:
+        return "INSERT";
+      case LogicalOperatorType::DELETE:
+        return "INSERT";
+      case LogicalOperatorType::UPDATE:
+        return "UPDATE";
+      case LogicalOperatorType::EXPLAIN:
+        return "EXPLAIN";
+      default:
+        break;
+    }
+    return "NO_SUPPORT";
+  }
+
+  virtual void printTree() {
+    printTree("", this, false);
+  }
+
   void add_child(std::unique_ptr<LogicalOperator> oper);
   std::vector<std::unique_ptr<LogicalOperator>> &children() { return children_; }
   std::vector<std::unique_ptr<Expression>> &expressions() { return expressions_; }
+
+  void set_expressions(std::vector<std::unique_ptr<Expression>> &&expression) {
+    expressions_ = std::move(expression);
+  }
+private:
+    // 打印逻辑树
+  virtual void printTree(const std::string& prefix, LogicalOperator* node, bool isFirst) {
+    if (node != nullptr) {
+      std::cout << prefix;
+      std::cout << (isFirst ? "├──" : "└──" );
+      std::cout << node->to_string() << " : ";
+      for (const auto& expression: node->expressions_) {
+        std::cout << expression->to_string() << " ";
+      }
+      std::cout << std::endl;
+      for (int i = 0; i < node->children_.size(); i++) {
+          printTree(prefix + (isFirst ? "│   " : "    "), node->children_[i].get(), i == 0);
+      }
+    }
+  }
 
 protected:
   std::vector<std::unique_ptr<LogicalOperator>> children_;  ///< 子算子

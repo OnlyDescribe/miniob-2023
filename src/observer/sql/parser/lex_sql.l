@@ -85,6 +85,7 @@ QUOTE            [\'\"]
 EXIT                                    RETURN_TOKEN(EXIT);
 HELP                                    RETURN_TOKEN(HELP);
 DESC                                    RETURN_TOKEN(DESC);
+ASC                                     RETURN_TOKEN(ASC);
 CREATE                                  RETURN_TOKEN(CREATE);
 DROP                                    RETURN_TOKEN(DROP);
 TABLE                                   RETURN_TOKEN(TABLE);
@@ -123,11 +124,16 @@ MIN                                     RETURN_TOKEN(AGGR_MIN);
 SUM                                     RETURN_TOKEN(AGGR_SUM);
 AVG                                     RETURN_TOKEN(AGGR_AVG);
 COUNT                                   RETURN_TOKEN(AGGR_COUNT);
+INNER                                   RETURN_TOKEN(INNER);
+JOIN                                    RETURN_TOKEN(JOIN);
 LIKE                                    RETURN_TOKEN(LIKE_CONDITION);
 IS                                      RETURN_TOKEN(IS);
-NOT                                     RETURN_TOKEN(NOT);
 DEFAULT                                 RETURN_TOKEN(DEFAULT);
+NOT                                     RETURN_TOKEN(NOT);
+ORDER                                   RETURN_TOKEN(ORDER);
+BY                                      RETURN_TOKEN(BY);
 {ID}                                    yylval->string=strdup(yytext); RETURN_TOKEN(ID);
+
 "("                                     RETURN_TOKEN(LBRACE);
 ")"                                     RETURN_TOKEN(RBRACE);
 

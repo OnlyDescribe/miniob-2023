@@ -96,6 +96,31 @@ public:
    */
   virtual AttrType value_type() const = 0;
 
+  virtual std::string to_string() {
+    switch (type())
+    {
+    case ExprType::STAR:
+      return "STAR";
+    case ExprType::FIELD:
+      return "FIELD";
+    case ExprType::VALUE:
+      return "VALUE";
+    case ExprType::AGGRFUNCTION:
+      return "AGGRFUNCTION";
+    case ExprType::CAST:
+      return "CAST";
+    case ExprType::COMPARISON:
+      return "COMPARISON";
+    case ExprType::CONJUNCTION:
+      return "CONJUNCTION";
+    case ExprType::ARITHMETIC:
+      return "ARITHMETIC";
+    default:
+      break;
+    }
+    return "NOT SUPPORT";
+  }
+
   /**
    * @brief 表达式的名字，比如是字段名称，或者用户在执行SQL语句时输入的内容
    */

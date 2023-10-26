@@ -34,6 +34,24 @@ RC NestedLoopJoinPhysicalOperator::open(Trx *trx)
   return rc;
 }
 
+RC NestedLoopJoinPhysicalOperator::predicate() {
+  RC rc = RC::SUCCESS;
+  if (!expressions_.empty()) {
+    for (const auto& expression: expressions_) {
+      Value ret;
+      rc = expression->get_value(joined_tuple_, ret);
+      if (rc != RC::SUCCESS) {
+        return rc;
+      }
+      std::cout << joined_tuple_.to_string() << " " << ret.to_string() << std::endl;
+      if (!(ret == Value(true))) {
+        return RC::NOT_MATHCH;
+      }
+    }
+  }
+  return rc;
+}
+
 RC NestedLoopJoinPhysicalOperator::next()
 {
   bool left_need_step = (left_tuple_ == nullptr);
@@ -49,6 +67,10 @@ RC NestedLoopJoinPhysicalOperator::next()
         return rc;
       }
     } else {
+      rc = predicate();
+      if (rc == RC::NOT_MATHCH) {
+        rc = next();
+      }
       return rc;  // got one tuple from right
     }
   }
@@ -61,6 +83,16 @@ RC NestedLoopJoinPhysicalOperator::next()
   }
 
   rc = right_next();
+
+  if (rc != RC::SUCCESS) {
+    return rc;
+  }
+
+  rc = predicate();
+  if (rc == RC::NOT_MATHCH) {
+    rc = next();
+  }
+  
   return rc;
 }
 
@@ -129,4 +161,93 @@ RC NestedLoopJoinPhysicalOperator::right_next()
   right_tuple_ = right_->current_tuple();
   joined_tuple_.set_right(right_tuple_);
   return rc;
+}
+
+HashJoinPhysicalOperator::HashJoinPhysicalOperator() {}
+
+RC HashJoinPhysicalOperator::open(Trx* trx) {
+  if (children_.size() != 2) {
+    LOG_WARN("nlj operator should have 2 children");
+    return RC::INTERNAL;
+  }
+  RC rc = RC::SUCCESS;
+  left_ = children_[0].get();
+  right_ = children_[1].get();
+
+  rc = right_->open(trx);
+  right_results_ = std::queue<Tuple*>();
+  if (rc != RC::SUCCESS || left_->open(trx) != RC::SUCCESS) {
+    return rc;
+  }
+  // TODO: 可能有左表达式和右表达式相反的情况, 事先做交换
+  mp_.clear();
+  while ((rc = right_->next()) == RC::SUCCESS) {
+    auto right_tuple = right_->current_tuple();
+
+    std::vector<Value> values;
+    for (int i = 0; i < right_expressions_.size(); i++) {
+      Value value;
+      rc = right_expressions_[i]->get_value(*right_tuple, value);
+      if (rc != RC::SUCCESS) {
+        return rc;
+      }
+      values.emplace_back(value);
+    }
+    AggregateKey key;
+    key.group_bys_.swap(values);
+    mp_[key].push_back(right_tuple->copy_tuple());
+  }
+  trx_ = trx;
+  return RC::SUCCESS;
+}
+
+RC HashJoinPhysicalOperator::next() {
+  RC rc = RC::SUCCESS;
+  while (right_results_.empty()) {
+    rc = left_->next();
+    left_tuple_ = left_->current_tuple();
+    if (rc == RC::RECORD_EOF) {
+      return rc;
+    }
+    std::vector<Value> values;
+    for (int i = 0; i < left_expressions_.size(); i++) {
+      Value value;
+      rc = left_expressions_[i]->get_value(*left_tuple_, value);
+      if (rc != RC::SUCCESS) {
+        return rc;
+      }
+      values.emplace_back(value);
+    }
+    AggregateKey key;
+    key.group_bys_ .swap(values);
+    auto it = mp_.find(key);
+    if (it != mp_.end()) {
+      for (Tuple* right_tuple: it->second) {
+        right_results_.push(right_tuple);
+      }
+      break;
+    }
+  } 
+  if (left_tuple_ == nullptr || right_results_.empty()) {
+    return RC::RECORD_EOF;
+  }
+  joined_tuple_.set_left(left_tuple_);
+  joined_tuple_.set_right(right_results_.front());
+  right_results_.pop();
+
+  return rc;
+}
+RC HashJoinPhysicalOperator::close() {
+  RC rc = left_->close();
+  if (left_->close() != RC::SUCCESS) {
+    LOG_WARN("failed to close left oper. rc=%s", strrc(rc));
+  }
+  RC rc2 = right_->close();
+  if (right_->close() != RC::SUCCESS) {
+    LOG_WARN("failed to close right oper. rc=%s", strrc(rc2));
+  }
+  return RC::SUCCESS;
+};
+Tuple* HashJoinPhysicalOperator::current_tuple() {
+  return &joined_tuple_;
 }

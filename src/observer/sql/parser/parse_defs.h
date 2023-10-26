@@ -76,6 +76,24 @@ enum CompOp
 };
 
 /**
+ * @description: 排序类型
+ * 
+ */
+enum class SortType {
+  ASC,
+  DESC
+};
+
+
+/**
+ * @description: 一个OrderBy单元
+ * @return {*}
+ */
+struct OrderBy {
+  RelAttrSqlNode attr;        // order_by的属性
+  SortType sort_type;          // 排序类型, 
+};
+/**
  * @brief 表示一个条件比较
  * @ingroup SQLParser
  * @details 条件比较就是SQL查询中的 where a>b 这种。
@@ -97,6 +115,28 @@ struct ConditionSqlNode
 };
 
 /**
+ * @description: Where句柄，里面会跟Conditions, 以及OrderBy, GroupBy
+ * @return {*}
+ */
+
+struct WhereSqlNode {
+  std::vector<ConditionSqlNode> conditions;
+  std::vector<OrderBy> orderbys;
+};
+
+
+/**
+ * @description: 把 SelectSqlNode 所有表join起来的条件
+ * 一个N 个表，N-1个条件
+ * @return {*}
+ */
+
+struct JoinSqlNode {
+  std::vector<std::string> relations;      // 需要join的表
+  std::vector<std::vector<ConditionSqlNode>> join_conds;  // 把表join起来的条件, 
+};
+
+/**
  * @brief 描述一个select语句
  * @ingroup SQLParser
  * @details 一个正常的select语句描述起来比这个要复杂很多，这里做了简化。
@@ -112,6 +152,8 @@ struct SelectSqlNode
   std::vector<RelAttrSqlNode> attributes;    ///< attributes in select clause
   std::vector<std::string> relations;        ///< 查询的表
   std::vector<ConditionSqlNode> conditions;  ///< 查询条件，使用AND串联起来多个条件
+  std::vector<std::vector<ConditionSqlNode>> join_conds;       ///< 做连接时，把relations连接起来的条件。
+  std::vector<OrderBy> orderbys;            // oderby条件
 
   bool IsAttributesVailid()
   {
