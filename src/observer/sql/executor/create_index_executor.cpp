@@ -35,6 +35,7 @@ RC CreateIndexExecutor::execute(SQLStageEvent *sql_event)
 
   // 这里从db复制了一份字段field_metas(一般字段名不大)
   // 这是考虑到尽可能少修改并统一联合索引字段的接口, 即 const std::vector<FieldMeta> &field_meta
+  // 复制一份后, create index会在field_metas后增加bitmap数据
   std::vector<FieldMeta> new_field_metas;
   const std::vector<const FieldMeta *> &field_metas = create_index_stmt->field_meta();
   new_field_metas.reserve(field_metas.size());

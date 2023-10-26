@@ -24,6 +24,7 @@ See the Mulan PSL v2 for more details. */
 enum AttrType
 {
   UNDEFINED,
+  NULLS,     ///< NULL类型
   DATES,     ///< 日期类型
   CHARS,     ///< 字符串类型
   TEXTS,     ///< 文本类型
@@ -51,6 +52,7 @@ public:
   explicit Value(bool val);
   explicit Value(const char *s, int len = 0);
   explicit Value(const char *s, AttrType type);
+  explicit Value(AttrType type);
 
   Value(const Value &other) = default;
   Value &operator=(const Value &other) = default;
@@ -62,6 +64,7 @@ public:
   void set_type(AttrType type) { this->attr_type_ = type; }
   void set_data(char *data, int length);
   void set_data(const char *data, int length) { this->set_data(const_cast<char *>(data), length); }
+  void set_null();
   void set_int(int val);
   void set_float(float val);
   void set_boolean(bool val);
@@ -80,6 +83,26 @@ public:
         case AttrType::INTS: return Value(a.get_int() + b.get_int());
         case AttrType::FLOATS: return Value(a.get_float() + b.get_float());
         case AttrType::BOOLEANS: return Value(a.get_int() + b.get_int());
+        default: break;
+      }
+    }
+    // TODO: from oldcb 需要修改, 我瞎改的
+    if (a.attr_type() == AttrType::NULLS) {
+      switch (b.attr_type()) {
+        case AttrType::INTS: return Value(b.get_int());
+        case AttrType::FLOATS: return Value(b.get_float());
+        case AttrType::BOOLEANS: return Value(b.get_int());
+        case AttrType::NULLS: return Value(0);
+        default: break;
+      }
+    }
+    // TODO: from oldcb 需要修改, 我瞎改的
+    if (b.attr_type() == AttrType::NULLS) {
+      switch (a.attr_type()) {
+        case AttrType::INTS: return Value(a.get_int());
+        case AttrType::FLOATS: return Value(a.get_float());
+        case AttrType::BOOLEANS: return Value(a.get_int());
+        case AttrType::NULLS: return Value(0);
         default: break;
       }
     }

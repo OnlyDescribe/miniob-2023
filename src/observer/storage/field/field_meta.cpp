@@ -23,17 +23,21 @@ const static Json::StaticString FIELD_NAME("name");
 const static Json::StaticString FIELD_TYPE("type");
 const static Json::StaticString FIELD_OFFSET("offset");
 const static Json::StaticString FIELD_LEN("len");
+const static Json::StaticString FIELD_ID("id");
 const static Json::StaticString FIELD_VISIBLE("visible");
+const static Json::StaticString FIELD_IS_NOT_NULL("is_not_null");
 
 FieldMeta::FieldMeta() : attr_type_(AttrType::UNDEFINED), attr_offset_(-1), attr_len_(0), visible_(false) {}
 
-FieldMeta::FieldMeta(const char *name, AttrType attr_type, int attr_offset, int attr_len, bool visible)
+FieldMeta::FieldMeta(
+    const char *name, AttrType attr_type, int attr_offset, int attr_len, int attr_id, bool visible, bool is_not_null)
 {
-  [[maybe_unused]] RC rc = this->init(name, attr_type, attr_offset, attr_len, visible);
+  [[maybe_unused]] RC rc = this->init(name, attr_type, attr_offset, attr_len, attr_id, visible, is_not_null);
   ASSERT(rc == RC::SUCCESS, "failed to init field meta. rc=%s", strrc(rc));
 }
 
-RC FieldMeta::init(const char *name, AttrType attr_type, int attr_offset, int attr_len, bool visible)
+RC FieldMeta::init(
+    const char *name, AttrType attr_type, int attr_offset, int attr_len, int attr_id, bool visible, bool is_not_null)
 {
   if (common::is_blank(name)) {
     LOG_WARN("Name cannot be empty");
@@ -51,6 +55,8 @@ RC FieldMeta::init(const char *name, AttrType attr_type, int attr_offset, int at
   attr_len_ = attr_len;
   attr_offset_ = attr_offset;
   visible_ = visible;
+  attr_id_ = attr_id;
+  is_not_null_ = is_not_null;
 
   LOG_INFO("Init a field with name=%s", name);
   return RC::SUCCESS;
@@ -64,7 +70,11 @@ int FieldMeta::offset() const { return attr_offset_; }
 
 int FieldMeta::len() const { return attr_len_; }
 
+int FieldMeta::id() const { return attr_id_; }
+
 bool FieldMeta::visible() const { return visible_; }
+
+bool FieldMeta::is_not_null() const { return is_not_null_; }
 
 void FieldMeta::desc(std::ostream &os) const
 {
@@ -78,7 +88,9 @@ void FieldMeta::to_json(Json::Value &json_value) const
   json_value[FIELD_TYPE] = attr_type_to_string(attr_type_);
   json_value[FIELD_OFFSET] = attr_offset_;
   json_value[FIELD_LEN] = attr_len_;
+  json_value[FIELD_ID] = attr_id_;
   json_value[FIELD_VISIBLE] = visible_;
+  json_value[FIELD_IS_NOT_NULL] = is_not_null_;
 }
 
 RC FieldMeta::from_json(const Json::Value &json_value, FieldMeta &field)
@@ -92,7 +104,9 @@ RC FieldMeta::from_json(const Json::Value &json_value, FieldMeta &field)
   const Json::Value &type_value = json_value[FIELD_TYPE];
   const Json::Value &offset_value = json_value[FIELD_OFFSET];
   const Json::Value &len_value = json_value[FIELD_LEN];
+  const Json::Value &id_value = json_value[FIELD_LEN];
   const Json::Value &visible_value = json_value[FIELD_VISIBLE];
+  const Json::Value &is_not_null_value = json_value[FIELD_IS_NOT_NULL];
 
   if (!name_value.isString()) {
     LOG_ERROR("Field name is not a string. json value=%s", name_value.toStyledString().c_str());
@@ -111,8 +125,16 @@ RC FieldMeta::from_json(const Json::Value &json_value, FieldMeta &field)
     LOG_ERROR("Len is not an integer. json value=%s", len_value.toStyledString().c_str());
     return RC::INTERNAL;
   }
+  if (!id_value.isInt()) {
+    LOG_ERROR("Len is not an integer. json value=%s", len_value.toStyledString().c_str());
+    return RC::INTERNAL;
+  }
   if (!visible_value.isBool()) {
     LOG_ERROR("Visible field is not a bool value. json value=%s", visible_value.toStyledString().c_str());
+    return RC::INTERNAL;
+  }
+  if (!is_not_null_value.isBool()) {
+    LOG_ERROR("Is not null is not a bool value. json value=%s", is_not_null_value.toStyledString().c_str());
     return RC::INTERNAL;
   }
 
@@ -125,6 +147,8 @@ RC FieldMeta::from_json(const Json::Value &json_value, FieldMeta &field)
   const char *name = name_value.asCString();
   int offset = offset_value.asInt();
   int len = len_value.asInt();
+  int id = id_value.asInt();
   bool visible = visible_value.asBool();
-  return field.init(name, type, offset, len, visible);
+  bool is_not_null = is_not_null_value.asBool();
+  return field.init(name, type, offset, len, id, visible, is_not_null);
 }

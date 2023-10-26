@@ -24,7 +24,7 @@ private:
   Table *table_ = nullptr;
   std::vector<const Value *> values_;
   std::vector<const FieldMeta *> field_metas_;
-  std::vector<int> index_field_metas_;
+  std::vector<int> index_field_metas_; // 需要修改的字段是第几个, 不考虑系统字段
 
   Trx *trx_ = nullptr;
 };

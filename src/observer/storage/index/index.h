@@ -82,7 +82,8 @@ protected:
 
 protected:
   IndexMeta index_meta_;                ///< 索引的元数据
-  std::vector<FieldMeta> field_metas_;  ///< multi-index // 字段存在顺序
+  // 字段存在顺序, 最后一个放的是bitmap的元数据
+  std::vector<FieldMeta> field_metas_;  ///< multi-index
 };
 
 /**

@@ -43,6 +43,7 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/calc_physical_operator.h"
 #include "sql/expr/expression.h"
 #include "common/log/log.h"
+#include "storage/field/field_meta.h"
 
 using namespace std;
 
@@ -184,6 +185,7 @@ RC PhysicalPlanGenerator::create_plan(TableGetLogicalOperator &table_get_oper, u
   if (table_get_oper.readonly() && index != nullptr) {
     ASSERT(value_expr != nullptr, "got an index but value expr is null ?");
 
+    // 过滤条件中的值
     std::vector<Value> values;
     values.reserve(field_valexp_pairs.size());
     std::transform(field_valexp_pairs.begin(),
@@ -191,9 +193,23 @@ RC PhysicalPlanGenerator::create_plan(TableGetLogicalOperator &table_get_oper, u
         std::back_inserter(values),
         [](const FieldValueExpPair &v) { return v.value->get_value(); });
 
+    // 过滤条件中的字段
+    std::vector<FieldMeta> value_metas;
+    values.reserve(field_valexp_pairs.size());
+    std::transform(field_valexp_pairs.begin(),
+        field_valexp_pairs.end(),
+        std::back_inserter(value_metas),
+        [](const FieldValueExpPair &v) { return *v.field.meta(); });
+
     // 走联合索引
-    IndexScanPhysicalOperator *index_scan_oper = new IndexScanPhysicalOperator(
-        table, index, table_get_oper.readonly(), values, true /*left_inclusive*/, values, true /*right_inclusive*/);
+    IndexScanPhysicalOperator *index_scan_oper = new IndexScanPhysicalOperator(table,
+        index,
+        table_get_oper.readonly(),
+        values,
+        true /*left_inclusive*/,
+        values,
+        true /*right_inclusive*/,
+        value_metas);
 
     index_scan_oper->set_predicates(std::move(predicates));
     oper = unique_ptr<PhysicalOperator>(index_scan_oper);

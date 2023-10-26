@@ -21,7 +21,7 @@ See the Mulan PSL v2 for more details. */
 #include "common/lang/string.h"
 
 // 注意这里的顺序应该与enum AttrType一一对应
-const char *ATTR_TYPE_NAME[] = {"undefined", "dates", "chars", "texts", "ints", "floats", "booleans"};
+const char *ATTR_TYPE_NAME[] = {"undefined", "nulls", "dates", "chars", "texts", "ints", "floats", "booleans"};
 
 const char *attr_type_to_string(AttrType type)
 {
@@ -52,6 +52,15 @@ Value::Value(const char *s, AttrType type)
 {
   if (type == AttrType::DATES) {
     set_date(s);
+  } else {
+    LOG_WARN("unknown data type: %d", type);
+  }
+}
+
+Value::Value(AttrType type)
+{
+  if (type == AttrType::NULLS) {
+    set_null();
   } else {
     LOG_WARN("unknown data type: %d", type);
   }
@@ -88,6 +97,13 @@ void Value::set_data(char *data, int length)
     } break;
   }
 }
+void Value::set_null()
+{
+  attr_type_ = NULLS;
+  num_value_.int_value_ = 0;
+  length_ = 0;
+}
+
 void Value::set_int(int val)
 {
   attr_type_ = INTS;
@@ -193,6 +209,9 @@ std::string Value::to_string() const
 {
   std::stringstream os;
   switch (attr_type_) {
+    case NULLS: {
+      os << "NULL";
+    } break;
     case INTS: {
       os << num_value_.int_value_;
     } break;
@@ -255,17 +274,25 @@ int Value::compare(const Value &other) const
   } else if (this->attr_type_ == FLOATS && other.attr_type_ == INTS) {
     float other_data = other.num_value_.int_value_;
     return common::compare_float((void *)&this->num_value_.float_value_, (void *)&other_data);
-  } else if ((this->attr_type_ == DATES || this->attr_type_ == INTS || this->attr_type_ == FLOATS) &&
-             (other.attr_type_ == DATES || other.attr_type_ == INTS || other.attr_type_ == FLOATS)) {
+  }
+  // common comparison for DATES and INTS and FLOATS
+  else if ((this->attr_type_ == DATES || this->attr_type_ == INTS || this->attr_type_ == FLOATS) &&
+           (other.attr_type_ == DATES || other.attr_type_ == INTS || other.attr_type_ == FLOATS)) {
     float this_data = this->get_float();
     float other_data = other.get_float();
     return common::compare_float((void *)&this_data, (void *)&other_data);
-  } else if ((this->attr_type_ == CHARS || this->attr_type_ == TEXTS) &&
-             (other.attr_type_ == CHARS || other.attr_type_ == TEXTS)) {
+  }
+  // common comparison for CHARS and TEXTS
+  else if ((this->attr_type_ == CHARS || this->attr_type_ == TEXTS) &&
+           (other.attr_type_ == CHARS || other.attr_type_ == TEXTS)) {
     return common::compare_string((void *)this->str_value_.c_str(),
         this->str_value_.length(),
         (void *)other.str_value_.c_str(),
         other.str_value_.length());
+  }
+  // common comparison for NULLS
+  else if (this->attr_type_ == NULLS || other.attr_type_ == NULLS) {
+    LOG_WARN("can not compare");
   }
   LOG_WARN("not supported");
   return -1;  // TODO return rc?

@@ -248,12 +248,13 @@ RC Table::insert_record(Record &record)
 
   // rc = insert_entry_of_indexes(record.data(), record.rid());
   for (Index *index : indexes_) {
+    // 注意: 索引的fieldmeta是索引字段+null字段, table的fieldmeta是sys+user+null字段
     rc = index->insert_entry(record.data(), &record.rid());
     if (rc != RC::SUCCESS) {
       if (index->index_meta().is_unique()) {
         // 注意 KeyComparator, 如果是唯一索引, 则只比较索引字段; 而忽略rid
         // 此时不应从索引中删除对应的entry; 否则会删除已存在的索引叶节点, 即使是不同的rid
-        // TODO(oldcb): 唯一索引的回滚处理比较麻烦
+        // TODO(oldcb): 唯一索引的回滚处理比较麻烦(需要比较rid, 要特殊处理)
         if (rc != RC::RECORD_DUPLICATE_KEY) {
           LOG_ERROR("Unprocessable situation; the unique index cannot currently be rolled back. table name=%s, rc=%s", table_meta_.name(), strrc(rc));
         }
@@ -337,8 +338,8 @@ const TableMeta &Table::table_meta() const { return table_meta_; }
 
 RC Table::make_record(int value_num, const Value *values, Record &record)
 {
-  // 检查字段类型是否一致
-  if (value_num + table_meta_.sys_field_num() != table_meta_.field_num()) {
+  // 检查字段类型是否一致(还有null对应的bitmap字段)
+  if (value_num + table_meta_.sys_field_num() + table_meta_.extra_field_num() != table_meta_.field_num()) {
     LOG_WARN("Input values don't match the table's schema, table name:%s", table_meta_.name());
     return RC::SCHEMA_FIELD_MISSING;
   }
@@ -348,65 +349,119 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
     const FieldMeta *field = table_meta_.field(i + normal_field_start_index);
     const Value &value = values[i];
     if (field->type() != value.attr_type()) {
-      LOG_ERROR("Invalid value type. table name =%s, field name=%s, type=%d, but given=%d",
+      if (value.attr_type() == AttrType::NULLS) {
+        if (field->is_not_null()) {
+          LOG_WARN("value can not be null.");
+          return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+        }
+      } else {
+        LOG_ERROR("Invalid value type. table name =%s, field name=%s, type=%d, but given=%d",
                 table_meta_.name(), field->name(), field->type(), value.attr_type());
-      return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+        return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+      }
     }
   }
 
   // 复制所有字段的值
   int record_size = table_meta_.record_size();
   char *record_data = (char *)malloc(record_size);
+  memset(record_data, 0, record_size);  // 清零, 这样也保证了bitmap初始全为0
+
+  const FieldMeta *null_field = table_meta_.null_field();
+  common::Bitmap bitmap(record_data + null_field->offset(), null_field->len());
 
   for (int i = 0; i < value_num; i++) {
     const FieldMeta *field = table_meta_.field(i + normal_field_start_index);
     const Value &value = values[i];
     size_t copy_len = field->len();
-    if (field->type() == CHARS) {
-      const size_t data_len = value.length();
-      if (copy_len > data_len) {
-        copy_len = data_len + 1;
+
+    // 1. 对 NULL 值进行检查
+    if (value.attr_type() == AttrType::NULLS) {
+      // 1.1 值为NULL, 设置bitmap, 并赋值0
+      if (field->is_not_null()) {
+        LOG_ERROR("Cannot be null. table name =%s, field name=%s, type=%d",
+          table_meta_.name(),
+          field->name(),
+          field->type());
+        return RC::SCHEMA_FIELD_TYPE_MISMATCH;
       }
-    }
 
-    // 处理 text 字段, 设计当前文件下的溢出页
-    if (field->type() == AttrType::TEXTS) {
-      size_t data_len = value.length();
-      Frame *frame = nullptr;
-
+      bitmap.set_bit(normal_field_start_index + i);
       memset(record_data + field->offset(), 0, copy_len);
+    } else {
+      // 1.2 值非NULL, 设置bitmap, 继续赋值
+      bitmap.clear_bit(normal_field_start_index + i);
 
-      // 设置溢出页的页头
-      PageHeader page_header;
-      page_header.is_overflow = true;
+      // 1.2.1 处理字符串
+      if (field->type() == CHARS) {
+        const size_t data_len = value.length();
+        if (copy_len > data_len) {
+          copy_len = data_len + 1;
+        }
+        memcpy(record_data + field->offset(), value.data(), copy_len);
+      }
+      // 1.2.2 处理 text 字段, 设计当前文件下的溢出页
+      else if (field->type() == AttrType::TEXTS) {
+        size_t data_len = value.length();
+        Frame *frame = nullptr;
 
-      int record_offset{0};
-      int frame_offset{0};
-      // 将 text 字段的内容拷贝到溢出页中
-      // 注意: 杜绝 UB
-      const int COPY_SIZE = BP_PAGE_DATA_SIZE - sizeof(PageHeader);
-      while ((data_len + sizeof(PageHeader) + 1) > BP_PAGE_DATA_SIZE) {
-        data_len -= COPY_SIZE;
+        memset(record_data + field->offset(), 0, copy_len);
 
-        // 分配 frame
+        // 设置溢出页的页头
+        PageHeader page_header;
+        page_header.is_overflow = true;
+
+        int record_offset{0};
+        int frame_offset{0};
+        // 将 text 字段的内容拷贝到溢出页中
+        // 注意: 杜绝 UB
+        const int COPY_SIZE = BP_PAGE_DATA_SIZE - sizeof(PageHeader);
+        while ((data_len + sizeof(PageHeader) + 1) > BP_PAGE_DATA_SIZE) {
+          data_len -= COPY_SIZE;
+
+          // 分配 frame
+          RC ret = data_buffer_pool_->allocate_page(&frame);
+          if (ret != RC::SUCCESS) {
+            LOG_ERROR("Failed to allocate page while inserting record. ret:%d", ret);
+            return ret;
+          }
+          PageNum page_num = frame->page_num();
+
+          // 写 text 数据到溢出页
+          frame->write_latch();
+
+          memset(frame->data(), 0, BP_PAGE_DATA_SIZE);
+          memcpy(frame->data(), &page_header, sizeof(PageHeader));  // 最开始放溢出页
+          memcpy(frame->data() + sizeof(PageHeader), value.data() + frame_offset, COPY_SIZE);
+          frame_offset += COPY_SIZE;
+
+          // 将 record 对应 text 字段位置的内容设置为溢出页的页号
+          memcpy(record_data + field->offset() + record_offset, &page_num, sizeof(PageNum));
+          record_offset += sizeof(PageNum);
+
+          ret = data_buffer_pool_->flush_page(*frame);
+          if (ret != RC::SUCCESS) {
+            LOG_ERROR("Failed to flush page header %d:%d.", data_buffer_pool_->file_desc(), page_num);
+            return ret;
+          }
+          frame->unpin();
+
+          frame->write_unlatch();
+        }
+
         RC ret = data_buffer_pool_->allocate_page(&frame);
         if (ret != RC::SUCCESS) {
           LOG_ERROR("Failed to allocate page while inserting record. ret:%d", ret);
           return ret;
         }
+
         PageNum page_num = frame->page_num();
 
-        // 写 text 数据到溢出页
         frame->write_latch();
 
         memset(frame->data(), 0, BP_PAGE_DATA_SIZE);
         memcpy(frame->data(), &page_header, sizeof(PageHeader));  // 最开始放溢出页
-        memcpy(frame->data() + sizeof(PageHeader), value.data() + frame_offset, COPY_SIZE);
-        frame_offset += COPY_SIZE;
-
-        // 将 record 对应 text 字段位置的内容设置为溢出页的页号
-        memcpy(record_data + field->offset() + record_offset, &page_num, sizeof(PageNum));
-        record_offset += sizeof(PageNum);
+        memcpy(frame->data() + sizeof(PageHeader), value.data() + frame_offset, data_len + 1);
 
         ret = data_buffer_pool_->flush_page(*frame);
         if (ret != RC::SUCCESS) {
@@ -416,35 +471,14 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
         frame->unpin();
 
         frame->write_unlatch();
+
+        memcpy(record_data + field->offset() + record_offset, &page_num, sizeof(PageNum));
+
       }
-
-      RC ret = data_buffer_pool_->allocate_page(&frame);
-      if (ret != RC::SUCCESS) {
-        LOG_ERROR("Failed to allocate page while inserting record. ret:%d", ret);
-        return ret;
+      // 1.2.3 非TEXT的非NULL值, 直接复制Value的data
+      else {
+        memcpy(record_data + field->offset(), value.data(), copy_len);
       }
-
-      PageNum page_num = frame->page_num();
-
-      frame->write_latch();
-
-      memset(frame->data(), 0, BP_PAGE_DATA_SIZE);
-      memcpy(frame->data(), &page_header, sizeof(PageHeader));  // 最开始放溢出页
-      memcpy(frame->data() + sizeof(PageHeader), value.data() + frame_offset, data_len + 1);
-
-      ret = data_buffer_pool_->flush_page(*frame);
-      if (ret != RC::SUCCESS) {
-        LOG_ERROR("Failed to flush page header %d:%d.", data_buffer_pool_->file_desc(), page_num);
-        return ret;
-      }
-      frame->unpin();
-
-      frame->write_unlatch();
-
-      memcpy(record_data + field->offset() + record_offset, &page_num, sizeof(PageNum));
-
-    } else {
-      memcpy(record_data + field->offset(), value.data(), copy_len);
     }
   }
 
@@ -485,7 +519,7 @@ RC Table::get_record_scanner(RecordFileScanner &scanner, Trx *trx, bool readonly
   return rc;
 }
 
-RC Table::create_index(Trx *trx, const std::vector<FieldMeta> &field_meta, const char *index_name, bool is_unique)
+RC Table::create_index(Trx *trx, std::vector<FieldMeta> &field_meta, const char *index_name, bool is_unique)
 {
   if (common::is_blank(index_name)) {
     LOG_INFO("Invalid input arguments, table name is %s, index_name is blank", name());
@@ -497,6 +531,31 @@ RC Table::create_index(Trx *trx, const std::vector<FieldMeta> &field_meta, const
     return RC::INVALID_ARGUMENT;
   }
 
+  // field_meta 最后面放 bitmap
+  // 注意: 是 [index fields] [bitmap] 的结构
+  field_meta.push_back(*table_meta_.null_field());
+
+  // TODO(oldcb): 目前可以被field的 id 值替代
+  // 计算每个field对应在表中是第几个字段(id)
+  std::vector<int> field_id;
+  field_id.reserve(field_meta.size());
+  for (const FieldMeta &meta : field_meta) {
+    int field_index;
+    const std::vector<FieldMeta> &table_field_metas = *table_meta_.field_metas();
+    auto it = std::find_if(table_field_metas.begin(), table_field_metas.end(), [meta](const FieldMeta &m) {
+      if (strcmp(m.name(), meta.name()) == 0) {
+        return true;
+      }
+      return false;
+    });
+
+    ASSERT(it != table_field_metas.end(), "failed to get field index");
+    field_index = std::distance(table_field_metas.begin(), it);
+    field_index -= table_meta_.sys_field_num();  // 需要考虑sys_field
+    field_id.push_back(field_index);
+  }
+
+  // 初始化index_meta
   IndexMeta new_index_meta;
   RC rc = new_index_meta.init(index_name, field_meta, is_unique);
   if (rc != RC::SUCCESS) {
@@ -507,7 +566,7 @@ RC Table::create_index(Trx *trx, const std::vector<FieldMeta> &field_meta, const
   // 创建索引相关数据
   BplusTreeIndex *index = new BplusTreeIndex();
   std::string index_file = table_index_file(base_dir_.c_str(), name(), index_name);
-  rc = index->create(index_file.c_str(), new_index_meta, field_meta);
+  rc = index->create(index_file.c_str(), new_index_meta, field_meta, field_id);
   if (rc != RC::SUCCESS) {
     delete index;
     LOG_ERROR("Failed to create bplus tree index. file name=%s, rc=%d:%s", index_file.c_str(), rc, strrc(rc));
@@ -589,7 +648,7 @@ RC Table::delete_record(const Record &record)
 
   // 把溢出页的内存回收
   const int sys_field_num = table_meta_.sys_field_num();
-  const int field_num = table_meta_.field_num();
+  const int field_num = table_meta_.field_num() - table_meta_.extra_field_num();
   const std::vector<FieldMeta> *fieldmetas = table_meta_.field_metas();
   for (int i = sys_field_num; i < field_num; i++) {
     auto &meta = (*fieldmetas)[i];
