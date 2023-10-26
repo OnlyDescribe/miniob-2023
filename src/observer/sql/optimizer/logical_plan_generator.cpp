@@ -22,6 +22,7 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/insert_logical_operator.h"
 #include "sql/operator/delete_logical_operator.h"
 #include "sql/operator/join_logical_operator.h"
+#include "sql/operator/orderby_logical_operator.h"
 #include "sql/operator/project_logical_operator.h"
 #include "sql/operator/explain_logical_operator.h"
 #include "sql/operator/aggregation_logical_operator.h"
@@ -154,7 +155,7 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
     return rc;
   }
 
-  // 自低向上，构建logic_tree
+  // 自低向上，构建logic_tree, 走完这里op是一个全表扫或者join
   unique_ptr<LogicalOperator> top_op;
   if (predicate_oper) {
     if (table_oper) {
@@ -163,6 +164,18 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
     top_op = std::move(predicate_oper);
   } else {
     top_op = std::move(table_oper);
+  }
+
+  // orderby
+  unique_ptr<LogicalOperator> orderby_oper;
+  rc = create_plan(select_stmt->orderbys(), orderby_oper);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to create orderby logical plan. rc=%s", strrc(rc));
+    return rc;
+  }
+  if (orderby_oper) {
+    orderby_oper->add_child(std::move(top_op));
+    top_op.swap(orderby_oper);
   }
 
   // 聚合 logic_op，直接使用构造
@@ -258,6 +271,17 @@ RC LogicalPlanGenerator::create_plan(DeleteStmt *delete_stmt, unique_ptr<Logical
 
   logical_operator = std::move(delete_oper);
   return rc;
+}
+
+RC LogicalPlanGenerator::create_plan(std::vector<OrderByUnit> *orderbys, std::unique_ptr<LogicalOperator> &logical_operator) {
+  std::vector<SortType> sort_types;
+  std::vector<std::unique_ptr<FieldExpr>> field_exprs;
+  for (int i = 0; i < orderbys->size(); i++) {
+    field_exprs.emplace_back(new FieldExpr((*orderbys)[i].field));
+    sort_types.emplace_back((*orderbys)[i].sort_type);
+  }
+  logical_operator = std::make_unique<OrderByLogicalOperator>(std::move(field_exprs), std::move(sort_types));
+  return RC::SUCCESS;
 }
 
 RC LogicalPlanGenerator::create_plan(UpdateStmt *update_stmt, unique_ptr<LogicalOperator> &logical_operator)

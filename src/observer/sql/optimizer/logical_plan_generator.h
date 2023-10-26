@@ -15,6 +15,7 @@ See the Mulan PSL v2 for more details. */
 #pragma once
 
 #include <memory>
+#include <vector>
 
 #include "common/rc.h"
 
@@ -27,6 +28,7 @@ class DeleteStmt;
 class UpdateStmt;
 class ExplainStmt;
 class LogicalOperator;
+struct OrderByUnit;
 
 class LogicalPlanGenerator
 {
@@ -44,4 +46,5 @@ private:
   RC create_plan(DeleteStmt *delete_stmt, std::unique_ptr<LogicalOperator> &logical_operator);
   RC create_plan(UpdateStmt *update_stmt, std::unique_ptr<LogicalOperator> &logical_operator);
   RC create_plan(ExplainStmt *explain_stmt, std::unique_ptr<LogicalOperator> &logical_operator);
+  RC create_plan(std::vector<OrderByUnit> *orderbys, std::unique_ptr<LogicalOperator> &logical_operator);
 };

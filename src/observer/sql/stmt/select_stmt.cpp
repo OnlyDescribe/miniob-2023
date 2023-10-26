@@ -25,6 +25,10 @@ SelectStmt::~SelectStmt()
     delete filter_stmt_;
     filter_stmt_ = nullptr;
   }
+
+  if (join_on_stmt_ != nullptr) {
+    delete join_on_stmt_;
+  }
 }
 
 static void wildcard_fields(Table *table, std::vector<Field> &field_metas)
@@ -34,6 +38,29 @@ static void wildcard_fields(Table *table, std::vector<Field> &field_metas)
   for (int i = table_meta.sys_field_num(); i < field_num; i++) {
     field_metas.push_back(Field(table, table_meta.field(i)));
   }
+}
+
+RC SelectStmt::createField(const std::vector<Table*> &tables, const char* table_name, const char* attr_name, Field& field) {
+  // 如果没有使用table.attr name的形式，默认使用tables[0]的表名，建立排序字段
+  std::string table_name_str(table_name);
+  if (table_name_str.empty()) {
+    if (tables.size() != 1) {
+      return RC::SCHEMA_TABLE_NOT_EXIST;
+    }
+    table_name_str = tables[0]->name();
+  }
+  for (auto table: tables) {
+    if (!strcmp(table->name(), table_name_str.c_str())) {
+      const FieldMeta *field_meta = table->table_meta().field(attr_name);
+      if (nullptr == field_meta) {
+        LOG_WARN("no such field. field=%s.%s", table->name(), attr_name);
+        return RC::SCHEMA_FIELD_MISSING;
+      }
+      field = Field(table, field_meta);
+      return RC::SUCCESS;
+    }
+  }
+  return RC::SCHEMA_FIELD_NOT_EXIST;
 }
 
 RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
@@ -213,12 +240,25 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
     return rc;
   }
 
+  // create orderby 
+  auto orderbys = std::make_unique<std::vector<OrderByUnit>>();
+  orderbys->reserve(select_sql.orderbys.size());
+  for (auto& order_by: select_sql.orderbys) {
+    Field field;
+    rc = createField(tables, order_by.attr.relation_name.c_str(), order_by.attr.attribute_name.c_str(), field);
+    if (rc != RC::SUCCESS) {
+      return rc;
+    }
+    orderbys->emplace_back(field, order_by.sort_type);
+  }
+
   // everything alright
   SelectStmt *select_stmt = new SelectStmt();
   select_stmt->tables_.swap(tables);
   select_stmt->query_fields_.swap(query_fields);
   select_stmt->join_on_stmt_ = join_on_stmt;
   select_stmt->filter_stmt_ = filter_stmt;
+  select_stmt->orderbys_ = std::move(orderbys);
   select_stmt->set_is_aggregation_stmt(aggr_field_cnt > 0);
 
   stmt = select_stmt;

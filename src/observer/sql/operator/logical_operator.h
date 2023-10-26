@@ -37,6 +37,7 @@ enum class LogicalOperatorType
   PREDICATE,    ///< 过滤，就是谓词
   PROJECTION,   ///< 投影，就是select
   AGGREGATION,  ///< 聚合
+  ORDER_BY,      ///< 聚合
   JOIN,         ///< 连接
   HASH_JOIN,    ///< hash join连表
   INSERT,       ///< 插入

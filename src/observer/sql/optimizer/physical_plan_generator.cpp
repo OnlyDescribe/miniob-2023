@@ -27,6 +27,8 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/predicate_physical_operator.h"
 #include "sql/operator/aggregation_logical_operator.h"
 #include "sql/operator/aggregation_physical_operator.h"
+#include "sql/operator/orderby_logical_operator.h"
+#include "sql/operator/orderby_physical_operator.h"
 #include "sql/operator/project_logical_operator.h"
 #include "sql/operator/project_physical_operator.h"
 #include "sql/operator/insert_logical_operator.h"
@@ -84,6 +86,10 @@ RC PhysicalPlanGenerator::create(LogicalOperator &logical_operator, unique_ptr<P
     case LogicalOperatorType::HASH_JOIN:
     case LogicalOperatorType::JOIN: {
       return create_plan(static_cast<JoinLogicalOperator &>(logical_operator), oper);
+    } break;
+
+    case LogicalOperatorType::ORDER_BY: {
+      return create_plan(static_cast<OrderByLogicalOperator &>(logical_operator), oper);
     } break;
 
     case LogicalOperatorType::AGGREGATION: {
@@ -200,6 +206,29 @@ RC PhysicalPlanGenerator::create_plan(TableGetLogicalOperator &table_get_oper, u
   }
 
   return RC::SUCCESS;
+}
+
+
+// ORDERBY 下面必须挂对应的算子
+RC PhysicalPlanGenerator::create_plan(OrderByLogicalOperator &orderby_oper, std::unique_ptr<PhysicalOperator> &oper) {
+  vector<unique_ptr<LogicalOperator>> &child_opers = orderby_oper.children();
+  assert(child_opers.size() == 1);
+
+  RC rc = RC::SUCCESS;
+  unique_ptr<PhysicalOperator> child_phy_oper;
+  if (!child_opers.empty()) {
+    LogicalOperator *child_oper = child_opers.front().get();
+    rc = create(*child_oper, child_phy_oper);
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("failed to create project logical operator's child physical operator. rc=%s", strrc(rc));
+      return rc;
+    }
+  }
+  auto ptr = new OrderbyPhysicalOperator(std::move(orderby_oper.field_expressions), std::move(orderby_oper.sortTypes));
+  std::unique_ptr<PhysicalOperator> orderby_phy_oper(ptr);
+  orderby_phy_oper->add_child(std::move(child_phy_oper));
+  oper.swap(orderby_phy_oper);
+  return rc;
 }
 
 // aggr op 下面必须挂一个全表扫描的算子
