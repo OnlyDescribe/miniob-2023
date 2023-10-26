@@ -83,37 +83,40 @@ ComparisonExpr::ComparisonExpr(CompOp comp, unique_ptr<Expression> left, unique_
 
 ComparisonExpr::~ComparisonExpr() {}
 
-bool ComparisonExpr::is_like(const std::string& s, const std::string& p) const {
-    int n = s.size(), m = p.size();
-    // 动态规划
-    vector<vector<bool>> f(n + 1, vector<bool>(m + 1));
-    f[0][0] = true;
-    for (int i = 1; i <= m; i++) {
-        if (p[i - 1] != '%') break;
-        f[0][i] = true;
-    }
-    for (int i = 1; i <= n; i++) {
-        for (int j = 1; j <= m; j++) {
-            if (p[j - 1] == '%') {
-                int k = j - 1;
-                while (k >= 0 && p[k] == '%') k--;
-                if (k < 0) {
-                    f[i][j] = true;
-                } else {
-                    for (int u = 0; u < i; u++) {
-                        if (s[u] == p[k] || p[k] == '_') {
-                            f[i][j] = f[i][j] | f[u][k];
-                        }
-                    }
-                }
-            } else if (p[j - 1] == '_') {
-                f[i][j] = f[i - 1][j - 1];
-            } else {
-                f[i][j] = (s[i - 1] == p[j - 1] && f[i - 1][j - 1]);
+bool ComparisonExpr::is_like(const std::string &s, const std::string &p) const
+{
+  int n = s.size(), m = p.size();
+  // 动态规划
+  vector<vector<bool>> f(n + 1, vector<bool>(m + 1));
+  f[0][0] = true;
+  for (int i = 1; i <= m; i++) {
+    if (p[i - 1] != '%')
+      break;
+    f[0][i] = true;
+  }
+  for (int i = 1; i <= n; i++) {
+    for (int j = 1; j <= m; j++) {
+      if (p[j - 1] == '%') {
+        int k = j - 1;
+        while (k >= 0 && p[k] == '%')
+          k--;
+        if (k < 0) {
+          f[i][j] = true;
+        } else {
+          for (int u = 0; u < i; u++) {
+            if (s[u] == p[k] || p[k] == '_') {
+              f[i][j] = f[i][j] | f[u][k];
             }
+          }
         }
+      } else if (p[j - 1] == '_') {
+        f[i][j] = f[i - 1][j - 1];
+      } else {
+        f[i][j] = (s[i - 1] == p[j - 1] && f[i - 1][j - 1]);
+      }
     }
-    return f[n][m];
+  }
+  return f[n][m];
 }
 
 RC ComparisonExpr::compare_value(const Value &left, const Value &right, bool &result) const
@@ -131,10 +134,25 @@ RC ComparisonExpr::compare_value(const Value &left, const Value &right, bool &re
   }
 
   // NULL
-  if ((left.attr_type() == AttrType::NULLS || right.attr_type() == AttrType::NULLS) && comp_ != IS_NULL &&
-      comp_ != IS_NOT_NULL) {
-    result = false;
+  if (comp_ == IS_NULL) {
+    if (left.attr_type() == AttrType::NULLS) {
+      result = true;
+    } else {
+      result = false;
+    }
     return rc;
+  } else if (comp_ == IS_NOT_NULL) {
+    if (left.attr_type() != AttrType::NULLS) {
+      result = true;
+    } else {
+      result = false;
+    }
+    return rc;
+  } else {
+    if (left.attr_type() == AttrType::NULLS || right.attr_type() == AttrType::NULLS) {
+      result = false;
+      return rc;
+    }
   }
 
   // Compare
@@ -158,20 +176,6 @@ RC ComparisonExpr::compare_value(const Value &left, const Value &right, bool &re
     } break;
     case GREAT_THAN: {
       result = (cmp_result > 0);
-    } break;
-    case IS_NULL: {
-      if (left.attr_type() == AttrType::NULLS) {
-        result = true;
-      } else {
-        result = false;
-      }
-    } break;
-    case IS_NOT_NULL: {
-      if (left.attr_type() != AttrType::NULLS) {
-        result = true;
-      } else {
-        result = false;
-      }
     } break;
     default: {
       LOG_WARN("unsupported comparison. %d", comp_);
@@ -400,15 +404,10 @@ RC AggretationExpr::get_value(const Tuple &tuple, Value &value) const
     case AggrFuncType::MIN:
     case AggrFuncType::MAX:
     case AggrFuncType::SUM:
-    case AggrFuncType::AVG: 
-      rc = tuple.find_cell(TupleCellSpec(field_.table_name(), field_.field_name()), value);
-      break;
-    case AggrFuncType::COUNT: 
-    case AggrFuncType::COUNT_STAR: 
-      value.set_int(1); 
-      break;
-    default: 
-      break;
+    case AggrFuncType::AVG: rc = tuple.find_cell(TupleCellSpec(field_.table_name(), field_.field_name()), value); break;
+    case AggrFuncType::COUNT:
+    case AggrFuncType::COUNT_STAR: value.set_int(1); break;
+    default: break;
   }
   return rc;
 }

@@ -537,7 +537,7 @@ RC Table::create_index(Trx *trx, std::vector<FieldMeta> &field_meta, const char 
 
   // 计算每个field对应在表中是第几个字段(id)
   std::vector<int> field_id;
-  field_id.reserve(field_meta.size() + 1);
+  field_id.reserve(field_meta.size());
   for (const FieldMeta &meta : field_meta) {
     int field_index;
     const std::vector<FieldMeta> &table_field_metas = *table_meta_.field_metas();

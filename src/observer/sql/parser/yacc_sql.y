@@ -390,39 +390,6 @@ attr_def_list:
       $$->emplace_back(*$2);
       delete $2;
     }
-    | COMMA attr_def DEFAULT NULL_T attr_def_list
-    {
-      if ($5 != nullptr) {
-        $$ = $5;
-      } else {
-        $$ = new std::vector<AttrInfoSqlNode>;
-      }
-      $2->is_not_null = false;
-      $$->emplace_back(*$2);
-      delete $2;
-    }
-    | COMMA attr_def NULL_T attr_def_list
-    {
-      if ($4 != nullptr) {
-        $$ = $4;
-      } else {
-        $$ = new std::vector<AttrInfoSqlNode>;
-      }
-      $2->is_not_null = false;
-      $$->emplace_back(*$2);
-      delete $2;
-    }
-    | COMMA attr_def NOT NULL_T attr_def_list
-    {
-      if ($5 != nullptr) {
-        $$ = $5;
-      } else {
-        $$ = new std::vector<AttrInfoSqlNode>;
-      }
-      $2->is_not_null = true;
-      $$->emplace_back(*$2);
-      delete $2;
-    }
     ;
     
 attr_def:
@@ -432,6 +399,25 @@ attr_def:
       $$->type = (AttrType)$2;
       $$->name = $1;
       $$->length = $4;
+      $$->is_not_null = false;
+      free($1);
+    }
+    | ID type LBRACE number RBRACE NULL_T
+    {
+      $$ = new AttrInfoSqlNode;
+      $$->type = (AttrType)$2;
+      $$->name = $1;
+      $$->length = $4;
+      $$->is_not_null = false;
+      free($1);
+    }
+    | ID type LBRACE number RBRACE NOT NULL_T
+    {
+      $$ = new AttrInfoSqlNode;
+      $$->type = (AttrType)$2;
+      $$->name = $1;
+      $$->length = $4;
+      $$->is_not_null = true;
       free($1);
     }
     | ID type
@@ -439,6 +425,37 @@ attr_def:
       $$ = new AttrInfoSqlNode;
       $$->type = (AttrType)$2;
       $$->name = $1;
+      $$->is_not_null = false;
+      if($$->type == AttrType::TEXTS)
+      {
+        $$->length = 68; // 字段长度为68， 在record中存储为16+1个指向文本数据的溢出页
+      }
+      else{
+        $$->length = 4;
+      }
+      free($1);
+    }
+    | ID type NULL_T
+    {
+      $$ = new AttrInfoSqlNode;
+      $$->type = (AttrType)$2;
+      $$->name = $1;
+      $$->is_not_null = false;
+      if($$->type == AttrType::TEXTS)
+      {
+        $$->length = 68; // 字段长度为68， 在record中存储为16+1个指向文本数据的溢出页
+      }
+      else{
+        $$->length = 4;
+      }
+      free($1);
+    }
+    | ID type NOT NULL_T
+    {
+      $$ = new AttrInfoSqlNode;
+      $$->type = (AttrType)$2;
+      $$->name = $1;
+      $$->is_not_null = true;
       if($$->type == AttrType::TEXTS)
       {
         $$->length = 68; // 字段长度为68， 在record中存储为16+1个指向文本数据的溢出页
@@ -878,6 +895,28 @@ condition:
       $$->right_is_attr = 0;
       $$->right_value = Value(AttrType::NULLS);
       $$->comp = CompOp::IS_NOT_NULL;
+
+      delete $1;
+    }
+    | rel_attr IS NOT NULL_T
+    {
+      $$ = new ConditionSqlNode;
+      $$->left_is_attr = 1;
+      $$->left_attr = *$1;
+      $$->right_is_attr = 0;
+      $$->right_value = Value(AttrType::NULLS);
+      $$->comp = CompOp::IS_NOT_NULL;
+
+      delete $1;
+    }
+    | rel_attr IS NULL_T
+    {
+      $$ = new ConditionSqlNode;
+      $$->left_is_attr = 1;
+      $$->left_attr = *$1;
+      $$->right_is_attr = 0;
+      $$->right_value = Value(AttrType::NULLS);
+      $$->comp = CompOp::IS_NULL;
 
       delete $1;
     }
