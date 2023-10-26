@@ -45,7 +45,7 @@ RC UpdateStmt::create(Db *db, UpdateSqlNode &update, Stmt *&stmt)
 
   const TableMeta &table_meta = table->table_meta();
   const int sys_field_num = table_meta.sys_field_num();
-  const int field_num = table_meta.field_num();
+  const int field_num = table_meta.field_num() - table_meta.extra_field_num();
 
   // 检查表中是否存在相应字段, 设置field_metas和values
   for (int i = 0; i < value_amount; ++i) {

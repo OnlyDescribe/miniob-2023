@@ -73,10 +73,10 @@ RC ExecuteStage::handle_request_with_physical_operator(SQLStageEvent *sql_event)
       bool with_table_name = select_stmt->tables().size() > 1;
 
       for (const Field &field : select_stmt->query_fields()) {
-        // 注意最后一个字段是 null
-        if (field.meta() != NULL and strcmp(field.field_name(), "__null") == 0) {
-          continue;
-        }
+        // // 其实不用判断null, 为了语义清晰, 不应该把null字段放在query_fields_中
+        // if (field.meta() != NULL and strcmp(field.field_name(), "__null") == 0) {
+        //   continue;
+        // }
 
         if (select_stmt->is_aggregation_stmt()) {
           schema.append_cell(AggretationExpr::to_string(field, field.get_aggr_type()).c_str());

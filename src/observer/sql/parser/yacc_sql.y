@@ -386,7 +386,6 @@ attr_def_list:
       } else {
         $$ = new std::vector<AttrInfoSqlNode>;
       }
-      $2->is_not_null = false;
       $$->emplace_back(*$2);
       delete $2;
     }

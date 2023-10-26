@@ -198,7 +198,8 @@ RC LogicalPlanGenerator::create_plan(DeleteStmt *delete_stmt, unique_ptr<Logical
   Table *table = delete_stmt->table();
   FilterStmt *filter_stmt = delete_stmt->filter_stmt();
   std::vector<Field> fields;
-  for (int i = table->table_meta().sys_field_num(); i < table->table_meta().field_num(); i++) {
+  int field_num = table->table_meta().field_num() - table->table_meta().extra_field_num();
+  for (int i = table->table_meta().sys_field_num(); i < field_num; i++) {
     const FieldMeta *field_meta = table->table_meta().field(i);
     fields.push_back(Field(table, field_meta));
   }
@@ -230,7 +231,8 @@ RC LogicalPlanGenerator::create_plan(UpdateStmt *update_stmt, unique_ptr<Logical
   FilterStmt *filter_stmt = update_stmt->filter_stmt();
 
   std::vector<Field> fields;
-  for (int i = table->table_meta().sys_field_num(); i < table->table_meta().field_num(); i++) {
+  int field_num = table->table_meta().field_num() - table->table_meta().extra_field_num();
+  for (int i = table->table_meta().sys_field_num(); i < field_num; i++) {
     const FieldMeta *field_meta = table->table_meta().field(i);
     fields.push_back(Field(table, field_meta));
   }

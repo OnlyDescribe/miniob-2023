@@ -30,7 +30,7 @@ SelectStmt::~SelectStmt()
 static void wildcard_fields(Table *table, std::vector<Field> &field_metas)
 {
   const TableMeta &table_meta = table->table_meta();
-  const int field_num = table_meta.field_num();
+  const int field_num = table_meta.field_num() - table_meta.extra_field_num();
   for (int i = table_meta.sys_field_num(); i < field_num; i++) {
     field_metas.push_back(Field(table, table_meta.field(i)));
   }
@@ -71,7 +71,7 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
   for (int i = static_cast<int>(select_sql.attributes.size()) - 1; i >= 0; i--) {
     const RelAttrSqlNode &relation_attr = select_sql.attributes[i];
     auto aggr_type = relation_attr.aggr_type;
-    
+
     // 检验聚合的合法性
     if (aggr_type != AggrFuncType::INVALID) {
       aggr_field_cnt++;
@@ -98,9 +98,9 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
     // 不带聚合select的逻辑
     if (common::is_blank(relation_attr.relation_name.c_str()) &&
         0 == strcmp(relation_attr.attribute_name.c_str(), "*")) {
-        for (Table *table : tables) {
-          wildcard_fields(table, query_fields);
-        }
+      for (Table *table : tables) {
+        wildcard_fields(table, query_fields);
+      }
     } else if (!common::is_blank(relation_attr.relation_name.c_str())) {
       const char *table_name = relation_attr.relation_name.c_str();
       const char *field_name = relation_attr.attribute_name.c_str();
@@ -146,7 +146,6 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
       }
       query_fields.push_back(Field(table, field_meta));
     }
-
   }
 
   LOG_INFO("got %d tables in from stmt and %d fields in query stmt", tables.size(), query_fields.size());
