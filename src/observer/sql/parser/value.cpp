@@ -100,6 +100,7 @@ void Value::set_data(char *data, int length)
 void Value::set_null()
 {
   attr_type_ = NULLS;
+  num_value_.int_value_ = 0;
   length_ = 0;
 }
 

@@ -82,6 +82,26 @@ public:
         default: break;
       }
     }
+    // TODO: from oldcb 需要修改, 我瞎改的
+    if (a.attr_type() == AttrType::NULLS) {
+      switch (b.attr_type()) {
+        case AttrType::INTS: return Value(b.get_int());
+        case AttrType::FLOATS: return Value(b.get_float());
+        case AttrType::BOOLEANS: return Value(b.get_int());
+        case AttrType::NULLS: return Value(0);
+        default: break;
+      }
+    }
+    // TODO: from oldcb 需要修改, 我瞎改的
+    if (b.attr_type() == AttrType::NULLS) {
+      switch (a.attr_type()) {
+        case AttrType::INTS: return Value(a.get_int());
+        case AttrType::FLOATS: return Value(a.get_float());
+        case AttrType::BOOLEANS: return Value(a.get_int());
+        case AttrType::NULLS: return Value(0);
+        default: break;
+      }
+    }
     throw std::runtime_error("Unsupported types for operation.");
   }
 
