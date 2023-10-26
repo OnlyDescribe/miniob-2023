@@ -13,18 +13,22 @@ See the Mulan PSL v2 for more details. */
 //
 
 #include "sql/operator/index_scan_physical_operator.h"
+#include "common/lang/bitmap.h"
+#include "sql/parser/value.h"
 #include "storage/index/index.h"
+#include "storage/record/record.h"
 #include "storage/trx/trx.h"
 #include <numeric>
 
 IndexScanPhysicalOperator::IndexScanPhysicalOperator(Table *table, Index *index, bool readonly,
     const std::vector<Value> &left_values, bool left_inclusive, const std::vector<Value> &right_values,
-    bool right_inclusive)
+    bool right_inclusive, const std::vector<FieldMeta> &value_metas)
     : table_(table),
       index_(index),
       readonly_(readonly),
       left_values_(left_values),
       right_values_(right_values),
+      value_metas_(value_metas),
       left_inclusive_(left_inclusive),
       right_inclusive_(right_inclusive)
 {}
@@ -35,17 +39,36 @@ RC IndexScanPhysicalOperator::open(Trx *trx)
     return RC::INTERNAL;
   }
 
-  auto make_key = [](const std::vector<Value> &values) -> char * {
+  auto make_key = [this](const std::vector<Value> &values) -> char * {
+    // 注意: 要附加上相应的bitmap
+
+    // 计算values的长度
     int total_length =
         std::accumulate(values.begin(), values.end(), 0, [](int sum, const Value &val) { return sum + val.length(); });
+
+    // 附加上bitmap的长度
+    const FieldMeta *null_field = this->table_->table_meta().null_field();
+    total_length += null_field->len();
+
     char *key = new char[total_length];
     int offset{0};
     for (const Value &val : values) {
       memcpy(key + offset, val.data(), val.length());
       offset += val.length();
     }
+    memset(key + offset, 0, null_field->len());
+    common::Bitmap bitmap(key + offset, null_field->len());
+
+    // 遍历 value 值, 设置对应 null 的 bitmap 为 1
+    for (int i = 0; i < values.size(); ++i) {
+      if (values[i].attr_type() == AttrType::NULLS) {
+        bitmap.set_bit(value_metas_[i].id());
+      }
+    }
+
     return key;
   };
+
   char *left_key = make_key(left_values_);
   char *right_key = make_key(right_values_);
 

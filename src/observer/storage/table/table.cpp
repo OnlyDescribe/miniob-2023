@@ -365,6 +365,7 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
   // 复制所有字段的值
   int record_size = table_meta_.record_size();
   char *record_data = (char *)malloc(record_size);
+  memset(record_data, 0, record_size);  // 清零, 这样也保证了bitmap初始全为0
 
   const FieldMeta *null_field = table_meta_.null_field();
   common::Bitmap bitmap(record_data + null_field->offset(), null_field->len());
@@ -376,7 +377,7 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
 
     // 1. 对 NULL 值进行检查
     if (value.attr_type() == AttrType::NULLS) {
-      // 1.1 值非NULL, 设置bitmap, 并赋值0
+      // 1.1 值为NULL, 设置bitmap, 并赋值0
       if (field->is_not_null()) {
         LOG_ERROR("Cannot be null. table name =%s, field name=%s, type=%d",
           table_meta_.name(),
@@ -391,15 +392,16 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
       // 1.2 值非NULL, 设置bitmap, 继续赋值
       bitmap.clear_bit(normal_field_start_index + i);
 
+      // 1.2.1 处理字符串
       if (field->type() == CHARS) {
         const size_t data_len = value.length();
         if (copy_len > data_len) {
           copy_len = data_len + 1;
         }
+        memcpy(record_data + field->offset(), value.data(), copy_len);
       }
-
-      // 1.2.1 处理 text 字段, 设计当前文件下的溢出页
-      if (field->type() == AttrType::TEXTS) {
+      // 1.2.2 处理 text 字段, 设计当前文件下的溢出页
+      else if (field->type() == AttrType::TEXTS) {
         size_t data_len = value.length();
         Frame *frame = nullptr;
 
@@ -473,7 +475,7 @@ RC Table::make_record(int value_num, const Value *values, Record &record)
         memcpy(record_data + field->offset() + record_offset, &page_num, sizeof(PageNum));
 
       }
-      // 1.2.2 非TEXT的非NULL值, 直接复制Value的data
+      // 1.2.3 非TEXT的非NULL值, 直接复制Value的data
       else {
         memcpy(record_data + field->offset(), value.data(), copy_len);
       }
@@ -533,6 +535,7 @@ RC Table::create_index(Trx *trx, std::vector<FieldMeta> &field_meta, const char 
   // 注意: 是 [index fields] [bitmap] 的结构
   field_meta.push_back(*table_meta_.null_field());
 
+  // TODO(oldcb): 目前可以被field的 id 值替代
   // 计算每个field对应在表中是第几个字段(id)
   std::vector<int> field_id;
   field_id.reserve(field_meta.size());

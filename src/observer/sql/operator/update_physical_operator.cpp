@@ -8,7 +8,9 @@
 UpdatePhysicalOperator::UpdatePhysicalOperator(
     Table *table, const std::vector<const Value *> &values, const std::vector<const FieldMeta *> &field_metas)
     : table_(table), values_(values), field_metas_(field_metas)
-{  // 找到需要修改的字段是第几个
+{
+  // TODO(oldcb): 目前可以被field的 id 值替代
+  // 找到需要修改的字段是第几个
   index_field_metas_.reserve(field_metas_.size());
   for (const auto &field_meta : field_metas_) {
     int field_index;

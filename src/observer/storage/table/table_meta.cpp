@@ -69,6 +69,7 @@ RC TableMeta::init(int32_t table_id, const char *name, int field_num, const Attr
           field_meta.type(),
           field_offset,
           field_meta.len(),
+          i, /*id值*/
           false /*visible*/,
           field_meta.is_not_null());
       field_offset += field_meta.len();
@@ -85,6 +86,7 @@ RC TableMeta::init(int32_t table_id, const char *name, int field_num, const Attr
         attr_info.type,
         field_offset,
         attr_info.length,
+        i, /*id值*/
         true /*visible*/,
         attr_info.is_not_null);
     if (rc != RC::SUCCESS) {
@@ -99,7 +101,7 @@ RC TableMeta::init(int32_t table_id, const char *name, int field_num, const Attr
   // 这里直接每个bit对应相应的字段是否为null值, 与mysql的实现不同
   int null_field_len = (field_num + trx_field_num - 1) / 8 + 1;  // bitmap字节数
   rc = fields_[trx_field_num + field_num].init(
-      "__null", AttrType::CHARS, field_offset, null_field_len, false, false);  // bitmap可变长, CHARS类型
+      "__null", AttrType::CHARS, field_offset, null_field_len, field_num, false, false);  // bitmap可变长, CHARS类型
   if (RC::SUCCESS != rc) {
     LOG_ERROR("Failed to init field meta. table name=%s, field name: %s", name, "__null");
     return rc;
