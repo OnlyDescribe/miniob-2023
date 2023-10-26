@@ -235,8 +235,7 @@ RC PlainCommunicator::write_result_internal(SessionEvent *event, bool &need_disc
   while (RC::SUCCESS == (rc = sql_result->next_tuple(tuple))) {
     assert(tuple != nullptr);
 
-    int cell_num = tuple->cell_num();
-    cell_num -= 1;  // 不显示 null字段
+    // int cell_num = tuple->cell_num(); // 使用 schema.cell_num()
     for (int i = 0; i < cell_num; i++) {
       if (i != 0) {
         const char *delim = " | ";

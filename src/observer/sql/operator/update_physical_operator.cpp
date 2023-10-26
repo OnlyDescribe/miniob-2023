@@ -91,7 +91,7 @@ RC UpdatePhysicalOperator::next()
     Value cell;
 
     std::vector<Value> values;
-    int value_num = row_tuple->cell_num() - sys_field_num;  // row_tuple中应该包含系统字段
+    int value_num = row_tuple->cell_num() - sys_field_num - 1;  // row_tuple中应该包含系统字段和null字段
     values.reserve(value_num);
 
     for (int i = 0, j = 0; i < value_num; ++i) {

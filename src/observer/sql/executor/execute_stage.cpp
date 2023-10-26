@@ -12,6 +12,7 @@ See the Mulan PSL v2 for more details. */
 // Created by Longda on 2021/4/13.
 //
 
+#include <cstddef>
 #include <string>
 #include <sstream>
 
@@ -22,6 +23,7 @@ See the Mulan PSL v2 for more details. */
 #include "event/storage_event.h"
 #include "event/sql_event.h"
 #include "event/session_event.h"
+#include "sql/parser/value.h"
 #include "sql/stmt/stmt.h"
 #include "sql/stmt/select_stmt.h"
 #include "storage/default/default_handler.h"
@@ -70,12 +72,12 @@ RC ExecuteStage::handle_request_with_physical_operator(SQLStageEvent *sql_event)
       SelectStmt *select_stmt = static_cast<SelectStmt *>(stmt);
       bool with_table_name = select_stmt->tables().size() > 1;
 
-      const std::vector<Field> &query_fields = select_stmt->query_fields();  // 注意最后一个字段是 null
-      // for (const Field &field : select_stmt->query_fields()) {
-      ASSERT(query_fields.size() > 1, "There may be no column corresponding to the null field");
-      for (auto iter = query_fields.begin(); iter != std::prev(query_fields.end()); ++iter) {
-        const Field &field = *iter;
-        // char *field_name = nullptr;
+      for (const Field &field : select_stmt->query_fields()) {
+        // 注意最后一个字段是 null
+        if (field.meta() != NULL and strcmp(field.field_name(), "__null") == 0) {
+          continue;
+        }
+
         if (select_stmt->is_aggregation_stmt()) {
           schema.append_cell(AggretationExpr::to_string(field, field.get_aggr_type()).c_str());
         } else {
