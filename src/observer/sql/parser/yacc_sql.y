@@ -401,6 +401,17 @@ attr_def_list:
       $$->emplace_back(*$2);
       delete $2;
     }
+    | COMMA attr_def NULL_T attr_def_list
+    {
+      if ($4 != nullptr) {
+        $$ = $4;
+      } else {
+        $$ = new std::vector<AttrInfoSqlNode>;
+      }
+      $2->is_not_null = false;
+      $$->emplace_back(*$2);
+      delete $2;
+    }
     | COMMA attr_def NOT NULL_T attr_def_list
     {
       if ($5 != nullptr) {
