@@ -98,7 +98,8 @@ RC TableMeta::init(int32_t table_id, const char *name, int field_num, const Attr
   // 增加 NULL 字段, 为了尽可能减少代码的改动, 将该字段放在record的最后部分
   // 这里直接每个bit对应相应的字段是否为null值, 与mysql的实现不同
   int null_field_len = (field_num + trx_field_num - 1) / 8 + 1;  // bitmap字节数
-  rc = fields_[trx_field_num + field_num].init("__null", AttrType::CHARS, field_offset, null_field_len, false, false); // bitmap可变长, CHARS类型
+  rc = fields_[trx_field_num + field_num].init(
+      "__null", AttrType::CHARS, field_offset, null_field_len, false, false);  // bitmap可变长, CHARS类型
   if (RC::SUCCESS != rc) {
     LOG_ERROR("Failed to init field meta. table name=%s, field name: %s", name, "__null");
     return rc;
@@ -180,9 +181,9 @@ const IndexMeta *TableMeta::index(const char *name) const
 const IndexMeta *TableMeta::find_index_by_field(const std::vector<std::string> &fields) const
 {
   for (const IndexMeta &index : indexes_) {
-    const std::vector<std::string> &index_fields = index.field();
+    const std::vector<std::string> &index_fields = index.field();  // 最后一个field对应null的bitmap
     int field_num = fields.size();
-    int index_field_num = index_fields.size();
+    int index_field_num = index_fields.size() - 1;
 
     // 完全匹配
     if (field_num != index_field_num) {
