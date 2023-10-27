@@ -40,7 +40,6 @@ enum class LogicalOperatorType
   AGGREGATION,  ///< 聚合
   ORDER_BY,      ///< 聚合
   JOIN,         ///< 连接
-  HASH_JOIN,    ///< hash join连表
   INSERT,       ///< 插入
   DELETE,       ///< 删除，删除可能会有子查询
   UPDATE,       ///< 更新

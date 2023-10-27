@@ -67,6 +67,7 @@ private:
 /**
  * @description: hash join
  */
+// TODO: 更新初始化函数, 这里只涉及跨表比较函数，剩下的已经下推
 class HashJoinPhysicalOperator : public PhysicalOperator
 {
 public:

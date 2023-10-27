@@ -83,7 +83,6 @@ RC PhysicalPlanGenerator::create(LogicalOperator &logical_operator, unique_ptr<P
       return create_plan(static_cast<ExplainLogicalOperator &>(logical_operator), oper);
     } break;
 
-    case LogicalOperatorType::HASH_JOIN:
     case LogicalOperatorType::JOIN: {
       return create_plan(static_cast<JoinLogicalOperator &>(logical_operator), oper);
     } break;
@@ -400,11 +399,13 @@ RC PhysicalPlanGenerator::create_plan(JoinLogicalOperator &join_oper, unique_ptr
   }
 
   unique_ptr<PhysicalOperator> join_physical_oper;
-  if (join_oper.type() == LogicalOperatorType::HASH_JOIN) {
+
+  // 如果有跨表，且等值表达式的话。那么使用hash, join
+  if (join_oper.has_equal_cmp_expression()) {
     join_physical_oper = std::make_unique<HashJoinPhysicalOperator>();
     auto ptr = static_cast<HashJoinPhysicalOperator*>(join_physical_oper.get());
-    ptr->set_left_expressions(std::move(join_oper.left_exprs));
-    ptr->set_right_expressions(std::move(join_oper.right_exprs));
+    // ptr->set_left_expressions(std::move(join_oper.left_exprs));
+    // ptr->set_right_expressions(std::move(join_oper.right_exprs));
     // ptr->set_expressions(std::move(join_oper.expressions()));
   } else {
     join_physical_oper = std::make_unique<NestedLoopJoinPhysicalOperator>();
