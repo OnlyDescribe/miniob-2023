@@ -68,6 +68,7 @@ public:
 
   RC insert_record(Table *table, Record &record) override;
   RC delete_record(Table *table, Record &record) override;
+  // new_record此时还未在bpm或磁盘中
   RC update_record(Table *table, Record &old_record, Record &new_record) override;
 
   /**
@@ -92,7 +93,7 @@ public:
 
 private:
   RC commit_with_trx_id(int32_t commit_id);
-  void trx_fields(Table *table, Field &begin_xid_field, Field &end_xid_field) const;
+  void trx_fields(Table *table, Field &begin_xid_field, Field &end_xid_field, Field &pointer_xid_field) const;
 
 private:
   static const int32_t MAX_TRX_ID = std::numeric_limits<int32_t>::max();

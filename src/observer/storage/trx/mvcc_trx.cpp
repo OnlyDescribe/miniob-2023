@@ -12,7 +12,11 @@ See the Mulan PSL v2 for more details. */
 // Created by Wangyunlai on 2023/04/24.
 //
 
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
 #include <limits>
+#include "storage/record/record.h"
 #include "storage/trx/mvcc_trx.h"
 #include "storage/field/field.h"
 #include "storage/clog/clog.h"
@@ -143,10 +147,15 @@ RC MvccTrx::insert_record(Table *table, Record &record)
 {
   Field begin_field;
   Field end_field;
-  trx_fields(table, begin_field, end_field);
+  Field pointer_field;
+  trx_fields(table, begin_field, end_field, pointer_field);
 
   begin_field.set_int(record, -trx_id_);
   end_field.set_int(record, trx_kit_.max_trx_id());
+  // 用 null_rid 来表示最新的record
+  RID null_rid{0, 0};
+  char *new_record_pointer = record.data() + pointer_field.meta()->offset();
+  memcpy(new_record_pointer, &null_rid, sizeof(RID));
 
   RC rc = table->insert_record(record);
   if (rc != RC::SUCCESS) {
@@ -176,7 +185,8 @@ RC MvccTrx::delete_record(Table *table, Record &record)
 {
   Field begin_field;
   Field end_field;
-  trx_fields(table, begin_field, end_field);
+  Field pointer_field;
+  trx_fields(table, begin_field, end_field, pointer_field);
 
   [[maybe_unused]] int32_t end_xid = end_field.get_int(record);
   /// 在删除之前，第一次获取record时，就已经对record做了对应的检查，并且保证不会有其它的事务来访问这条数据
@@ -208,38 +218,21 @@ RC MvccTrx::delete_record(Table *table, Record &record)
 RC MvccTrx::update_record(Table *table, Record &old_record, Record &new_record)
 {
   // 采用append-only方式, 将多版本的tuple存储在一张表中。
-  // 表里在事务 sys_field 增加 rid 字段, Oldest to newest, 指向更新的record
+  // 表里在事务 sys_field 增加 rid 字段, oldest to newest, 指向更新的record
   Field begin_field;
   Field end_field;
-  trx_fields(table, begin_field, end_field);
+  Field pointer_field;
+  trx_fields(table, begin_field, end_field, pointer_field);
 
-  delete_record(table, old_record);
+  this->delete_record(table, old_record);
 
-  // Record insert_record(new_record);
+  // 设置new_record的pointer_field
+  this->insert_record(table, new_record);
 
-  // [[maybe_unused]] int32_t end_xid = end_field.get_int(record);
-  // /// 在删除之前，第一次获取record时，就已经对record做了对应的检查，并且保证不会有其它的事务来访问这条数据
-  // ASSERT(end_xid > 0,
-  //     "concurrency conflit: other transaction is updating this record. end_xid=%d, current trx id=%d, rid=%s",
-  //     end_xid,
-  //     trx_id_,
-  //     record.rid().to_string().c_str());
-  // if (end_xid != trx_kit_.max_trx_id()) {
-  //   // 当前不是多版本数据中的最新记录，不需要删除
-  //   return RC::SUCCESS;
-  // }
-
-  // end_field.set_int(record, -trx_id_);
-  // RC rc = log_manager_->append_log(CLogType::DELETE, trx_id_, table->table_id(), record.rid(), 0, 0, nullptr);
-  // ASSERT(rc == RC::SUCCESS,
-  //     "failed to append delete record log. trx id=%d, table id=%d, rid=%s, record len=%d, rc=%s",
-  //     trx_id_,
-  //     table->table_id(),
-  //     record.rid().to_string().c_str(),
-  //     record.len(),
-  //     strrc(rc));
-
-  // operations_.insert(Operation(Operation::Type::DELETE, table, record.rid()));
+  // 设置老record指向新的record
+  RID new_rid = new_record.rid();
+  char *old_record_pointer = old_record.data() + pointer_field.meta()->offset();
+  memcpy(old_record_pointer, &new_rid, sizeof(RID));
 
   return RC::SUCCESS;
 }
@@ -248,33 +241,94 @@ RC MvccTrx::visit_record(Table *table, Record &record, bool readonly)
 {
   Field begin_field;
   Field end_field;
-  trx_fields(table, begin_field, end_field);
+  Field pointer_field;
+  trx_fields(table, begin_field, end_field, pointer_field);
 
-  int32_t begin_xid = begin_field.get_int(record);
-  int32_t end_xid = end_field.get_int(record);
+  // 因为采用的oldest to newest, 需要反转record链
+  // 我们这里保存了record链的begin_xid和end_xid
+  std::vector<int32_t> begin_xids;
+  std::vector<int32_t> end_xids;
 
-  RC rc = RC::SUCCESS;
-  if (begin_xid > 0 && end_xid > 0) {
-    if (trx_id_ >= begin_xid && trx_id_ <= end_xid) {
-      rc = RC::SUCCESS;
-    } else {
-      rc = RC::RECORD_INVISIBLE;
+  RID rid;
+  memcpy(&rid, record.data() + pointer_field.meta()->offset(), sizeof(RID));
+  begin_xids.push_back(begin_field.get_int(record));
+  end_xids.push_back(end_field.get_int(record));
+
+  while (rid != RID{0, 0}) {
+
+    Record newer_record;
+
+    DiskBufferPool *data_buffer_pool = const_cast<DiskBufferPool *>(table->data_buffer_pool());
+
+    RecordPageHandler page_handler;
+
+    RC rc = page_handler.init(*data_buffer_pool, rid.page_num, readonly);
+    if (OB_FAIL(rc)) {
+      LOG_ERROR("Failed to init record page handler.page number=%d", rid.page_num);
+      return rc;
     }
-  } else if (begin_xid < 0) {
-    // begin xid 小于0说明是刚插入而且没有提交的数据
-    rc = (-begin_xid == trx_id_) ? RC::SUCCESS : RC::RECORD_INVISIBLE;
-  } else if (end_xid < 0) {
-    // end xid 小于0 说明是正在删除但是还没有提交的数据
-    if (readonly) {
-      // 如果 -end_xid 就是当前事务的事务号，说明是当前事务删除的
-      rc = (-end_xid != trx_id_) ? RC::SUCCESS : RC::RECORD_INVISIBLE;
-    } else {
-      // 如果当前想要修改此条数据，并且不是当前事务删除的，简单的报错
-      // 这是事务并发处理的一种方式，非常简单粗暴。其它的并发处理方法，可以等待，或者让客户端重试
-      // 或者等事务结束后，再检测修改的数据是否有冲突
-      rc = (-end_xid != trx_id_) ? RC::LOCKED_CONCURRENCY_CONFLICT : RC::RECORD_INVISIBLE;
+
+    rc = page_handler.get_record(&rid, &newer_record);
+    if (OB_FAIL(rc)) {
+      LOG_WARN("failed to get record from record page handle. rid=%s, rc=%s", rid.to_string().c_str(), strrc(rc));
+      return rc;
+    }
+
+    begin_xids.push_back(begin_field.get_int(newer_record));
+    end_xids.push_back(end_field.get_int(newer_record));
+  }
+
+  assert(begin_xids.size() == end_xids.size());
+  int size = begin_xids.size();
+  RC rc = RC::SUCCESS;
+
+  for (int i = size - 1; i >= 0; ++i) {
+    int32_t begin_xid = begin_xids[i];
+    int32_t end_xid = end_xids[i];
+
+    if (begin_xid > 0 && end_xid > 0) {
+      if (trx_id_ >= begin_xid && trx_id_ <= end_xid) {
+        rc = RC::SUCCESS;
+        return rc;
+      } else {
+        rc = RC::RECORD_INVISIBLE;
+        continue;
+      }
+    } else if (begin_xid < 0) {
+      // begin xid 小于0说明是刚插入而且没有提交的数据
+      if (-begin_xid == trx_id_) {
+        rc = RC::SUCCESS;
+        return rc;
+      } else {
+        rc = RC::RECORD_INVISIBLE;
+        continue;
+      }
+    } else if (end_xid < 0) {
+      // end xid 小于0 说明是正在删除但是还没有提交的数据
+      if (readonly) {
+        // 如果 -end_xid 就是当前事务的事务号，说明是当前事务删除的
+        if (-end_xid != trx_id_) {
+          rc = RC::SUCCESS;
+          return rc;
+        } else {
+          rc = RC::RECORD_INVISIBLE;
+          continue;
+        }
+      } else {
+        // 如果当前想要修改此条数据，并且不是当前事务删除的，简单的报错
+        // 这是事务并发处理的一种方式，非常简单粗暴。其它的并发处理方法，可以等待，或者让客户端重试
+        // 或者等事务结束后，再检测修改的数据是否有冲突
+        if (-end_xid != trx_id_) {
+          rc = RC::LOCKED_CONCURRENCY_CONFLICT;
+          return rc;
+        } else {
+          rc = RC::RECORD_INVISIBLE;
+          continue;
+        }
+      }
     }
   }
+
   return rc;
 }
 
@@ -285,7 +339,7 @@ RC MvccTrx::visit_record(Table *table, Record &record, bool readonly)
  * @param begin_xid_field 返回处理begin_xid的字段
  * @param end_xid_field   返回处理end_xid的字段
  */
-void MvccTrx::trx_fields(Table *table, Field &begin_xid_field, Field &end_xid_field) const
+void MvccTrx::trx_fields(Table *table, Field &begin_xid_field, Field &end_xid_field, Field &pointer_xid_field) const
 {
   const TableMeta &table_meta = table->table_meta();
   const std::pair<const FieldMeta *, int> trx_fields = table_meta.trx_fields();
@@ -295,6 +349,8 @@ void MvccTrx::trx_fields(Table *table, Field &begin_xid_field, Field &end_xid_fi
   begin_xid_field.set_field(&trx_fields.first[0]);
   end_xid_field.set_table(table);
   end_xid_field.set_field(&trx_fields.first[1]);
+  pointer_xid_field.set_table(table);
+  pointer_xid_field.set_field(&trx_fields.first[2]);
 }
 
 RC MvccTrx::start_if_need()
@@ -327,8 +383,8 @@ RC MvccTrx::commit_with_trx_id(int32_t commit_xid)
       case Operation::Type::INSERT: {
         RID rid(operation.page_num(), operation.slot_num());
         Table *table = operation.table();
-        Field begin_xid_field, end_xid_field;
-        trx_fields(table, begin_xid_field, end_xid_field);
+        Field begin_xid_field, end_xid_field, pointer_xid_field;
+        trx_fields(table, begin_xid_field, end_xid_field, pointer_xid_field);
 
         auto record_updater = [this, &begin_xid_field, commit_xid](Record &record) {
           LOG_DEBUG("before commit insert record. trx id=%d, begin xid=%d, commit xid=%d, lbt=%s",
@@ -352,8 +408,8 @@ RC MvccTrx::commit_with_trx_id(int32_t commit_xid)
         Table *table = operation.table();
         RID rid(operation.page_num(), operation.slot_num());
 
-        Field begin_xid_field, end_xid_field;
-        trx_fields(table, begin_xid_field, end_xid_field);
+        Field begin_xid_field, end_xid_field, pointer_xid_field;
+        trx_fields(table, begin_xid_field, end_xid_field, pointer_xid_field);
 
         auto record_updater = [this, &end_xid_field, commit_xid](Record &record) {
           (void)this;
@@ -402,12 +458,29 @@ RC MvccTrx::rollback()
         // 而且实际上trx应该记录下来自己曾经插入过的数据
         // 也就是不需要从table中获取这条数据，可以直接从当前内存中获取
         // 这里也可以不删除，仅仅给数据加个标识位，等垃圾回收器来收割也行
+#if 0
         rc = table->get_record(rid, record);
         ASSERT(rc == RC::SUCCESS,
             "failed to get record while rollback. rid=%s, rc=%s",
             rid.to_string().c_str(),
             strrc(rc));
         rc = table->delete_record(record);
+#endif
+        // 我们在这里不删除, 否则这会中断record链
+        // TODO 垃圾回收
+        Field begin_xid_field, end_xid_field, pointer_xid_field;
+        trx_fields(table, begin_xid_field, end_xid_field, pointer_xid_field);
+
+        auto record_deleter = [this, &begin_xid_field](Record &record) {
+          ASSERT(begin_xid_field.get_int(record) == -trx_id_,
+              "got an invalid record while rollback. end xid=%d, this trx id=%d",
+              end_xid_field.get_int(record),
+              trx_id_);
+
+          begin_xid_field.set_int(record, numeric_limits<int32_t>::min());
+        };
+
+        rc = table->visit_record(rid, false /*readonly*/, record_deleter);
         ASSERT(rc == RC::SUCCESS,
             "failed to delete record while rollback. rid=%s, rc=%s",
             rid.to_string().c_str(),
@@ -422,8 +495,9 @@ RC MvccTrx::rollback()
             "failed to get record while rollback. rid=%s, rc=%s",
             rid.to_string().c_str(),
             strrc(rc));
-        Field begin_xid_field, end_xid_field;
-        trx_fields(table, begin_xid_field, end_xid_field);
+
+        Field begin_xid_field, end_xid_field, pointer_xid_field;
+        trx_fields(table, begin_xid_field, end_xid_field, pointer_xid_field);
 
         auto record_updater = [this, &end_xid_field](Record &record) {
           ASSERT(end_xid_field.get_int(record) == -trx_id_,
@@ -503,7 +577,8 @@ RC MvccTrx::redo(Db *db, const CLogRecord &log_record)
       const CLogRecordData &data_record = log_record.data_record();
       Field begin_field;
       Field end_field;
-      trx_fields(table, begin_field, end_field);
+      Field pointer_field;
+      trx_fields(table, begin_field, end_field, pointer_field);
 
       auto record_updater = [this, &end_field](Record &record) {
         (void)this;
