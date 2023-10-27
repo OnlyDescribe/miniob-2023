@@ -42,7 +42,12 @@ RC JoinPushdownRewriter::rewrite(std::unique_ptr<LogicalOperator> &oper, bool &c
   // 下推函数
   auto push_down = [](LogicalOperator* child, std::vector<std::unique_ptr<Expression>>& pushdown_exprs) {
     while (!pushdown_exprs.empty()) {
-      child->add_expressioin(std::move(pushdown_exprs.back()));
+      if (child->type() == LogicalOperatorType::TABLE_GET) {
+        auto table_scan = static_cast<TableGetLogicalOperator*>(child);
+        table_scan->predicates().emplace_back(std::move(pushdown_exprs.back()));
+      } else {
+        child->add_expressioin(std::move(pushdown_exprs.back()));
+      }
       pushdown_exprs.pop_back();
     }
   };

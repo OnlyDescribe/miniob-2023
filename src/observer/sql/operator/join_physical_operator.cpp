@@ -39,15 +39,15 @@ RC NestedLoopJoinPhysicalOperator::predicate() {
   if (!expressions_.empty()) {
     for (const auto& expression: expressions_) {
       Value ret;
-      rc = expression->get_value(joined_tuple_, ret);
+      // 必须拷贝，否则会改变left_tuple_和right_tuple_ 的值
+      std::unique_ptr<Tuple> tmp_tuple(joined_tuple_.copy_tuple());
+      rc = expression->get_value(*tmp_tuple, ret);
       if (rc != RC::SUCCESS) {
+        tmp_tuple = nullptr;
         return rc;
       }
-      if (ret.compare(Value(static_cast<bool>(false)))) {
-        LOG_WARN("not equal: %s and %s", left_tuple_->to_string().c_str(), right_tuple_->to_string().c_str());
-        LOG_WARN("expression is %s, ret=%s", expression->to_string().c_str(), ret.to_string().c_str());
-        // std::cout << joined_tuple_.to_string() << " " << ret.to_string() << std::endl;
-        return RC::NOT_MATHCH;
+      if (!ret.get_boolean()) {
+        return RC::NOT_MATCH;
       }
     }
   }
@@ -70,7 +70,7 @@ RC NestedLoopJoinPhysicalOperator::next()
       }
     } else {
       rc = predicate();
-      if (rc == RC::NOT_MATHCH) {
+      if (rc == RC::NOT_MATCH) {
         rc = next();
       }
       return rc;  // got one tuple from right
@@ -91,7 +91,7 @@ RC NestedLoopJoinPhysicalOperator::next()
   }
 
   rc = predicate();
-  if (rc == RC::NOT_MATHCH) {
+  if (rc == RC::NOT_MATCH) {
     rc = next();
   }
   
@@ -167,14 +167,56 @@ RC NestedLoopJoinPhysicalOperator::right_next()
 
 HashJoinPhysicalOperator::HashJoinPhysicalOperator() {}
 
+
+RC HashJoinPhysicalOperator::predicate() {
+  RC rc = RC::SUCCESS;
+  if (!expressions_.empty()) {
+    for (const auto& expression: expressions_) {
+      Value ret;
+      // 必须拷贝，否则会改变left_tuple_和right_tuple_ 的值
+      std::unique_ptr<Tuple> tmp_tuple(joined_tuple_.copy_tuple());
+      rc = expression->get_value(*tmp_tuple, ret);
+      if (rc != RC::SUCCESS) {
+        tmp_tuple = nullptr;
+        return rc;
+      }
+      if (!ret.get_boolean()) {
+        return RC::NOT_MATCH;
+      }
+    }
+  }
+  return rc;
+}
+
+
+void HashJoinPhysicalOperator::init_expressions() {
+  for (auto it = expressions_.begin(); it != expressions_.end(); ) {
+    if ((*it)->type() == ExprType::COMPARISON) {
+      auto cmp_expr = static_cast<ComparisonExpr*>(it->get());
+      // 可以使用hash join
+      if (cmp_expr->comp() == CompOp::EQUAL_TO) {
+        left_expressions_.emplace_back(std::move(cmp_expr->left()));
+        right_expressions_.emplace_back(std::move(cmp_expr->right()));
+        it = expressions_.erase(it);
+      } else {
+        it++;
+      }
+    } else {
+      LOG_WARN("hash join hash other expressions");
+      it++;
+    }
+  }
+}
+
 RC HashJoinPhysicalOperator::open(Trx* trx) {
   if (children_.size() != 2) {
-    LOG_WARN("nlj operator should have 2 children");
-    return RC::INTERNAL;
+    LOG_WARN("hash join operator should have 2 children");
+    return RC::RECORD_EOF;
   }
   RC rc = RC::SUCCESS;
   left_ = children_[0].get();
   right_ = children_[1].get();
+  init_expressions();
 
   rc = right_->open(trx);
   right_results_ = std::queue<Tuple*>();
@@ -235,6 +277,10 @@ RC HashJoinPhysicalOperator::next() {
   joined_tuple_.set_left(left_tuple_);
   joined_tuple_.set_right(right_results_.front());
   right_results_.pop();
+
+  if (predicate() == RC::NOT_MATCH) {
+    return next();
+  }
 
   return rc;
 }

@@ -27,10 +27,10 @@ OrderbyPhysicalOperator::~OrderbyPhysicalOperator() {
 RC OrderbyPhysicalOperator::open(Trx *trx) {
   trx_ = trx;
   if (children_.size() != 1 || !children_[0]) {
-    return RC::NOT_MATHCH;
+    return RC::NOT_MATCH;
   }
   if (sort_types_.size() != expressions_.size()) {
-    return RC::NOT_MATHCH;
+    return RC::NOT_MATCH;
   }
   RC rc = children_[0]->open(trx);
 
