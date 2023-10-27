@@ -18,6 +18,7 @@ See the Mulan PSL v2 for more details. */
 RC JoinPushdownRewriter::rewrite(std::unique_ptr<LogicalOperator> &oper, bool &change_made)
 {
   RC rc = RC::SUCCESS;
+  // 当前不是join，先递归下面的算子
   if (oper->type() != LogicalOperatorType::JOIN) {
     return rc;
   }
@@ -37,10 +38,10 @@ RC JoinPushdownRewriter::rewrite(std::unique_ptr<LogicalOperator> &oper, bool &c
   std::vector<std::unique_ptr<Expression>> pushdown_right_exprs;
   // 当前的表达式
   std::vector<std::unique_ptr<Expression>> &join_oper_exprs = oper->expressions();
-  rc = get_exprs_can_pushdown(join_op, join_oper_exprs, pushdown_left_exprs, pushdown_right_exprs);
+  rc = get_exprs_can_pushdown(join_op, join_oper_exprs, pushdown_left_exprs, pushdown_right_exprs, change_made);
 
   // 下推函数
-  auto push_down = [](LogicalOperator* child, std::vector<std::unique_ptr<Expression>>& pushdown_exprs) {
+  auto push_down = [&change_made](LogicalOperator* child, std::vector<std::unique_ptr<Expression>>& pushdown_exprs) {
     while (!pushdown_exprs.empty()) {
       if (child->type() == LogicalOperatorType::TABLE_GET) {
         auto table_scan = static_cast<TableGetLogicalOperator*>(child);
@@ -49,6 +50,7 @@ RC JoinPushdownRewriter::rewrite(std::unique_ptr<LogicalOperator> &oper, bool &c
         child->add_expressioin(std::move(pushdown_exprs.back()));
       }
       pushdown_exprs.pop_back();
+      change_made |= true;
     }
   };
   if (rc != RC::SUCCESS) {
@@ -82,7 +84,7 @@ RC JoinPushdownRewriter::rewrite(std::unique_ptr<LogicalOperator> &oper, bool &c
 RC JoinPushdownRewriter::get_exprs_can_pushdown(JoinLogicalOperator* join_oper,
       std::vector<std::unique_ptr<Expression>> &exprs, 
       std::vector<std::unique_ptr<Expression>> &pushdown_left_exprs,
-      std::vector<std::unique_ptr<Expression>> &pushdown_right_exprs)
+      std::vector<std::unique_ptr<Expression>> &pushdown_right_exprs, bool& change_made)
 {
   RC rc = RC::SUCCESS;
   if (join_oper == nullptr || join_oper->right_table == nullptr) {
@@ -99,8 +101,10 @@ RC JoinPushdownRewriter::get_exprs_can_pushdown(JoinLogicalOperator* join_oper,
         value_expr->get_value(value);
         if (value.attr_type() == AttrType::BOOLEANS) {
           if (value.get_boolean()) {
+            change_made |= true;
             it = exprs.erase(it);
           } else {
+            change_made |= true;
             join_oper->children().clear();
             return rc;
           }
@@ -152,15 +156,17 @@ RC JoinPushdownRewriter::get_exprs_can_pushdown(JoinLogicalOperator* join_oper,
           it++;
       }
     } else if (left->type() == ExprType::VALUE && right->type() == ExprType::VALUE) {
-      const auto left_expr = static_cast<ValueExpr*>(left.get());
-      const auto right_expr = static_cast<ValueExpr*>(right.get());
-      Value left_value, right_value;
-      left_expr->get_value(left_value);
-      right_expr->get_value(right_value);
-      if (!left_value.compare(right_value)) { // 可以删除这个表达式
+      Value value;
+      rc = comparison_expr->try_get_value(value);
+      if (rc != RC::SUCCESS) {
+        return rc;
+      }
+      if (value.get_boolean()) { // 可以删除这个表达式
+          change_made |= true;
           it = exprs.erase(it);
       } else {        // 因为是 AND 连接，如果不相等，可以直接删除这颗子树 (把孩子都删除)
         join_oper->children().clear();
+        change_made |= true;
         return rc;
       }
     } else if(left->type() == ExprType::FIELD && right->type() == ExprType::VALUE) {

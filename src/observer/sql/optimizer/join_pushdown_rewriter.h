@@ -32,6 +32,7 @@ private:
   RC get_exprs_can_pushdown(JoinLogicalOperator* join_oper,
       std::vector<std::unique_ptr<Expression>> &exprs, 
       std::vector<std::unique_ptr<Expression>> &pushdown_left_exprs,
-      std::vector<std::unique_ptr<Expression>> &pushdown_right_exprs);
+      std::vector<std::unique_ptr<Expression>> &pushdown_right_exprs,
+      bool &change_made);
 
 };

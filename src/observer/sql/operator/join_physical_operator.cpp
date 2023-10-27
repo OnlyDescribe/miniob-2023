@@ -209,7 +209,7 @@ void HashJoinPhysicalOperator::init_expressions() {
 }
 
 RC HashJoinPhysicalOperator::open(Trx* trx) {
-  if (children_.size() != 2) {
+  if (children_.size() != 2 || children_[0] == nullptr || children_[1] == nullptr) {
     LOG_WARN("hash join operator should have 2 children");
     return RC::RECORD_EOF;
   }
@@ -285,6 +285,9 @@ RC HashJoinPhysicalOperator::next() {
   return rc;
 }
 RC HashJoinPhysicalOperator::close() {
+  if (left_ == nullptr || right_ == nullptr) {
+    return RC::SUCCESS;
+  }
   RC rc = left_->close();
   if (left_->close() != RC::SUCCESS) {
     LOG_WARN("failed to close left oper. rc=%s", strrc(rc));
