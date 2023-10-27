@@ -45,7 +45,7 @@ RC UpdateStmt::create(Db *db, UpdateSqlNode &update, Stmt *&stmt)
 
   const TableMeta &table_meta = table->table_meta();
   const int sys_field_num = table_meta.sys_field_num();
-  const int field_num = table_meta.field_num();
+  const int field_num = table_meta.field_num() - table_meta.extra_field_num();
 
   // 检查表中是否存在相应字段, 设置field_metas和values
   for (int i = 0; i < value_amount; ++i) {
@@ -74,16 +74,24 @@ RC UpdateStmt::create(Db *db, UpdateSqlNode &update, Stmt *&stmt)
 
     // 检查字段和值类型是否冲突
     ASSERT(!field_metas.empty(), "");
+    const FieldMeta *field_meta = field_metas.back();
     const AttrType value_type = update.assignments[i].value.attr_type();
-    const AttrType field_type = field_metas.back()->type();
+    const AttrType field_type = field_meta->type();
     if (field_type != value_type) {
       // 因为更新操作的词法解析无法判断字符串是TEXTS还是CHARS
       // 目前可能会出现值 TEXTS 类型而字段是 CHARS 类型
       if (field_type == AttrType::TEXTS && value_type == AttrType::CHARS) {
         update.assignments[i].value.set_type(AttrType::TEXTS);
+      }  // 如果值为 NULL, 判断该字段是否设置了 NOT NULL
+      else if (value_type == AttrType::NULLS) {
+        if (field_meta->is_not_null()) {
+          LOG_WARN("value can not be null. table=%s, field=%s, field type=%d, value_type=%d",
+          table_name, field_meta->name(), field_type, value_type);
+          return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+        }
       } else {
         LOG_WARN("field type mismatch. table=%s, field=%s, field type=%d, value_type=%d",
-          table_name, field_metas.back()->name(), field_type, value_type);
+          table_name, field_meta->name(), field_type, value_type);
         return RC::SCHEMA_FIELD_TYPE_MISMATCH;
       }
     }

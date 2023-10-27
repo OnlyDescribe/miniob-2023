@@ -41,7 +41,7 @@ RC InsertStmt::create(Db *db, InsertSqlNode &inserts, Stmt *&stmt)
   Value *values = inserts.values.data();
   const int value_num = static_cast<int>(inserts.values.size());
   const TableMeta &table_meta = table->table_meta();
-  const int field_num = table_meta.field_num() - table_meta.sys_field_num();
+  const int field_num = table_meta.field_num() - table_meta.sys_field_num() - table_meta.extra_field_num();
   if (field_num != value_num) {
     LOG_WARN("schema mismatch. value num=%d, field num in schema=%d", value_num, field_num);
     return RC::SCHEMA_FIELD_MISSING;
@@ -58,6 +58,14 @@ RC InsertStmt::create(Db *db, InsertSqlNode &inserts, Stmt *&stmt)
       // 目前可能会出现值 TEXTS 类型而字段是 CHARS 类型
       if (field_type == AttrType::TEXTS && value_type == AttrType::CHARS) {
         values[i].set_type(AttrType::TEXTS);
+      }
+      // 如果值为 NULL, 判断该字段是否设置了 NOT NULL
+      else if (value_type == AttrType::NULLS) {
+        if (field_meta->is_not_null()) {
+          LOG_WARN("value can not be null. table=%s, field=%s, field type=%d, value_type=%d",
+          table_name, field_meta->name(), field_type, value_type);
+          return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+        }
       } else {
         LOG_WARN("field type mismatch. table=%s, field=%s, field type=%d, value_type=%d",
           table_name, field_meta->name(), field_type, value_type);

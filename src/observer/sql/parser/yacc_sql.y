@@ -111,6 +111,9 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
         GE
         NE
         NOT
+        IS
+        DEFAULT
+        NULL_T
         LIKE_CONDITION
 
 /** union 中定义各种数据类型，真实生成的代码也是union类型，所以不能有非POD类型的数据 **/
@@ -404,6 +407,25 @@ attr_def:
       $$->type = (AttrType)$2;
       $$->name = $1;
       $$->length = $4;
+      $$->is_not_null = false;
+      free($1);
+    }
+    | ID type LBRACE number RBRACE NULL_T
+    {
+      $$ = new AttrInfoSqlNode;
+      $$->type = (AttrType)$2;
+      $$->name = $1;
+      $$->length = $4;
+      $$->is_not_null = false;
+      free($1);
+    }
+    | ID type LBRACE number RBRACE NOT NULL_T
+    {
+      $$ = new AttrInfoSqlNode;
+      $$->type = (AttrType)$2;
+      $$->name = $1;
+      $$->length = $4;
+      $$->is_not_null = true;
       free($1);
     }
     | ID type
@@ -411,6 +433,37 @@ attr_def:
       $$ = new AttrInfoSqlNode;
       $$->type = (AttrType)$2;
       $$->name = $1;
+      $$->is_not_null = false;
+      if($$->type == AttrType::TEXTS)
+      {
+        $$->length = 68; // 字段长度为68， 在record中存储为16+1个指向文本数据的溢出页
+      }
+      else{
+        $$->length = 4;
+      }
+      free($1);
+    }
+    | ID type NULL_T
+    {
+      $$ = new AttrInfoSqlNode;
+      $$->type = (AttrType)$2;
+      $$->name = $1;
+      $$->is_not_null = false;
+      if($$->type == AttrType::TEXTS)
+      {
+        $$->length = 68; // 字段长度为68， 在record中存储为16+1个指向文本数据的溢出页
+      }
+      else{
+        $$->length = 4;
+      }
+      free($1);
+    }
+    | ID type NOT NULL_T
+    {
+      $$ = new AttrInfoSqlNode;
+      $$->type = (AttrType)$2;
+      $$->name = $1;
+      $$->is_not_null = true;
       if($$->type == AttrType::TEXTS)
       {
         $$->length = 68; // 字段长度为68， 在record中存储为16+1个指向文本数据的溢出页
@@ -472,11 +525,15 @@ value:
     }
     |SSS {
       char *tmp = common::substr($1,1,strlen($1)-2);
-      if(strlen(tmp)>65535){
+      if(strlen(tmp) > 65535){
         yyerror(&@$, sql_string, sql_result, scanner, "invalid text", SCF_INVALID);
       }
       $$ = new Value(tmp);
       free(tmp);
+    }
+    |NULL_T {
+      $$ = new Value(AttrType::NULLS);
+      @$ = @1;
     }
     |DATE {
       char *tmp = common::substr($1,1,strlen($1)-2);
@@ -925,6 +982,50 @@ condition:
 
       delete $1;
       delete $3;
+    }
+    | value IS NULL_T
+    {
+      $$ = new ConditionSqlNode;
+      $$->left_is_attr = 0;
+      $$->left_value = *$1;
+      $$->right_is_attr = 0;
+      $$->right_value = Value(AttrType::NULLS);
+      $$->comp = CompOp::IS_NULL;
+
+      delete $1;
+    }
+    | value IS NOT NULL_T
+    {
+      $$ = new ConditionSqlNode;
+      $$->left_is_attr = 0;
+      $$->left_value = *$1;
+      $$->right_is_attr = 0;
+      $$->right_value = Value(AttrType::NULLS);
+      $$->comp = CompOp::IS_NOT_NULL;
+
+      delete $1;
+    }
+    | rel_attr IS NOT NULL_T
+    {
+      $$ = new ConditionSqlNode;
+      $$->left_is_attr = 1;
+      $$->left_attr = *$1;
+      $$->right_is_attr = 0;
+      $$->right_value = Value(AttrType::NULLS);
+      $$->comp = CompOp::IS_NOT_NULL;
+
+      delete $1;
+    }
+    | rel_attr IS NULL_T
+    {
+      $$ = new ConditionSqlNode;
+      $$->left_is_attr = 1;
+      $$->left_attr = *$1;
+      $$->right_is_attr = 0;
+      $$->right_value = Value(AttrType::NULLS);
+      $$->comp = CompOp::IS_NULL;
+
+      delete $1;
     }
     ;
 

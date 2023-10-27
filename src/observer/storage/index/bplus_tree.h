@@ -54,10 +54,11 @@ enum class BplusTreeOperationType
 class AttrComparator
 {
 public:
-  void init(const std::vector<AttrType> &type, const std::vector<int> &length)
+  void init(const std::vector<AttrType> &type, const std::vector<int> &length, const std::vector<int> &attr_id)
   {
     attr_type_ = type;
     attr_length_ = length;
+    attr_id_ = attr_id;
   }
 
   int attr_length() const
@@ -76,7 +77,24 @@ public:
     int res{0};
 
     // TODO(oldcb): 支持null类型
-    for (int i = 0; i < attr_type_.size(); ++i) {
+    int bitmap_offset{0};
+    ASSERT(attr_length_.size() > 0, "error");
+    for (auto iter = attr_length_.begin(); iter != std::prev(attr_length_.end()); ++iter) {
+      bitmap_offset += *iter;
+    }
+    common::Bitmap v1_null_bitmap(const_cast<char *>(v1) + bitmap_offset, attr_length_.back());
+    common::Bitmap v2_null_bitmap(const_cast<char *>(v2) + bitmap_offset, attr_length_.back());
+
+    for (int i = 0; i < attr_type_.size() - 1; ++i) {
+      if (v2_null_bitmap.get_bit(attr_id_[i])) {
+        if (v1_null_bitmap.get_bit(attr_id_[i])) {
+          continue;  // NULL和NULL相等
+        } else {
+          return -1;  // NULL比其它值(不包括NULL)大
+        }
+      } else if (v1_null_bitmap.get_bit(attr_id_[i])) {
+        return 1;
+      }
       switch (attr_type_[i]) {
         case INTS: {
           res = common::compare_int((void *)(pos + v1), (void *)(pos + v2));
@@ -115,7 +133,7 @@ public:
   }
 
 private:
-  // std::vector<int> attr_id_;         // 各字段对应在表中是第几位
+  std::vector<int> attr_id_;         // 各字段对应在表中是第几位
   std::vector<AttrType> attr_type_;  // 将多个字段看成一个, 采用字典序进行比较
   std::vector<int> attr_length_;
 };
@@ -132,13 +150,15 @@ public:
   void init(const AttrType &type, int length, bool is_unique = false)
   {
     is_unique_ = is_unique;
-    attr_comparator_.init(std::vector<AttrType>{type}, std::vector<int>{length});
+    const std::vector<int> attr_id;  // do nothing
+    attr_comparator_.init(std::vector<AttrType>{type}, std::vector<int>{length}, attr_id);
   }
 
-  void init(const std::vector<AttrType> &type, const std::vector<int> &length, bool is_unique = false)
+  void init(const std::vector<AttrType> &type, const std::vector<int> &length, const std::vector<int> &attr_id,
+      bool is_unique = false)
   {
     is_unique_ = is_unique;
-    attr_comparator_.init(type, length);
+    attr_comparator_.init(type, length, attr_id);
   }
 
   const AttrComparator &attr_comparator() const { return attr_comparator_; }
@@ -265,12 +285,14 @@ struct IndexFileHeader
 
   // TODO
   bool is_unique;
-  PageNum root_page;             ///< 根节点在磁盘中的页号
-  int32_t internal_max_size;     ///< 内部节点最大的键值对数
-  int32_t leaf_max_size;         ///< 叶子节点最大的键值对数
-  int32_t key_length;            ///< attr length + sizeof(RID)
+  PageNum root_page;          ///< 根节点在磁盘中的页号
+  int32_t internal_max_size;  ///< 内部节点最大的键值对数
+  int32_t leaf_max_size;      ///< 叶子节点最大的键值对数
+  int32_t key_length;         ///< attr length + sizeof(RID)
+  // 注意最后一个对应bitmap
   int32_t attr_num;              ///< 键值的数量
   int32_t attr_length[MAX_NUM];  ///< 键值的长度
+  int32_t attr_id[MAX_NUM];      ///< 标识该列在record中的位置
   AttrType attr_type[MAX_NUM];   ///< 键值的类型
 
   const std::string to_string()
@@ -525,7 +547,7 @@ public:
   RC create(const char *file_name, AttrType attr_type, int attr_length, bool is_unique, int internal_max_size = -1,
       int leaf_max_size = -1);  // bplus_tree_test 单元测试需要该接口
   RC create(const char *file_name, const std::vector<AttrType> &attr_type, const std::vector<int> &attr_length,
-      bool is_unique, int internal_max_size = -1, int leaf_max_size = -1);
+      const std::vector<int> &attr_id, bool is_unique, int internal_max_size = -1, int leaf_max_size = -1);
 
   /**
    * 打开名为fileName的索引文件。

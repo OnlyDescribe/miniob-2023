@@ -8,18 +8,25 @@
 UpdatePhysicalOperator::UpdatePhysicalOperator(
     Table *table, const std::vector<const Value *> &values, const std::vector<const FieldMeta *> &field_metas)
     : table_(table), values_(values), field_metas_(field_metas)
-{  // 找到需要修改的字段是第几个
+{
+  // TODO(oldcb): 目前可以被field的 id 值替代
+  // 找到需要修改的字段是第几个
   index_field_metas_.reserve(field_metas_.size());
   for (const auto &field_meta : field_metas_) {
     int field_index;
     const std::vector<FieldMeta> &table_field_metas = *table_->table_meta().field_metas();
-    auto it = std::find_if(table_field_metas.begin(),
-        table_field_metas.end(),
-        [update_field_meta = field_meta](const FieldMeta &meta) { return meta.name() == update_field_meta->name(); });
+    auto it = std::find_if(
+        table_field_metas.begin(), table_field_metas.end(), [update_field_meta = field_meta](const FieldMeta &meta) {
+          if (strcmp(meta.name(), update_field_meta->name()) == 0) {
+            return true;
+          }
+          return false;
+          // return meta.name() == update_field_meta->name();
+        });
 
     ASSERT(it != table_field_metas.end(), "failed to get field index");
     field_index = std::distance(table_field_metas.begin(), it);
-    field_index -= table_->table_meta().sys_field_num();
+    field_index -= table_->table_meta().sys_field_num();  // 需要考虑sys_field
     index_field_metas_.push_back(field_index);
   }
 }
@@ -55,6 +62,8 @@ RC UpdatePhysicalOperator::next()
 
   PhysicalOperator *child = children_[0].get();
 
+  int sys_field_num = table_->table_meta().sys_field_num();
+
   // next
   while (RC::SUCCESS == (rc = child->next())) {
     Tuple *tuple = child->current_tuple();
@@ -63,8 +72,13 @@ RC UpdatePhysicalOperator::next()
       return rc;
     }
 
-    // 得到旧Tuple
+    // 得到需要删除的Tuple
     RowTuple *row_tuple = static_cast<RowTuple *>(tuple);
+
+    // // 得到旧bitmap
+    // int bitmap_size = row_tuple->bitmap().get_size();
+    // char *old_bitmap = new char[bitmap_size];
+    // memcpy(old_bitmap, row_tuple->bitmap().get_bitmap(), bitmap_size);
 
     // 删除旧Tuple
     Record &old_record = row_tuple->record();
@@ -79,7 +93,7 @@ RC UpdatePhysicalOperator::next()
     Value cell;
 
     std::vector<Value> values;
-    int value_num = row_tuple->cell_num();
+    int value_num = row_tuple->cell_num() - sys_field_num - 1;  // row_tuple中应该包含系统字段和null字段
     values.reserve(value_num);
 
     for (int i = 0, j = 0; i < value_num; ++i) {
@@ -93,6 +107,9 @@ RC UpdatePhysicalOperator::next()
     }
 
     RC rc = table_->make_record(value_num, values.data(), new_record);
+
+    // 设置 bitmap
+
     if (rc != RC::SUCCESS) {
       LOG_WARN("failed to make record. rc=%s", strrc(rc));
       // 注意失败后要回滚, 保证一次更新操作(删除+插入)是"原子"的

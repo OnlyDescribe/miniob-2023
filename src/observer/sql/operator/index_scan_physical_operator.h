@@ -26,7 +26,8 @@ class IndexScanPhysicalOperator : public PhysicalOperator
 {
 public:
   IndexScanPhysicalOperator(Table *table, Index *index, bool readonly, const std::vector<Value> &left_values,
-      bool left_inclusive, const std::vector<Value> &right_values, bool right_inclusive);
+      bool left_inclusive, const std::vector<Value> &right_values, bool right_inclusive,
+      const std::vector<FieldMeta> &value_metas);
 
   virtual ~IndexScanPhysicalOperator() = default;
 
@@ -60,6 +61,7 @@ private:
 
   std::vector<Value> left_values_;
   std::vector<Value> right_values_;
+  std::vector<FieldMeta> value_metas_;  // 我们需要知道左右 value 在 table 中属于第几个字段, 以此才能设置 null 的 bitmap
   bool left_inclusive_ = false;
   bool right_inclusive_ = false;
 

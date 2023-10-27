@@ -26,7 +26,7 @@ OrderbyPhysicalOperator::~OrderbyPhysicalOperator() {
 
 RC OrderbyPhysicalOperator::open(Trx *trx) {
   trx_ = trx;
-  if (children_.size() != 1) {
+  if (children_.size() != 1 || !children_[0]) {
     return RC::NOT_MATHCH;
   }
   if (sort_types_.size() != expressions_.size()) {

@@ -83,7 +83,7 @@ public:
 
   // TODO refactor
   // RC create_index(Trx *trx, const FieldMeta *field_meta, const char *index_name, bool is_unique);
-  RC create_index(Trx *trx, const std::vector<FieldMeta> &field_meta, const char *index_name, bool is_unique);
+  RC create_index(Trx *trx, std::vector<FieldMeta> &field_meta, const char *index_name, bool is_unique);
 
   RC get_record_scanner(RecordFileScanner &scanner, Trx *trx, bool readonly);
 
