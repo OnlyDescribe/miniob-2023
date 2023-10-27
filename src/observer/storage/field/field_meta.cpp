@@ -104,7 +104,7 @@ RC FieldMeta::from_json(const Json::Value &json_value, FieldMeta &field)
   const Json::Value &type_value = json_value[FIELD_TYPE];
   const Json::Value &offset_value = json_value[FIELD_OFFSET];
   const Json::Value &len_value = json_value[FIELD_LEN];
-  const Json::Value &id_value = json_value[FIELD_LEN];
+  const Json::Value &id_value = json_value[FIELD_ID];
   const Json::Value &visible_value = json_value[FIELD_VISIBLE];
   const Json::Value &is_not_null_value = json_value[FIELD_IS_NOT_NULL];
 
