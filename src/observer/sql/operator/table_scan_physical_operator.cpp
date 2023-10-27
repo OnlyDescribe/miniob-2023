@@ -21,6 +21,7 @@ using namespace std;
 RC TableScanPhysicalOperator::open(Trx *trx)
 {
   RC rc = table_->get_record_scanner(record_scanner_, trx, readonly_);
+  // tuple的schema应该与tuple_schema尽量保持一致, tuple_schema只包含了用户字段， tuple是用户字段+null字段
   if (rc == RC::SUCCESS) {
     tuple_.set_schema(table_, table_->table_meta().field_metas());
   }

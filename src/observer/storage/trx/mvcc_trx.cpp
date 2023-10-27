@@ -224,13 +224,15 @@ RC MvccTrx::update_record(Table *table, Record &old_record, Record &new_record)
   Field pointer_field;
   trx_fields(table, begin_field, end_field, pointer_field);
 
+  // 1. 设置删除标识
   this->delete_record(table, old_record);
 
-  // 设置new_record的pointer_field
+  // 2. 设置插入标识
   this->insert_record(table, new_record);
 
-  // 设置老record指向新的record
+  // 3. 设置pointer_field标识, 即老record所在的链的最新record 指向 新的record
   RID new_rid = new_record.rid();
+
   char *old_record_pointer = old_record.data() + pointer_field.meta()->offset();
   memcpy(old_record_pointer, &new_rid, sizeof(RID));
 
@@ -239,99 +241,45 @@ RC MvccTrx::update_record(Table *table, Record &old_record, Record &new_record)
 
 RC MvccTrx::visit_record(Table *table, Record &record, bool readonly)
 {
+  // 除了首节点, 链内的record应该都是不可见的
   Field begin_field;
   Field end_field;
   Field pointer_field;
   trx_fields(table, begin_field, end_field, pointer_field);
 
-  // 因为采用的oldest to newest, 需要反转record链
-  // 我们这里保存了record链的begin_xid和end_xid
-  std::vector<int32_t> begin_xids;
-  std::vector<int32_t> end_xids;
+  int32_t begin_xid = begin_field.get_int(record);
+  int32_t end_xid = end_field.get_int(record);
 
-  RID rid;
-  memcpy(&rid, record.data() + pointer_field.meta()->offset(), sizeof(RID));
-  begin_xids.push_back(begin_field.get_int(record));
-  end_xids.push_back(end_field.get_int(record));
-
-  while (rid != RID{0, 0}) {
-
-    Record newer_record;
-
-    DiskBufferPool *data_buffer_pool = const_cast<DiskBufferPool *>(table->data_buffer_pool());
-
-    RecordPageHandler page_handler;
-
-    RC rc = page_handler.init(*data_buffer_pool, rid.page_num, readonly);
-    if (OB_FAIL(rc)) {
-      LOG_ERROR("Failed to init record page handler.page number=%d", rid.page_num);
-      return rc;
-    }
-
-    rc = page_handler.get_record(&rid, &newer_record);
-    if (OB_FAIL(rc)) {
-      LOG_WARN("failed to get record from record page handle. rid=%s, rc=%s", rid.to_string().c_str(), strrc(rc));
-      return rc;
-    }
-
-    begin_xids.push_back(begin_field.get_int(newer_record));
-    end_xids.push_back(end_field.get_int(newer_record));
-  }
-
-  assert(begin_xids.size() == end_xids.size());
-  int size = begin_xids.size();
   RC rc = RC::SUCCESS;
-
-  for (int i = size - 1; i >= 0; ++i) {
-    int32_t begin_xid = begin_xids[i];
-    int32_t end_xid = end_xids[i];
-
-    if (begin_xid > 0 && end_xid > 0) {
-      if (trx_id_ >= begin_xid && trx_id_ <= end_xid) {
-        rc = RC::SUCCESS;
-        return rc;
-      } else {
-        rc = RC::RECORD_INVISIBLE;
-        continue;
-      }
-    } else if (begin_xid < 0) {
-      // begin xid 小于0说明是刚插入而且没有提交的数据
-      if (-begin_xid == trx_id_) {
-        rc = RC::SUCCESS;
-        return rc;
-      } else {
-        rc = RC::RECORD_INVISIBLE;
-        continue;
-      }
-    } else if (end_xid < 0) {
-      // end xid 小于0 说明是正在删除但是还没有提交的数据
-      if (readonly) {
-        // 如果 -end_xid 就是当前事务的事务号，说明是当前事务删除的
-        if (-end_xid != trx_id_) {
-          rc = RC::SUCCESS;
-          return rc;
-        } else {
-          rc = RC::RECORD_INVISIBLE;
-          continue;
-        }
-      } else {
-        // 如果当前想要修改此条数据，并且不是当前事务删除的，简单的报错
-        // 这是事务并发处理的一种方式，非常简单粗暴。其它的并发处理方法，可以等待，或者让客户端重试
-        // 或者等事务结束后，再检测修改的数据是否有冲突
-        if (-end_xid != trx_id_) {
-          rc = RC::LOCKED_CONCURRENCY_CONFLICT;
-          return rc;
-        } else {
-          rc = RC::RECORD_INVISIBLE;
-          continue;
-        }
-      }
+  if (begin_xid > 0 && end_xid > 0) {
+    if (trx_id_ >= begin_xid && trx_id_ <= end_xid) {
+      rc = RC::SUCCESS;
+    } else {
+      rc = RC::RECORD_INVISIBLE;
+    }
+  } else if (begin_xid < 0) {
+    // begin xid 小于0说明是刚插入而且没有提交的数据, 且如果begin和end的xid相等的话, 意味着这是更新链的一部分
+    if (-begin_xid == trx_id_ && begin_xid != end_xid) {
+      rc = RC::SUCCESS;
+    } else {
+      rc = RC::RECORD_INVISIBLE;
     }
   }
-
+  // 此时 begin_xid > 0
+  else if (end_xid < 0) {
+    // end xid 小于0 说明是正在删除但是还没有提交的数据
+    if (readonly) {
+      // 如果 -end_xid 就是当前事务的事务号，说明是当前事务删除的
+      rc = (-end_xid != trx_id_) ? RC::SUCCESS : RC::RECORD_INVISIBLE;
+    } else {
+      // 如果当前想要修改此条数据，并且不是当前事务删除的，简单的报错
+      // 这是事务并发处理的一种方式，非常简单粗暴。其它的并发处理方法，可以等待，或者让客户端重试
+      // 或者等事务结束后，再检测修改的数据是否有冲突
+      rc = (-end_xid != trx_id_) ? RC::LOCKED_CONCURRENCY_CONFLICT : RC::RECORD_INVISIBLE;
+    }
+  }
   return rc;
 }
-
 /**
  * @brief 获取指定表上的事务使用的字段
  *
@@ -442,6 +390,43 @@ RC MvccTrx::commit_with_trx_id(int32_t commit_xid)
   LOG_TRACE("append trx commit log. trx id=%d, commit_xid=%d, rc=%s", trx_id_, commit_xid, strrc(rc));
   return rc;
 }
+
+// Record newer_record;
+// while (curr_rid != RID{0, 0}) {
+//   prev_rid = curr_rid;
+
+//   DiskBufferPool *data_buffer_pool = const_cast<DiskBufferPool *>(table->data_buffer_pool());
+//   RecordPageHandler page_handler;
+
+//   RC rc = page_handler.init(*data_buffer_pool, curr_rid.page_num, true);
+//   if (OB_FAIL(rc)) {
+//     LOG_ERROR("Failed to init record page handler.page number=%d", curr_rid.page_num);
+//     return rc;
+//   }
+
+//   rc = page_handler.get_record(&curr_rid, &newer_record);
+//   if (OB_FAIL(rc)) {
+//     LOG_WARN("failed to get record from record page handle. rid=%s, rc=%s", curr_rid.to_string().c_str(), strrc(rc));
+//     return rc;
+//   }
+
+//   memcpy(&curr_rid, newer_record.data() + pointer_field.meta()->offset(), sizeof(RID));
+// }
+
+// DiskBufferPool *data_buffer_pool = const_cast<DiskBufferPool *>(table->data_buffer_pool());
+// RecordPageHandler page_handler;
+
+// RC rc = page_handler.init(*data_buffer_pool, prev_rid.page_num, false);  // 这里要取到链中最新的record, 并将修改
+// if (OB_FAIL(rc)) {
+//   LOG_ERROR("Failed to init record page handler.page number=%d", curr_rid.page_num);
+//   return rc;
+// }
+
+// rc = page_handler.get_record(&prev_rid, &newer_record);
+// if (OB_FAIL(rc)) {
+//   LOG_WARN("failed to get record from record page handle. rid=%s, rc=%s", curr_rid.to_string().c_str(), strrc(rc));
+//   return rc;
+// }
 
 RC MvccTrx::rollback()
 {
