@@ -153,20 +153,27 @@ public:
     this->record_ = record;
   }
 
+  // 默认fields是来自TableMeta, 包含了系统字段+用户字段+NULL字段
   void set_schema(const Table *table, const std::vector<FieldMeta> *fields)
   {
     table_ = table;
     this->speces_.reserve(fields->size());
-    for (const FieldMeta &field : *fields) {
-      speces_.push_back(new FieldExpr(table, &field));
+    // 我们应该去除开头的系统字段
+    int field_num = table->table_meta().field_num();
+    int sys_field_num = table->table_meta().sys_field_num();
+    for (int i = sys_field_num; i < field_num; ++i) {
+      speces_.push_back(new FieldExpr(
+          table, &(*fields)[i]));  // 这里field传的是指针, tuple里的speces的field一直指向的是tablemeta里的资源
     }
   }
   void set_table(const Table *table) { table_ = table; }
 
   void set_speces(const std::vector<FieldExpr *> &speces) { speces_ = speces; }
 
-  int cell_num() const override { return speces_.size(); }
+  // 为了和tuple_schema统一, 我们这里要减去null字段, 返回的是用户字段数
+  int cell_num() const override { return speces_.size() - 1; }
 
+  // index的默认是从非系统字段从0开始
   RC cell_at(int index, Value &cell) const override
   {
     if (index < 0 || index >= static_cast<int>(speces_.size())) {
@@ -268,7 +275,7 @@ public:
     }
 
     tuple->set_table(table_);
-    tuple->set_speces(speces); // 必须先设置speces, 在设置 record, 因为需要speces中的元素来设置null相关的bitmap
+    tuple->set_speces(speces);  // 必须先设置speces, 在设置 record, 因为需要speces中的元素来设置null相关的bitmap
     tuple->set_record(record);
 
     tuple->is_copy_ = true;
@@ -280,6 +287,7 @@ private:
   mutable common::Bitmap bitmap_;
   Record *record_ = nullptr;
   const Table *table_ = nullptr;
+  // speces指的是用户字段+null字段
   std::vector<FieldExpr *> speces_;
 };
 

@@ -14,6 +14,7 @@ See the Mulan PSL v2 for more details. */
 
 #pragma once
 
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -49,11 +50,12 @@ public:
   const FieldMeta *find_field_by_offset(int offset) const;
   const FieldMeta *null_field() const;
   const std::vector<FieldMeta> *field_metas() const { return &fields_; }
+
   auto trx_fields() const -> const std::pair<const FieldMeta *, int>;
 
-  int field_num() const;  // sys field and null included
-  int sys_field_num() const; // sys field
-  int extra_field_num() const; // null field
+  int field_num() const;        // sys field and null included
+  int sys_field_num() const;    // sys field
+  int extra_field_num() const;  // null field
 
   const IndexMeta *index(const char *name) const;
   const IndexMeta *find_index_by_field(const std::vector<std::string> &fields) const;
