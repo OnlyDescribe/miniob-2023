@@ -74,6 +74,8 @@ public:
   void set_text(const char *s);
   void set_value(const Value &value);
 
+  bool is_null() const { return attr_type_ == AttrType::NULLS; }
+
   // add 函数
   static Value add(const Value &a, const Value &b)
   {

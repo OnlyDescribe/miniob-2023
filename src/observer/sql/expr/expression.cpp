@@ -406,6 +406,11 @@ RC AggretationExpr::get_value(const Tuple &tuple, Value &value) const
     case AggrFuncType::SUM:
     case AggrFuncType::AVG: rc = tuple.find_cell(TupleCellSpec(field_.table_name(), field_.field_name()), value); break;
     case AggrFuncType::COUNT:
+        rc = tuple.find_cell(TupleCellSpec(field_.table_name(), field_.field_name()), value);
+        if (!value.is_null()) {
+          value = Value(1);
+        }
+        break;
     case AggrFuncType::COUNT_STAR: value.set_int(1); break;
     default: break;
   }

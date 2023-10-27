@@ -281,7 +281,9 @@ RC LogicalPlanGenerator::create_plan(std::vector<OrderByUnit> *orderbys, std::un
     field_exprs.emplace_back(new FieldExpr((*orderbys)[i].field));
     sort_types.emplace_back((*orderbys)[i].sort_type);
   }
-  logical_operator = std::make_unique<OrderByLogicalOperator>(std::move(field_exprs), std::move(sort_types));
+  if (!field_exprs.empty()) {
+    logical_operator = std::make_unique<OrderByLogicalOperator>(std::move(field_exprs), std::move(sort_types));
+  }
   return RC::SUCCESS;
 }
 

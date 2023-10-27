@@ -228,7 +228,6 @@ RC PhysicalPlanGenerator::create_plan(TableGetLogicalOperator &table_get_oper, u
 // ORDERBY 下面必须挂对应的算子
 RC PhysicalPlanGenerator::create_plan(OrderByLogicalOperator &orderby_oper, std::unique_ptr<PhysicalOperator> &oper) {
   vector<unique_ptr<LogicalOperator>> &child_opers = orderby_oper.children();
-  assert(child_opers.size() == 1);
 
   RC rc = RC::SUCCESS;
   unique_ptr<PhysicalOperator> child_phy_oper;

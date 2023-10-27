@@ -99,22 +99,16 @@ public:
       auto aggr_expr = static_cast<AggretationExpr*>(agg_expr_ptr.get());
       switch (aggr_expr->aggr_type()) {
         case AggrFuncType::COUNT_STAR:
-          // TODO: Others starts at null. 
+        case AggrFuncType::COUNT:
           // Count start starts at zero.
-          // ValueFactory::GetNullValueByType(TypeId::INTEGER)
           values.emplace_back(Value(0));
           break;
-        case AggrFuncType::COUNT:
         case AggrFuncType::MIN:
         case AggrFuncType::MAX:
         case AggrFuncType::SUM:
         case AggrFuncType::AVG:
-          values.emplace_back();
-          // if (aggr_expr->value_type() == AttrType::FLOATS) {
-          //   values.emplace_back(Value(static_cast<float>(0.0)));
-          // } else {
-          //   values.emplace_back(Value(0));
-          // }
+          // other start starts at NULL.
+          values.emplace_back(Value(AttrType::NULLS));
           break;
         default:
           break;
@@ -128,12 +122,14 @@ public:
    * Combines the input into the aggregation result.
    * @param[out] result The output aggregate value
    * @param input The input value
+   * @param input null_not_record 用于计算平均数
    */
-  void combine_aggregate_values(AggregateValue *result, const AggregateValue &input) {
+  void combine_aggregate_values(AggregateValue *result, 
+    const AggregateValue &input, AggregateValue &null_not_record) {
 
     // 如果需要，先初始化
     auto init_value = [](const Value& intial_value, Value& output) -> bool {
-      if (output.attr_type() == AttrType::UNDEFINED) {
+      if (output.attr_type() == AttrType::NULLS) {
         output = intial_value;
         return true;
       }
@@ -143,48 +139,51 @@ public:
       auto aggr_expr = static_cast<AggretationExpr*>((*agg_exprs_)[i].get());
       switch (aggr_expr->aggr_type()) {
         case AggrFuncType::COUNT_STAR:
+          result->aggregates_[i] = Value::add(result->aggregates_[i], Value(1));
+          break;
         case AggrFuncType::COUNT:
-          if (!init_value(Value(1), result->aggregates_[i])) {
+          if (!input.aggregates_[i].is_null()) {
             result->aggregates_[i] = Value::add(result->aggregates_[i], Value(1));
           }
           break;
         case AggrFuncType::AVG:
+          if (!input.aggregates_[i].is_null()) {
+            if (result->aggregates_[i].is_null()) {
+              result->aggregates_[i] = input.aggregates_[i];
+              null_not_record.aggregates_[i] = Value(1);
+            } else {
+              result->aggregates_[i] = Value::add(result->aggregates_[i], input.aggregates_[i]);
+              null_not_record.aggregates_[i] = Value::add(null_not_record.aggregates_[i], Value(1));
+            }
+          }
+          break;
         case AggrFuncType::SUM:
-          if (!init_value(input.aggregates_[i], result->aggregates_[i])) {
+          if (!input.aggregates_[i].is_null() && 
+            !init_value(input.aggregates_[i], result->aggregates_[i])) {
             result->aggregates_[i] = Value::add(result->aggregates_[i], input.aggregates_[i]);
           }
           break;
         case AggrFuncType::MIN:
-          if (!init_value(input.aggregates_[i], result->aggregates_[i])) {
+          if (!input.aggregates_[i].is_null() && 
+            !init_value(input.aggregates_[i], result->aggregates_[i])) {
             if (input.aggregates_[i].compare(result->aggregates_[i]) < 0) {
               result->aggregates_[i] = input.aggregates_[i];
             }
           } 
           break;
         case AggrFuncType::MAX:
-          if (!init_value(input.aggregates_[i], result->aggregates_[i])) {
+          if (!input.aggregates_[i].is_null() && 
+            !init_value(input.aggregates_[i], result->aggregates_[i])) {
             if (input.aggregates_[i].compare(result->aggregates_[i]) > 0) {
               result->aggregates_[i] = input.aggregates_[i];
             }
-          }
+          } 
           break;
         default:
           LOG_ERROR("aggretion invalid");
           break;
       }
     }
-  }
-
-  /**
-   * Inserts a value into the hash table and then combines it with the current aggregation.
-   * @param agg_key the key to be inserted
-   * @param agg_val the value to be inserted
-   */
-  void insert_combine(const AggregateKey &agg_key, const AggregateValue &agg_val) {
-    if (ht_.count(agg_key) == 0) {
-      ht_.insert({agg_key, generate_initial_aggregateValue()});
-    }
-    combine_aggregate_values(&ht_[agg_key], agg_val);
   }
 
   void clear() { ht_.clear(); }
@@ -220,7 +219,7 @@ private:
   std::vector<std::unique_ptr<Expression>> aggr_exprs_;      // 聚合表达式
   std::unique_ptr<SimpleAggregationHashTable> ht_;    // 聚合哈希表
   AggregateValue aggr_results_;
+  AggregateValue not_null_record_num_;
   std::unique_ptr<AggregationTuple> tuple_;
   bool is_execute_{false};
-  int record_num_{0};
 };
