@@ -81,9 +81,9 @@ public:
   }
 
   PhysicalOperatorType type() const override { return PhysicalOperatorType::HASH_JOIN; }
-  // void set_expressions(std::vector<std::unique_ptr<Expression>>&& expressions) {
-  //   expressions_ = std::move(expressions);
-  // }
+  void set_expressions(std::vector<std::unique_ptr<Expression>>&& expressions) {
+    expressions_ = std::move(expressions);
+  }
 
   void set_left_expressions(std::vector<std::unique_ptr<Expression>>&& expressions) {
     left_expressions_ = std::move(expressions);
@@ -108,7 +108,7 @@ private:
   Tuple *left_tuple_ = nullptr;
   JoinedTuple joined_tuple_;    //! 当前关联的左右两个tuple
   std::unordered_map<AggregateKey, std::vector<Tuple*>> mp_;     // 存放右表的数据结构
-  // std::vector<std::unique_ptr<Expression>> expressions_;
+  std::vector<std::unique_ptr<Expression>> expressions_;
   std::vector<std::unique_ptr<Expression>> left_expressions_;
   std::vector<std::unique_ptr<Expression>> right_expressions_;
 

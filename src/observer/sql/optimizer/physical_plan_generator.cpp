@@ -394,23 +394,20 @@ RC PhysicalPlanGenerator::create_plan(JoinLogicalOperator &join_oper, unique_ptr
 
   vector<unique_ptr<LogicalOperator>> &child_opers = join_oper.children();
   if (child_opers.size() != 2) {
-    LOG_WARN("join operator should have 2 children, but have %d", child_opers.size());
-    return RC::INTERNAL;
+    return RC::SUCCESS;
   }
 
   unique_ptr<PhysicalOperator> join_physical_oper;
 
   // 如果有跨表，且等值表达式的话。那么使用hash, join
   if (join_oper.has_equal_cmp_expression()) {
-    join_physical_oper = std::make_unique<HashJoinPhysicalOperator>();
-    auto ptr = static_cast<HashJoinPhysicalOperator*>(join_physical_oper.get());
-    // ptr->set_left_expressions(std::move(join_oper.left_exprs));
-    // ptr->set_right_expressions(std::move(join_oper.right_exprs));
-    // ptr->set_expressions(std::move(join_oper.expressions()));
+    auto hash_join = new HashJoinPhysicalOperator;
+    hash_join->set_expressions(std::move(join_oper.expressions()));
+    join_physical_oper.reset(static_cast<PhysicalOperator*>(hash_join));
   } else {
-    join_physical_oper = std::make_unique<NestedLoopJoinPhysicalOperator>();
-    auto ptr = static_cast<NestedLoopJoinPhysicalOperator*>(join_physical_oper.get());
-    ptr->set_expressions(std::move(join_oper.expressions()));
+    auto nest_loop = new NestedLoopJoinPhysicalOperator;
+    nest_loop->set_expressions(std::move(join_oper.expressions()));
+    join_physical_oper.reset(static_cast<PhysicalOperator*>(nest_loop));
   }
 
   for (auto &child_oper : child_opers) {

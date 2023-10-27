@@ -43,8 +43,10 @@ RC NestedLoopJoinPhysicalOperator::predicate() {
       if (rc != RC::SUCCESS) {
         return rc;
       }
-      std::cout << joined_tuple_.to_string() << " " << ret.to_string() << std::endl;
-      if (!(ret == Value(true))) {
+      if (ret.compare(Value(static_cast<bool>(false)))) {
+        LOG_WARN("not equal: %s and %s", left_tuple_->to_string().c_str(), right_tuple_->to_string().c_str());
+        LOG_WARN("expression is %s, ret=%s", expression->to_string().c_str(), ret.to_string().c_str());
+        // std::cout << joined_tuple_.to_string() << " " << ret.to_string() << std::endl;
         return RC::NOT_MATHCH;
       }
     }
@@ -179,7 +181,6 @@ RC HashJoinPhysicalOperator::open(Trx* trx) {
   if (rc != RC::SUCCESS || left_->open(trx) != RC::SUCCESS) {
     return rc;
   }
-  // TODO: 可能有左表达式和右表达式相反的情况, 事先做交换
   mp_.clear();
   while ((rc = right_->next()) == RC::SUCCESS) {
     auto right_tuple = right_->current_tuple();
