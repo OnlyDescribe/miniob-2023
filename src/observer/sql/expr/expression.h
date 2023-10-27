@@ -239,6 +239,9 @@ public:
 
   CompOp comp() const { return comp_; }
 
+  // 反转比较符号
+  void reverse_comp();
+
   std::unique_ptr<Expression> &left() { return left_; }
   std::unique_ptr<Expression> &right() { return right_; }
 

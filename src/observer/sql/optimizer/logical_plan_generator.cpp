@@ -115,8 +115,7 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
       join_oper->add_child(std::move(table_oper));
       join_oper->add_child(std::move(table_get_oper));
       table_oper = unique_ptr<LogicalOperator>(join_oper);
-      
-      // 连表条件设置为hashjoin, 里面的连接条件都是等于
+      // 连表条件设置为hashjoin, 里面的连接条件都是AND, OR 暂时不考虑
       if (join_on_units_index < join_on_units.size()) {
         auto& units = join_on_units[join_on_units_index];
         std::vector<unique_ptr<Expression>> cmp_exprs;
@@ -138,6 +137,7 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
         join_oper->set_expressions(std::move(cmp_exprs));
         join_on_units_index++;
       }
+      join_oper->right_table = table;
     }
   }
 

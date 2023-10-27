@@ -14,6 +14,7 @@ See the Mulan PSL v2 for more details. */
 #include <vector>
 #include "sql/optimizer/rewrite_rule.h"
 
+class JoinLogicalOperator;
 /**
  * @brief 将join的条件下推到左右到子节点中
  * @ingroup Rewriter
@@ -28,8 +29,9 @@ public:
   RC rewrite(std::unique_ptr<LogicalOperator> &oper, bool &change_made) override;
 
 private:
-  RC get_exprs_can_pushdown(
-      std::unique_ptr<Expression> &expr, std::vector<std::unique_ptr<Expression>> &pushdown_exprs);
-  RC get_exprs_can_pushdown(
-    std::vector<std::unique_ptr<Expression>> &exprs, std::vector<std::unique_ptr<Expression>> &pushdown_exprs)
+  RC get_exprs_can_pushdown(JoinLogicalOperator* join_oper,
+      std::vector<std::unique_ptr<Expression>> &exprs, 
+      std::vector<std::unique_ptr<Expression>> &pushdown_left_exprs,
+      std::vector<std::unique_ptr<Expression>> &pushdown_right_exprs);
+
 };
