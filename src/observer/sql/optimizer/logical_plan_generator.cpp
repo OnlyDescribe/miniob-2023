@@ -120,18 +120,16 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
         auto& units = join_on_units[join_on_units_index];
         std::vector<unique_ptr<Expression>> cmp_exprs;
         for (int i = 0; i < units.size(); i++) {
-
-         
           const JoinOnObj &join_on_obj_left = units[i]->left();
           const JoinOnObj &join_on_obj_right = units[i]->right();
-
           if (!join_on_obj_left.is_attr && !join_on_obj_right.is_attr &&
                 join_on_obj_left.value.attr_type() != join_on_obj_right.value.attr_type()) {
             ValueExpr *cmp_expr;
             if (units[i]->comp() == CompOp::EQUAL_TO) {
-              cmp_expr = new ValueExpr(Value(true));
+              continue;
             } else {
-              cmp_expr = new ValueExpr(Value(false));
+              join_oper->children().clear();
+              break;
             }
             cmp_exprs.emplace_back(static_cast<Expression*>(cmp_expr));
           } else {
