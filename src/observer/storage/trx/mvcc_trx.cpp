@@ -58,7 +58,7 @@ RC MvccTrxKit::init()
           8 /*attr_len*/,
           2 /*attr_id=*/,
           false /*visible*/,
-          false /*is_not_null*/),  // 指向newer的record/tuple,
+          false /*is_not_null*/),  // 指向newer的record/tuple, 用于rollback
   };
 
   LOG_INFO("init mvcc trx kit done.");
@@ -241,7 +241,6 @@ RC MvccTrx::update_record(Table *table, Record &old_record, Record &new_record)
 
 RC MvccTrx::visit_record(Table *table, Record &record, bool readonly)
 {
-  // 除了首节点, 链内的record应该都是不可见的
   Field begin_field;
   Field end_field;
   Field pointer_field;
@@ -253,7 +252,12 @@ RC MvccTrx::visit_record(Table *table, Record &record, bool readonly)
   RC rc = RC::SUCCESS;
   if (begin_xid > 0 && end_xid > 0) {
     if (trx_id_ >= begin_xid && trx_id_ <= end_xid) {
-      rc = RC::SUCCESS;
+      if (readonly) {
+        rc = RC::SUCCESS;
+      } else {
+        // 对于一个已经被删除且提交的record, 不能对此进行修改
+        rc = RC::LOCKED_CONCURRENCY_CONFLICT;
+      }
     } else {
       rc = RC::RECORD_INVISIBLE;
     }
@@ -270,7 +274,15 @@ RC MvccTrx::visit_record(Table *table, Record &record, bool readonly)
     // end xid 小于0 说明是正在删除但是还没有提交的数据
     if (readonly) {
       // 如果 -end_xid 就是当前事务的事务号，说明是当前事务删除的
-      rc = (-end_xid != trx_id_) ? RC::SUCCESS : RC::RECORD_INVISIBLE;
+      if (-end_xid == trx_id_) {
+        rc = RC::RECORD_INVISIBLE;
+      }
+      // 如果是其他事务号
+      else {
+        if (trx_id_ > begin_xid) {
+          rc = RC::SUCCESS;
+        }
+      }
     } else {
       // 如果当前想要修改此条数据，并且不是当前事务删除的，简单的报错
       // 这是事务并发处理的一种方式，非常简单粗暴。其它的并发处理方法，可以等待，或者让客户端重试
@@ -375,6 +387,30 @@ RC MvccTrx::commit_with_trx_id(int32_t commit_xid)
             rid.to_string().c_str(),
             strrc(rc));
       } break;
+
+      // case Operation::Type::UPDATE: {
+      //   Table *table = operation.table();
+      //   RID rid(operation.page_num(), operation.slot_num());
+
+      //   Field begin_xid_field, end_xid_field, pointer_xid_field;
+      //   trx_fields(table, begin_xid_field, end_xid_field, pointer_xid_field);
+
+      //   auto record_updater = [this, &end_xid_field, commit_xid](Record &record) {
+      //     (void)this;
+      //     ASSERT(end_xid_field.get_int(record) == -trx_id_,
+      //         "got an invalid record while committing. end xid=%d, this trx id=%d",
+      //         end_xid_field.get_int(record),
+      //         trx_id_);
+
+      //     end_xid_field.set_int(record, commit_xid);
+      //   };
+
+      //   rc = operation.table()->visit_record(rid, false /*readonly*/, record_updater);
+      //   ASSERT(rc == RC::SUCCESS,
+      //       "failed to get record while committing. rid=%s, rc=%s",
+      //       rid.to_string().c_str(),
+      //       strrc(rc));
+      // } break;
 
       default: {
         ASSERT(false, "unsupported operation. type=%d", static_cast<int>(operation.type()));
