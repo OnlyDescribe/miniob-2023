@@ -209,7 +209,7 @@ RC PhysicalPlanGenerator::create_plan(TableGetLogicalOperator &table_get_oper, u
         values,
         true /*right_inclusive*/,
         value_metas);
-    
+
     index_scan_oper->set_predicates(std::move(predicates));
     oper = unique_ptr<PhysicalOperator>(index_scan_oper);
     LOG_TRACE("use index scan");
@@ -223,9 +223,9 @@ RC PhysicalPlanGenerator::create_plan(TableGetLogicalOperator &table_get_oper, u
   return RC::SUCCESS;
 }
 
-
 // ORDERBY 下面必须挂对应的算子
-RC PhysicalPlanGenerator::create_plan(OrderByLogicalOperator &orderby_oper, std::unique_ptr<PhysicalOperator> &oper) {
+RC PhysicalPlanGenerator::create_plan(OrderByLogicalOperator &orderby_oper, std::unique_ptr<PhysicalOperator> &oper)
+{
   vector<unique_ptr<LogicalOperator>> &child_opers = orderby_oper.children();
 
   RC rc = RC::SUCCESS;
@@ -418,11 +418,11 @@ RC PhysicalPlanGenerator::create_plan(JoinLogicalOperator &join_oper, unique_ptr
   if (join_oper.has_equal_cmp_expression()) {
     auto hash_join = new HashJoinPhysicalOperator;
     hash_join->set_expressions(std::move(join_oper.expressions()));
-    join_physical_oper.reset(static_cast<PhysicalOperator*>(hash_join));
+    join_physical_oper.reset(static_cast<PhysicalOperator *>(hash_join));
   } else {
     auto nest_loop = new NestedLoopJoinPhysicalOperator;
     nest_loop->set_expressions(std::move(join_oper.expressions()));
-    join_physical_oper.reset(static_cast<PhysicalOperator*>(nest_loop));
+    join_physical_oper.reset(static_cast<PhysicalOperator *>(nest_loop));
   }
 
   for (auto &child_oper : child_opers) {

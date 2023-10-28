@@ -46,7 +46,7 @@ RC Stmt::create_stmt(Db *db, ParsedSqlNode &sql_node, Stmt *&stmt)
     case SCF_SELECT: {
       return SelectStmt::create(db, sql_node.selection, stmt);
     }
-    case SCF_UPDATE:{
+    case SCF_UPDATE: {
       return UpdateStmt::create(db, sql_node.update, stmt);
     }
 

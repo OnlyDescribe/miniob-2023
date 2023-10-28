@@ -8,7 +8,6 @@ EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
 MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
-
 #include "common/rc.h"
 #include "common/log/log.h"
 #include "common/lang/string.h"
@@ -18,8 +17,8 @@ See the Mulan PSL v2 for more details. */
 
 JoinOnStmt::~JoinOnStmt()
 {
-  for (auto units: join_units_) {
-    for (auto unit: units) {
+  for (auto units : join_units_) {
+    for (auto unit : units) {
       delete unit;
     }
   }
@@ -36,11 +35,11 @@ RC JoinOnStmt::create(Db *db, Table *default_table, std::unordered_map<std::stri
   // condition_num 个表
   for (int i = 0; i < condition_num; i++) {
     // 左表和右表的链接条件
-    std::vector<JoinOnUnit*> join_units;
-    
+    std::vector<JoinOnUnit *> join_units;
+
     // 创建当前表的链接条件
     for (int j = 0; j < conditions[i].size(); j++) {
-      JoinOnUnit* join_unit = new JoinOnUnit;
+      JoinOnUnit *join_unit = new JoinOnUnit;
       rc = create_join_unit(db, default_table, tables, conditions[i][j], join_unit);
       if (rc != RC::SUCCESS) {
         delete tmp_stmt;

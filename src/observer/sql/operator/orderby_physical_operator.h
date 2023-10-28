@@ -8,7 +8,6 @@ EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
 MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
-
 #pragma once
 
 #include "sql/operator/physical_operator.h"
@@ -22,14 +21,14 @@ class Trx;
 class OrderbyPhysicalOperator : public PhysicalOperator
 {
 
-struct SortItem
-{
-  std::vector<Value>* key;
-  Tuple* data{nullptr};
-};
+  struct SortItem
+  {
+    std::vector<Value> *key;
+    Tuple *data{nullptr};
+  };
 
 public:
-  OrderbyPhysicalOperator(std::vector<std::unique_ptr<FieldExpr>> &&expressions, std::vector<SortType>&& sortTypes);
+  OrderbyPhysicalOperator(std::vector<std::unique_ptr<FieldExpr>> &&expressions, std::vector<SortType> &&sortTypes);
 
   virtual ~OrderbyPhysicalOperator();
 
@@ -42,11 +41,11 @@ public:
   Tuple *current_tuple() override;
 
 private:
-  std::vector<std::unique_ptr<FieldExpr>> expressions_; 
-  std::vector<SortType> sort_types_; 
+  std::vector<std::unique_ptr<FieldExpr>> expressions_;
+  std::vector<SortType> sort_types_;
   std::vector<SortItem> items_;
   int idx_{0};
-  Tuple* tuple_;
-  
+  Tuple *tuple_;
+
   Trx *trx_ = nullptr;
 };

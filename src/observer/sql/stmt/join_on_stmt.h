@@ -8,7 +8,6 @@ EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
 MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
-
 #pragma once
 
 #include <vector>
@@ -39,7 +38,6 @@ struct JoinOnObj
     this->value = value;
   }
 };
-
 
 // a Join b on a.id = b.id, 表1和表2,
 // 可能会有 a.id = b.id and a.id > 3
@@ -76,7 +74,7 @@ public:
   virtual ~JoinOnStmt();
 
 public:
-  const std::vector<std::vector<JoinOnUnit*>> &join_units() const { return join_units_; }
+  const std::vector<std::vector<JoinOnUnit *>> &join_units() const { return join_units_; }
 
 public:
   static RC create(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,
@@ -84,11 +82,11 @@ public:
 
   static RC create_join_unit(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,
       const ConditionSqlNode &condition, JoinOnUnit *&joinon_unit);
-  
-private:
-  static RC get_table_and_field(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,
-    const RelAttrSqlNode &attr, Table *&table, const FieldMeta *&field);
 
 private:
-  std::vector<std::vector<JoinOnUnit*>> join_units_;  // 默认当前都是AND关系
+  static RC get_table_and_field(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,
+      const RelAttrSqlNode &attr, Table *&table, const FieldMeta *&field);
+
+private:
+  std::vector<std::vector<JoinOnUnit *>> join_units_;  // 默认当前都是AND关系
 };

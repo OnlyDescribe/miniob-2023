@@ -35,14 +35,13 @@ public:
 
   LogicalOperatorType type() const override { return LogicalOperatorType::JOIN; }
 
-  void add_expression(std::unique_ptr<Expression> &&expression) {
-    expressions_.emplace_back(std::move(expression));
-  }
+  void add_expression(std::unique_ptr<Expression> &&expression) { expressions_.emplace_back(std::move(expression)); }
 
-  bool has_equal_cmp_expression() {
-    for (const auto& expression: expressions_) {
+  bool has_equal_cmp_expression()
+  {
+    for (const auto &expression : expressions_) {
       if (expression->type() == ExprType::COMPARISON) {
-        auto exp = static_cast<ComparisonExpr*>(expression.get());
+        auto exp = static_cast<ComparisonExpr *>(expression.get());
         if (exp->comp() == CompOp::EQUAL_TO) {
           return true;
         }
@@ -50,12 +49,11 @@ public:
     }
     return false;
   }
-  
+
   // 右表，用于实现on 时的 过滤谓词下推
-  Table* right_table{nullptr};
+  Table *right_table{nullptr};
 
 private:
   LogicalOperatorType type_{LogicalOperatorType::JOIN};
-  int equal_expes_cnt{0};                     
-  
+  int equal_expes_cnt{0};
 };

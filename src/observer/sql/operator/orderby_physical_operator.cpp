@@ -10,21 +10,21 @@ See the Mulan PSL v2 for more details. */
 
 #include "sql/operator/orderby_physical_operator.h"
 
+OrderbyPhysicalOperator::OrderbyPhysicalOperator(
+    std::vector<std::unique_ptr<FieldExpr>> &&expressions, std::vector<SortType> &&sortTypes)
+    : expressions_(std::move(expressions)), sort_types_(std::move(sortTypes))
+{}
 
-OrderbyPhysicalOperator::OrderbyPhysicalOperator(std::vector<std::unique_ptr<FieldExpr>> &&expressions, 
-    std::vector<SortType> &&sortTypes): 
-    expressions_(std::move(expressions)), 
-    sort_types_(std::move(sortTypes)) {}
-
-OrderbyPhysicalOperator::~OrderbyPhysicalOperator() {
-  for (auto& item: items_) {
+OrderbyPhysicalOperator::~OrderbyPhysicalOperator()
+{
+  for (auto &item : items_) {
     delete item.key;
     delete item.data;
   }
 }
 
-
-RC OrderbyPhysicalOperator::open(Trx *trx) {
+RC OrderbyPhysicalOperator::open(Trx *trx)
+{
   trx_ = trx;
   if (children_.size() != 1 || !children_[0]) {
     return RC::NOT_MATCH;
@@ -35,7 +35,7 @@ RC OrderbyPhysicalOperator::open(Trx *trx) {
   RC rc = children_[0]->open(trx);
 
   while ((rc = children_[0]->next()) == RC::SUCCESS) {
-    Tuple* tuple = children_[0]->current_tuple();
+    Tuple *tuple = children_[0]->current_tuple();
     SortItem item;
     item.key = new std::vector<Value>;
     for (int i = 0; i < expressions_.size(); i++) {
@@ -50,12 +50,12 @@ RC OrderbyPhysicalOperator::open(Trx *trx) {
     items_.push_back(item);
   }
   // 内存排序模型
-  std::sort(items_.begin(), items_.end(), [&](const SortItem& a, const SortItem& b) -> bool {
+  std::sort(items_.begin(), items_.end(), [&](const SortItem &a, const SortItem &b) -> bool {
     assert(a.key->size() == b.key->size());
     assert(a.key->size() == sort_types_.size());
     for (int i = 0; i < a.key->size(); i++) {
       int ret = (*a.key)[i].compare((*b.key)[i]);
-      // -1, a<b, 0: ret=0, 1, 
+      // -1, a<b, 0: ret=0, 1,
       if (ret != 0) {
         bool result = ret < 0;
         // 默认升序
@@ -66,19 +66,21 @@ RC OrderbyPhysicalOperator::open(Trx *trx) {
       }
     }
     return false;
-  }); 
+  });
   idx_ = -1;
   return RC::SUCCESS;
 }
-RC OrderbyPhysicalOperator::next() {
+RC OrderbyPhysicalOperator::next()
+{
   if (++idx_ >= items_.size()) {
     return RC::RECORD_EOF;
   }
   tuple_ = items_[idx_].data;
   return RC::SUCCESS;
 }
-RC OrderbyPhysicalOperator::close() {
-  for (auto& item: items_) {
+RC OrderbyPhysicalOperator::close()
+{
+  for (auto &item : items_) {
     delete item.key;
     delete item.data;
   }
@@ -86,7 +88,4 @@ RC OrderbyPhysicalOperator::close() {
   return RC::SUCCESS;
 }
 
-Tuple *OrderbyPhysicalOperator::current_tuple() {
-  return tuple_;
-}
-
+Tuple *OrderbyPhysicalOperator::current_tuple() { return tuple_; }

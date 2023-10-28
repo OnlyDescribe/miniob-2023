@@ -40,7 +40,9 @@ static void wildcard_fields(Table *table, std::vector<Field> &field_metas)
   }
 }
 
-RC SelectStmt::createField(const std::vector<Table*> &tables, const char* table_name, const char* attr_name, Field& field) {
+RC SelectStmt::createField(
+    const std::vector<Table *> &tables, const char *table_name, const char *attr_name, Field &field)
+{
   // 如果没有使用table.attr name的形式，默认使用tables[0]的表名，建立排序字段
   std::string table_name_str(table_name);
   if (table_name_str.empty()) {
@@ -49,7 +51,7 @@ RC SelectStmt::createField(const std::vector<Table*> &tables, const char* table_
     }
     table_name_str = tables[0]->name();
   }
-  for (auto table: tables) {
+  for (auto table : tables) {
     if (!strcmp(table->name(), table_name_str.c_str())) {
       const FieldMeta *field_meta = table->table_meta().field(attr_name);
       if (nullptr == field_meta) {
@@ -187,7 +189,6 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
     default_table = tables[0];
   }
 
-
   // create filter statement in `where` statement
   FilterStmt *filter_stmt = nullptr;
   RC rc = FilterStmt::create(db,
@@ -214,10 +215,10 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
     return rc;
   }
 
-  // create orderby 
+  // create orderby
   auto orderbys = std::make_unique<std::vector<OrderByUnit>>();
   orderbys->reserve(select_sql.orderbys.size());
-  for (auto& order_by: select_sql.orderbys) {
+  for (auto &order_by : select_sql.orderbys) {
     Field field;
     rc = createField(tables, order_by.attr.relation_name.c_str(), order_by.attr.attribute_name.c_str(), field);
     if (rc != RC::SUCCESS) {

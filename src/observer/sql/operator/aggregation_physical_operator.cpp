@@ -9,14 +9,14 @@ EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
 MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
-
 #include "sql/operator/aggregation_physical_operator.h"
 #include "storage/table/table.h"
 #include "event/sql_debug.h"
 
 using namespace std;
 
-RC AggregationPhysicalOperator::open(Trx *trx) {
+RC AggregationPhysicalOperator::open(Trx *trx)
+{
   if (children_.empty()) {
     return RC::INTERNAL;
   }
@@ -25,7 +25,7 @@ RC AggregationPhysicalOperator::open(Trx *trx) {
   not_null_record_num_ = ht_->generate_initial_aggregateValue();
   const auto child_op = children_.front().get();
   RC rc = child_op->open(trx);
-  Tuple* tuple;
+  Tuple *tuple;
   while (child_op->next() == RC::SUCCESS) {
     tuple = child_op->current_tuple();
 
@@ -44,19 +44,22 @@ RC AggregationPhysicalOperator::open(Trx *trx) {
 }
 
 // 只能执行一次
-RC AggregationPhysicalOperator::next() {
+RC AggregationPhysicalOperator::next()
+{
   if (is_execute_) {
     return RC::RECORD_EOF;
   }
   // 拿到所有的fields
   std::vector<Field> fields;
-  for (const auto& aggr_expr: aggr_exprs_) {
-    fields.push_back(static_cast<AggretationExpr*>(aggr_expr.get())->filed());
+  for (const auto &aggr_expr : aggr_exprs_) {
+    fields.push_back(static_cast<AggretationExpr *>(aggr_expr.get())->filed());
   }
   // 更改avg的结果, 统一改成float
   for (int i = 0; i < aggr_results_.aggregates_.size(); i++) {
-    if (!not_null_record_num_.aggregates_[i].is_null() && static_cast<AggretationExpr*>(aggr_exprs_[i].get())->aggr_type() == AggrFuncType::AVG) {
-      aggr_results_.aggregates_[i] = Value(aggr_results_.aggregates_[i].get_float() / not_null_record_num_.aggregates_[i].get_int());
+    if (!not_null_record_num_.aggregates_[i].is_null() &&
+        static_cast<AggretationExpr *>(aggr_exprs_[i].get())->aggr_type() == AggrFuncType::AVG) {
+      aggr_results_.aggregates_[i] =
+          Value(aggr_results_.aggregates_[i].get_float() / not_null_record_num_.aggregates_[i].get_int());
     }
   }
   tuple_ = std::make_unique<AggregationTuple>(aggr_results_.aggregates_, fields);
@@ -64,7 +67,4 @@ RC AggregationPhysicalOperator::next() {
   return RC::SUCCESS;
 }
 
-Tuple * AggregationPhysicalOperator::current_tuple() {
-  return tuple_.get();
-}
-
+Tuple *AggregationPhysicalOperator::current_tuple() { return tuple_.get(); }

@@ -28,10 +28,12 @@ class JoinOnStmt;
 class Db;
 class Table;
 
-struct OrderByUnit{
+struct OrderByUnit
+{
   Field field;
   SortType sort_type;
-  OrderByUnit(const Field& other_field, const SortType& other_sort_type) {
+  OrderByUnit(const Field &other_field, const SortType &other_sort_type)
+  {
     field = other_field;
     sort_type = other_sort_type;
   }
@@ -51,7 +53,8 @@ public:
 
 public:
   static RC create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt);
-  static RC createField(const std::vector<Table*> &tables, const char* table_name, const char* attr_name, Field& field);
+  static RC createField(
+      const std::vector<Table *> &tables, const char *table_name, const char *attr_name, Field &field);
 
 public:
   void set_is_aggregation_stmt(bool is_aggregation_stmt) { is_aggregation_stmt_ = is_aggregation_stmt; }
@@ -60,7 +63,7 @@ public:
   const std::vector<Field> &query_fields() const { return query_fields_; }
   FilterStmt *filter_stmt() const { return filter_stmt_; }
   JoinOnStmt *join_on_stmt() const { return join_on_stmt_; }
-  std::vector<OrderByUnit>* orderbys() const { return orderbys_.get(); }
+  std::vector<OrderByUnit> *orderbys() const { return orderbys_.get(); }
 
 private:
   std::vector<Field> query_fields_;

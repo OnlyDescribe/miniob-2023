@@ -39,12 +39,12 @@ public:
   RC close() override;
   Tuple *current_tuple() override;
 
-  void set_expressions(std::vector<std::unique_ptr<Expression>>&& expressions) {
+  void set_expressions(std::vector<std::unique_ptr<Expression>> &&expressions)
+  {
     expressions_ = std::move(expressions);
   }
 
   RC predicate();
-
 
 private:
   RC left_next();   //! 左表遍历下一条数据
@@ -58,10 +58,10 @@ private:
   PhysicalOperator *right_ = nullptr;
   Tuple *left_tuple_ = nullptr;
   Tuple *right_tuple_ = nullptr;
-  JoinedTuple joined_tuple_;  //! 当前关联的左右两个tuple
-  bool round_done_ = true;    //! 右表遍历的一轮是否结束
-  bool right_closed_ = true;  //! 右表算子是否已经关闭
-  std::vector<std::unique_ptr<Expression>> expressions_;      //! 值表达式
+  JoinedTuple joined_tuple_;                              //! 当前关联的左右两个tuple
+  bool round_done_ = true;                                //! 右表遍历的一轮是否结束
+  bool right_closed_ = true;                              //! 右表算子是否已经关闭
+  std::vector<std::unique_ptr<Expression>> expressions_;  //! 值表达式
 };
 
 /**
@@ -72,19 +72,20 @@ class HashJoinPhysicalOperator : public PhysicalOperator
 {
 public:
   HashJoinPhysicalOperator();
-  virtual ~HashJoinPhysicalOperator() {
-    for(auto& [k, tuple_vec]: mp_) {
-      for (auto tuple: tuple_vec) {
+  virtual ~HashJoinPhysicalOperator()
+  {
+    for (auto &[k, tuple_vec] : mp_) {
+      for (auto tuple : tuple_vec) {
         delete tuple;
       }
     }
   }
 
   PhysicalOperatorType type() const override { return PhysicalOperatorType::HASH_JOIN; }
-  void set_expressions(std::vector<std::unique_ptr<Expression>>&& expressions) {
+  void set_expressions(std::vector<std::unique_ptr<Expression>> &&expressions)
+  {
     expressions_ = std::move(expressions);
   }
-
 
   RC open(Trx *trx) override;
   RC next() override;
@@ -100,11 +101,11 @@ private:
   PhysicalOperator *left_ = nullptr;
   PhysicalOperator *right_ = nullptr;
   Tuple *left_tuple_ = nullptr;
-  JoinedTuple joined_tuple_;    //! 当前关联的左右两个tuple
-  std::unordered_map<AggregateKey, std::vector<Tuple*>> mp_;     // 存放右表的数据结构
-  std::vector<std::unique_ptr<Expression>> expressions_;            // 存放比较表达式，用于过滤
-  std::vector<std::unique_ptr<Expression>> left_expressions_;     // 用于左表的hash join
-  std::vector<std::unique_ptr<Expression>> right_expressions_;    // 用于右表的hash join
+  JoinedTuple joined_tuple_;                                    //! 当前关联的左右两个tuple
+  std::unordered_map<AggregateKey, std::vector<Tuple *>> mp_;   // 存放右表的数据结构
+  std::vector<std::unique_ptr<Expression>> expressions_;        // 存放比较表达式，用于过滤
+  std::vector<std::unique_ptr<Expression>> left_expressions_;   // 用于左表的hash join
+  std::vector<std::unique_ptr<Expression>> right_expressions_;  // 用于右表的hash join
 
-  std::queue<Tuple*> right_results_;      // 和当前left_tuple匹配的右表 
+  std::queue<Tuple *> right_results_;                           // 和当前left_tuple匹配的右表
 };

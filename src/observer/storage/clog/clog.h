@@ -210,7 +210,7 @@ public:
   std::string to_string() const;
 
 protected:
-  CLogRecordHeader header_;  ///< 日志头信息
+  CLogRecordHeader header_;             ///< 日志头信息
 
   CLogRecordData data_record_;          ///< 如果日志操作的是数据，此结构生效
   CLogRecordCommitData commit_record_;  ///< 如果是事务提交日志，此结构生效

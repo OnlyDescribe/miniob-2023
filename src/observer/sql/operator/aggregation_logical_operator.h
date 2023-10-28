@@ -27,16 +27,12 @@ public:
   LogicalOperatorType type() const override { return LogicalOperatorType::AGGREGATION; }
 
   // 从fields 构造聚合表达式
-  void set_aggregation_expr(const std::vector<Field>& fields) {
-    for (const auto& field: fields) {
+  void set_aggregation_expr(const std::vector<Field> &fields)
+  {
+    for (const auto &field : fields) {
       expressions_.emplace_back(std::make_unique<AggretationExpr>(field, field.get_aggr_type()));
     }
-  } 
-  void set_aggregation_expr(std::vector<std::unique_ptr<Expression>> &&exprs) {
-    expressions_ = std::move(exprs);
   }
-  const std::vector<std::unique_ptr<Expression>> &aggregation_expr() const {
-    return expressions_;
-  }
-  
+  void set_aggregation_expr(std::vector<std::unique_ptr<Expression>> &&exprs) { expressions_ = std::move(exprs); }
+  const std::vector<std::unique_ptr<Expression>> &aggregation_expr() const { return expressions_; }
 };

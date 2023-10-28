@@ -99,7 +99,7 @@ RC TableMeta::init(int32_t table_id, const char *name, int field_num, const Attr
 
   // 增加 NULL 字段, 为了尽可能减少代码的改动, 将该字段放在record的最后部分
   // 这里直接每个bit对应相应的字段是否为null值, 与mysql的实现不同
-  int null_field_len = (field_num + trx_field_num - 1) / 8 + 1;  // bitmap字节数
+  int null_field_len = (field_num + trx_field_num - 1) / 8 + 1;                           // bitmap字节数
   rc = fields_[trx_field_num + field_num].init(
       "__null", AttrType::CHARS, field_offset, null_field_len, field_num, false, false);  // bitmap可变长, CHARS类型
   if (RC::SUCCESS != rc) {

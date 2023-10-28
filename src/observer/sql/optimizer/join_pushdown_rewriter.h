@@ -8,7 +8,6 @@ EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
 MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
-
 #pragma once
 
 #include <vector>
@@ -29,10 +28,7 @@ public:
   RC rewrite(std::unique_ptr<LogicalOperator> &oper, bool &change_made) override;
 
 private:
-  RC get_exprs_can_pushdown(JoinLogicalOperator* join_oper,
-      std::vector<std::unique_ptr<Expression>> &exprs, 
+  RC get_exprs_can_pushdown(JoinLogicalOperator *join_oper, std::vector<std::unique_ptr<Expression>> &exprs,
       std::vector<std::unique_ptr<Expression>> &pushdown_left_exprs,
-      std::vector<std::unique_ptr<Expression>> &pushdown_right_exprs,
-      bool &change_made);
-
+      std::vector<std::unique_ptr<Expression>> &pushdown_right_exprs, bool &change_made);
 };

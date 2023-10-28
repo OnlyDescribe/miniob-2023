@@ -293,9 +293,8 @@ int Value::compare(const Value &other) const
   // common comparison for NULLS
   else if (this->attr_type_ == NULLS || other.attr_type_ == NULLS) {
     LOG_WARN("can not compare");
-  } 
-  else if ((this->attr_type_ == CHARS && (other.attr_type_ == FLOATS || other.attr_type_ == INTS))
-   || (other.attr_type_ == CHARS && (this->attr_type_ == FLOATS || this->attr_type_ == INTS))) {
+  } else if ((this->attr_type_ == CHARS && (other.attr_type_ == FLOATS || other.attr_type_ == INTS)) ||
+             (other.attr_type_ == CHARS && (this->attr_type_ == FLOATS || this->attr_type_ == INTS))) {
     if (attr_type_ == CHARS) {
       return common::compare_string_and_num(this->str_value_, other.get_float());
     } else {

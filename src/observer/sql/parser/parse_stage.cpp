@@ -49,7 +49,7 @@ RC ParseStage::handle_request(SQLStageEvent *sql_event)
   }
 
   std::unique_ptr<ParsedSqlNode> sql_node = std::move(parsed_sql_result.sql_nodes().front());
-  
+
   if (sql_node->flag == SCF_INVALID) {
     rc = RC::VARIABLE_NOT_VALID;
     sql_result->set_return_code(rc);

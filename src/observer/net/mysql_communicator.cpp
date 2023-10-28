@@ -88,7 +88,7 @@ enum enum_field_types
   MYSQL_TYPE_TIME2,       /**< Internal to MySQL. Not used in protocol */
   MYSQL_TYPE_TYPED_ARRAY, /**< Used for replication only */
   MYSQL_TYPE_INVALID = 243,
-  MYSQL_TYPE_BOOL = 244, /**< Currently just a placeholder */
+  MYSQL_TYPE_BOOL = 244,  /**< Currently just a placeholder */
   MYSQL_TYPE_JSON = 245,
   MYSQL_TYPE_NEWDECIMAL = 246,
   MYSQL_TYPE_ENUM = 247,
@@ -325,7 +325,7 @@ struct HandshakeV10 : public BasePacket
 {
   int8_t protocol = 10;
   char server_version[7] = "5.7.25";
-  int32_t thread_id = 21501807;  // conn id
+  int32_t thread_id = 21501807;         // conn id
   char auth_plugin_data_part_1[9] =
       "12345678";                       // first 8 bytes of the plugin provided data (scramble) // and the filler
   int16_t capability_flags_1 = 0xF7DF;  // The lower 2 bytes of the Capabilities Flags
