@@ -54,15 +54,23 @@ RC OrderbyPhysicalOperator::open(Trx *trx)
     assert(a.key->size() == b.key->size());
     assert(a.key->size() == sort_types_.size());
     for (int i = 0; i < a.key->size(); i++) {
-      int ret = (*a.key)[i].compare((*b.key)[i]);
-      // -1, a<b, 0: ret=0, 1,
-      if (ret != 0) {
-        bool result = ret < 0;
-        // 默认升序
-        if (sort_types_[i] == SortType::DESC) {
-          result = !result;
+      if ((*a.key)[i].attr_type() == AttrType::NULLS && (*b.key)[i].attr_type() != AttrType::NULLS) {
+        return sort_types_[i] == SortType::ASC ? true : false;
+      } else if ((*a.key)[i].attr_type() != AttrType::NULLS && (*b.key)[i].attr_type() == AttrType::NULLS) {
+        return sort_types_[i] == SortType::ASC ? false : true;
+      } else if ((*a.key)[i].attr_type() == AttrType::NULLS && (*b.key)[i].attr_type() == AttrType::NULLS) {
+        continue;
+      } else {
+        int ret = (*a.key)[i].compare((*b.key)[i]);
+        // -1, a<b, 0: ret=0, 1,
+        if (ret != 0) {
+          bool result = ret < 0;
+          // 默认升序
+          if (sort_types_[i] == SortType::DESC) {
+            result = !result;
+          }
+          return result;
         }
-        return result;
       }
     }
     return false;
