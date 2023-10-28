@@ -70,16 +70,15 @@ int compare_date(void *arg1, void *arg2)
 int compare_string_and_num(const std::string& s, float num) {
   try
   {
+    // 尝试转换
     float a = std::stof(s);
     return compare_float(&a, &num);
   }
   catch(const std::exception& e)
   {
-    auto b = std::to_string(num);
-    if (s == b) {
-      return 0;
-    }
-    return compare_string((void*)s.c_str(), s.size(), (void*)b.c_str(), b.size());
+    // 转换不成功，就转化为0
+    float a = 0;
+    return compare_float(&a, &num);
   }
   return -1;
 }
