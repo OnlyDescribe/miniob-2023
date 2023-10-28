@@ -122,16 +122,6 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
         for (int i = 0; i < units.size(); i++) {
           const JoinOnObj &join_on_obj_left = units[i]->left();
           const JoinOnObj &join_on_obj_right = units[i]->right();
-          // if (join_on_obj_left.value.attr_type() != join_on_obj_right.value.attr_type()) {
-          //   if (!join_on_obj_left.is_attr && !join_on_obj_right.is_attr) {
-          //     if (units[i]->comp() == CompOp::EQUAL_TO) {
-          //       continue;
-          //     } else {
-          //       join_oper->children().clear();
-          //       break;
-          //     }
-          //   }
-          // } else {
           unique_ptr<Expression> left(join_on_obj_left.is_attr
                                           ? static_cast<Expression *>(new FieldExpr(join_on_obj_left.field))
                                           : static_cast<Expression *>(new ValueExpr(join_on_obj_left.value)));
@@ -142,7 +132,6 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
 
           ComparisonExpr *cmp_expr = new ComparisonExpr(units[i]->comp(), std::move(left), std::move(right));
           cmp_exprs.emplace_back(static_cast<Expression*>(cmp_expr));
-          // }
         }
         join_oper->set_expressions(std::move(cmp_exprs));
         join_on_units_index++;
