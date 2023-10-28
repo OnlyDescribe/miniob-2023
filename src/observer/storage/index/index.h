@@ -81,7 +81,7 @@ protected:
   RC init(const IndexMeta &index_meta, const std::vector<FieldMeta> &field_metas);
 
 protected:
-  IndexMeta index_meta_;                ///< 索引的元数据
+  IndexMeta index_meta_;  ///< 索引的元数据
   // 字段存在顺序, 最后一个放的是bitmap的元数据
   std::vector<FieldMeta> field_metas_;  ///< multi-index
 };

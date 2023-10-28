@@ -9,6 +9,8 @@
 clog
 *.data
 *.table
+*.index
+*.tmp
 *.sql
 ./docs/doxy/
 build/*

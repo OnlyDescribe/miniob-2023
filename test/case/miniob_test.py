@@ -724,6 +724,7 @@ class TestSuite:
       return True
     else:
       result = self.__compare_files(result_tmp_file_name, result_file_name)
+      print(result_tmp_file_name, result_file_name)
       if not GlobalConfig.debug:
         #os.remove(result_tmp_file_name)
         pass

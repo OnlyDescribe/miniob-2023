@@ -94,7 +94,7 @@ bool IndexNodeHandler::is_safe(BplusTreeOperationType op, bool is_root_node)
       return size() < max_size();
     } break;
     case BplusTreeOperationType::DELETE: {
-      if (is_root_node) {  // 参考adjust_root
+      if (is_root_node) {     // 参考adjust_root
         if (node_->is_leaf) {
           return size() > 1;  // 根节点如果空的话，就需要删除整棵树
         }
@@ -1711,7 +1711,7 @@ RC BplusTreeScanner::open(const char *left_user_key, int left_len, bool left_inc
     LeafIndexNodeHandler left_node(tree_handler_.file_header_, current_frame_);
     int left_index = left_node.lookup(tree_handler_.key_comparator_, left_key);
     // lookup 返回的是适合插入的位置，还需要判断一下是否在合适的边界范围内
-    if (left_index >= left_node.size()) {  // 超出了当前页，就需要向后移动一个位置
+    if (left_index >= left_node.size()) {          // 超出了当前页，就需要向后移动一个位置
       const PageNum next_page_num = left_node.next_page();
       if (next_page_num == BP_INVALID_PAGE_NUM) {  // 这里已经是最后一页，说明当前扫描，没有数据
         latch_memo_.release();

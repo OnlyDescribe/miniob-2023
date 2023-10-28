@@ -196,7 +196,7 @@ public:
       Frame *frame = nullptr;
       std::string texts;  // 文本内容
 
-      PageNum page_num;  // 溢出页号
+      PageNum page_num;   // 溢出页号
       int record_offset{0};
       memcpy(&page_num,
           this->record_->data() + field_meta->offset() + record_offset,

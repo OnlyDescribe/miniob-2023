@@ -67,4 +67,20 @@ int compare_date(void *arg1, void *arg2)
   return v1 - v2;
 }
 
+int compare_string_and_num(const std::string& s, float num) {
+  try
+  {
+    // 尝试转换
+    float a = std::stof(s);
+    return compare_float(&a, &num);
+  }
+  catch(const std::exception& e)
+  {
+    // 转换不成功，就转化为0
+    float a = 0;
+    return compare_float(&a, &num);
+  }
+  return -1;
+}
+
 } // namespace common

@@ -92,13 +92,13 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
   const std::vector<Table *> &tables = select_stmt->tables();
   const std::vector<Field> &all_fields = select_stmt->query_fields();
   // 连表条件
-  const auto& join_on_units = select_stmt->join_on_stmt()->join_units();
+  const auto &join_on_units = select_stmt->join_on_stmt()->join_units();
 
   if (!join_on_units.empty() && join_on_units.size() + 1 != tables.size()) {
     return RC::JOIN_ERROR;
   }
   int join_on_units_index = 0;
-  
+
   for (Table *table : tables) {
     std::vector<Field> fields;
     for (const Field &field : all_fields) {
@@ -115,36 +115,28 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
       join_oper->add_child(std::move(table_oper));
       join_oper->add_child(std::move(table_get_oper));
       table_oper = unique_ptr<LogicalOperator>(join_oper);
-      // 连表条件设置为hashjoin, 里面的连接条件都是等于
+      // 连表条件设置为hashjoin, 里面的连接条件都是AND, OR 暂时不考虑
       if (join_on_units_index < join_on_units.size()) {
-        auto& units = join_on_units[join_on_units_index];
-        std::vector<std::unique_ptr<Expression>> left_expressions;
-        std::vector<std::unique_ptr<Expression>> right_expressions;
-        // std::vector<unique_ptr<Expression>> cmp_exprs;
+        auto &units = join_on_units[join_on_units_index];
+        std::vector<unique_ptr<Expression>> cmp_exprs;
         for (int i = 0; i < units.size(); i++) {
           const JoinOnObj &join_on_obj_left = units[i]->left();
           const JoinOnObj &join_on_obj_right = units[i]->right();
-
           unique_ptr<Expression> left(join_on_obj_left.is_attr
                                           ? static_cast<Expression *>(new FieldExpr(join_on_obj_left.field))
                                           : static_cast<Expression *>(new ValueExpr(join_on_obj_left.value)));
 
           unique_ptr<Expression> right(join_on_obj_right.is_attr
-                                          ? static_cast<Expression *>(new FieldExpr(join_on_obj_right.field))
-                                          : static_cast<Expression *>(new ValueExpr(join_on_obj_right.value)));
+                                           ? static_cast<Expression *>(new FieldExpr(join_on_obj_right.field))
+                                           : static_cast<Expression *>(new ValueExpr(join_on_obj_right.value)));
 
-          // TODO: 左右表达式可能需要换
-          left_expressions.emplace_back(std::move(left));
-          right_expressions.emplace_back(std::move(right));
-          // ComparisonExpr *cmp_expr = new ComparisonExpr(units[i]->comp(), std::move(left), std::move(right));
-          // cmp_exprs.emplace_back(cmp_expr);
+          ComparisonExpr *cmp_expr = new ComparisonExpr(units[i]->comp(), std::move(left), std::move(right));
+          cmp_exprs.emplace_back(static_cast<Expression *>(cmp_expr));
         }
-        join_oper->left_exprs.swap(left_expressions);
-        join_oper->right_exprs.swap(right_expressions);
-        // join_oper->set_expressions(std::move(cmp_exprs));
-        join_oper->set_type(LogicalOperatorType::HASH_JOIN);
+        join_oper->set_expressions(std::move(cmp_exprs));
         join_on_units_index++;
       }
+      join_oper->right_table = table;
     }
   }
 
@@ -274,14 +266,18 @@ RC LogicalPlanGenerator::create_plan(DeleteStmt *delete_stmt, unique_ptr<Logical
   return rc;
 }
 
-RC LogicalPlanGenerator::create_plan(std::vector<OrderByUnit> *orderbys, std::unique_ptr<LogicalOperator> &logical_operator) {
+RC LogicalPlanGenerator::create_plan(
+    std::vector<OrderByUnit> *orderbys, std::unique_ptr<LogicalOperator> &logical_operator)
+{
   std::vector<SortType> sort_types;
   std::vector<std::unique_ptr<FieldExpr>> field_exprs;
   for (int i = 0; i < orderbys->size(); i++) {
     field_exprs.emplace_back(new FieldExpr((*orderbys)[i].field));
     sort_types.emplace_back((*orderbys)[i].sort_type);
   }
-  logical_operator = std::make_unique<OrderByLogicalOperator>(std::move(field_exprs), std::move(sort_types));
+  if (!field_exprs.empty()) {
+    logical_operator = std::make_unique<OrderByLogicalOperator>(std::move(field_exprs), std::move(sort_types));
+  }
   return RC::SUCCESS;
 }
 

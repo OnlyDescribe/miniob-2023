@@ -50,10 +50,10 @@ enum class AggrFuncType
  */
 struct RelAttrSqlNode
 {
-  std::string relation_name;   ///< relation name (may be NULL) 表名
-  std::string attribute_name;  ///< attribute name              属性名
-  AggrFuncType aggr_type = AggrFuncType::INVALID;     // 聚合类型
-  std::vector<std::string> aggregates;          // 聚合字段
+  std::string relation_name;                       ///< relation name (may be NULL) 表名
+  std::string attribute_name;                      ///< attribute name              属性名
+  AggrFuncType aggr_type = AggrFuncType::INVALID;  // 聚合类型
+  std::vector<std::string> aggregates;             // 聚合字段
 };
 
 /**
@@ -77,21 +77,22 @@ enum CompOp
 
 /**
  * @description: 排序类型
- * 
+ *
  */
-enum class SortType {
+enum class SortType
+{
   ASC,
   DESC
 };
-
 
 /**
  * @description: 一个OrderBy单元
  * @return {*}
  */
-struct OrderBy {
-  RelAttrSqlNode attr;        // order_by的属性
-  SortType sort_type;          // 排序类型, 
+struct OrderBy
+{
+  RelAttrSqlNode attr;  // order_by的属性
+  SortType sort_type;   // 排序类型,
 };
 /**
  * @brief 表示一个条件比较
@@ -119,11 +120,11 @@ struct ConditionSqlNode
  * @return {*}
  */
 
-struct WhereSqlNode {
+struct WhereSqlNode
+{
   std::vector<ConditionSqlNode> conditions;
   std::vector<OrderBy> orderbys;
 };
-
 
 /**
  * @description: 把 SelectSqlNode 所有表join起来的条件
@@ -131,9 +132,10 @@ struct WhereSqlNode {
  * @return {*}
  */
 
-struct JoinSqlNode {
-  std::vector<std::string> relations;      // 需要join的表
-  std::vector<std::vector<ConditionSqlNode>> join_conds;  // 把表join起来的条件, 
+struct JoinSqlNode
+{
+  std::vector<std::string> relations;                     // 需要join的表
+  std::vector<std::vector<ConditionSqlNode>> join_conds;  // 把表join起来的条件,
 };
 
 /**
@@ -149,11 +151,11 @@ struct JoinSqlNode {
 
 struct SelectSqlNode
 {
-  std::vector<RelAttrSqlNode> attributes;    ///< attributes in select clause
-  std::vector<std::string> relations;        ///< 查询的表
-  std::vector<ConditionSqlNode> conditions;  ///< 查询条件，使用AND串联起来多个条件
-  std::vector<std::vector<ConditionSqlNode>> join_conds;       ///< 做连接时，把relations连接起来的条件。
-  std::vector<OrderBy> orderbys;            // oderby条件
+  std::vector<RelAttrSqlNode> attributes;                 ///< attributes in select clause
+  std::vector<std::string> relations;                     ///< 查询的表
+  std::vector<ConditionSqlNode> conditions;               ///< 查询条件，使用AND串联起来多个条件
+  std::vector<std::vector<ConditionSqlNode>> join_conds;  ///< 做连接时，把relations连接起来的条件。
+  std::vector<OrderBy> orderbys;                          // oderby条件
 
   bool IsAttributesVailid()
   {
@@ -165,7 +167,6 @@ struct SelectSqlNode
     }
     return relattr_cnt == 0 || (relattr_cnt == static_cast<int>(attributes.size()));
   }
-
 };
 
 /**
@@ -216,7 +217,7 @@ struct UpdateSqlNode
 {
   // std::vector<std::string> attribute_names;  ///< 更新的字段，支持多字段
   // std::vector<Value> values;           ///< 更新的值，支持多字段
-  std::string relation_name;                 ///< Relation to update
+  std::string relation_name;  ///< Relation to update
   std::vector<AssignmentSqlNode> assignments;
   std::vector<ConditionSqlNode> conditions;
 };

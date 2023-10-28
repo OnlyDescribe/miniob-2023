@@ -26,12 +26,12 @@ See the Mulan PSL v2 for more details. */
 
 class Tuple;
 const static std::unordered_map<AggrFuncType, std::string> AggretationExprStr = {
-  { AggrFuncType::MAX, "MAX" },
-  { AggrFuncType::MIN, "MIN" },
-  { AggrFuncType::AVG, "AVG" },
-  { AggrFuncType::SUM, "SUM" },
-  { AggrFuncType::COUNT, "COUNT" },
-  { AggrFuncType::COUNT_STAR, "COUNT" },
+    {AggrFuncType::MAX, "MAX"},
+    {AggrFuncType::MIN, "MIN"},
+    {AggrFuncType::AVG, "AVG"},
+    {AggrFuncType::SUM, "SUM"},
+    {AggrFuncType::COUNT, "COUNT"},
+    {AggrFuncType::COUNT_STAR, "COUNT"},
 };
 
 /**
@@ -96,27 +96,18 @@ public:
    */
   virtual AttrType value_type() const = 0;
 
-  virtual std::string to_string() {
-    switch (type())
-    {
-    case ExprType::STAR:
-      return "STAR";
-    case ExprType::FIELD:
-      return "FIELD";
-    case ExprType::VALUE:
-      return "VALUE";
-    case ExprType::AGGRFUNCTION:
-      return "AGGRFUNCTION";
-    case ExprType::CAST:
-      return "CAST";
-    case ExprType::COMPARISON:
-      return "COMPARISON";
-    case ExprType::CONJUNCTION:
-      return "CONJUNCTION";
-    case ExprType::ARITHMETIC:
-      return "ARITHMETIC";
-    default:
-      break;
+  virtual std::string to_string()
+  {
+    switch (type()) {
+      case ExprType::STAR: return "STAR";
+      case ExprType::FIELD: return "FIELD";
+      case ExprType::VALUE: return "VALUE";
+      case ExprType::AGGRFUNCTION: return "AGGRFUNCTION";
+      case ExprType::CAST: return "CAST";
+      case ExprType::COMPARISON: return "COMPARISON";
+      case ExprType::CONJUNCTION: return "CONJUNCTION";
+      case ExprType::ARITHMETIC: return "ARITHMETIC";
+      default: break;
     }
     return "NOT SUPPORT";
   }
@@ -235,9 +226,12 @@ public:
 
   AttrType value_type() const override { return BOOLEANS; }
 
-  bool is_like(const std::string& s, const std::string& pattern) const;
+  bool is_like(const std::string &s, const std::string &pattern) const;
 
   CompOp comp() const { return comp_; }
+
+  // 反转比较符号
+  void reverse_comp();
 
   std::unique_ptr<Expression> &left() { return left_; }
   std::unique_ptr<Expression> &right() { return right_; }
@@ -364,7 +358,8 @@ public:
 
   Field filed() const { return field_; }
 
-  static std::string to_string(const Field& field, AggrFuncType aggr_func_type) {
+  static std::string to_string(const Field &field, AggrFuncType aggr_func_type)
+  {
     auto it = AggretationExprStr.find(aggr_func_type);
     if (it == AggretationExprStr.end()) {
       return "";

@@ -231,6 +231,18 @@ RC ComparisonExpr::get_value(const Tuple &tuple, Value &value) const
   return rc;
 }
 
+// 反转比较符号
+void ComparisonExpr::reverse_comp()
+{
+  switch (comp_) {
+    case CompOp::GREAT_EQUAL: comp_ = CompOp::LESS_EQUAL; break;
+    case CompOp::GREAT_THAN: comp_ = CompOp::LESS_THAN; break;
+    case CompOp::LESS_EQUAL: comp_ = CompOp::GREAT_EQUAL; break;
+    case CompOp::LESS_THAN: comp_ = CompOp::GREAT_THAN; break;
+    default: break;
+  }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 ConjunctionExpr::ConjunctionExpr(Type type, vector<unique_ptr<Expression>> &children)
     : conjunction_type_(type), children_(std::move(children))
@@ -406,6 +418,11 @@ RC AggretationExpr::get_value(const Tuple &tuple, Value &value) const
     case AggrFuncType::SUM:
     case AggrFuncType::AVG: rc = tuple.find_cell(TupleCellSpec(field_.table_name(), field_.field_name()), value); break;
     case AggrFuncType::COUNT:
+      rc = tuple.find_cell(TupleCellSpec(field_.table_name(), field_.field_name()), value);
+      if (!value.is_null()) {
+        value = Value(1);
+      }
+      break;
     case AggrFuncType::COUNT_STAR: value.set_int(1); break;
     default: break;
   }
