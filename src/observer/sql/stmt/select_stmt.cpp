@@ -201,38 +201,13 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
     return rc;
   }
 
-  std::vector<std::vector<ConditionSqlNode>> conditions;
-
-  // 把joins里面, a.id > 3 这种condition 放到filter里面
-  for (int i = 0; i < select_sql.join_conds.size(); i++) {
-    std::vector<ConditionSqlNode> join_on_condtions;
-    for (auto condition: select_sql.join_conds[i]) {
-      if (condition.comp != CompOp::EQUAL_TO) {
-        // 这种先不支持
-        if (condition.left_is_attr && condition.right_is_attr) {
-          LOG_WARN("not support attr comp attr type");
-        } else {
-          FilterUnit* filter_unit = nullptr;
-          rc = FilterStmt::create_filter_unit(db, default_table, &table_map, condition, filter_unit);
-          if (rc != RC::SUCCESS) {
-            return rc;
-          }
-          filter_stmt->addFilterUnit(filter_unit);
-        }
-      } else {
-        join_on_condtions.push_back(condition);
-      }
-    }
-    conditions.emplace_back(std::move(join_on_condtions));
-  }
-
   // create join on statement
   JoinOnStmt *join_on_stmt = nullptr;
   rc = JoinOnStmt::create(db,
       default_table,
       &table_map,
-      conditions.data(),
-      static_cast<int>(conditions.size()),
+      select_sql.join_conds.data(),
+      static_cast<int>(select_sql.join_conds.size()),
       join_on_stmt);
   if (rc != RC::SUCCESS) {
     LOG_WARN("cannot construct filter stmt");

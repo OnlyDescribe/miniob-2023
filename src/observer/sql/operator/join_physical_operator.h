@@ -67,6 +67,7 @@ private:
 /**
  * @description: hash join
  */
+// TODO: 更新初始化函数, 这里只涉及跨表比较函数，剩下的已经下推
 class HashJoinPhysicalOperator : public PhysicalOperator
 {
 public:
@@ -80,25 +81,19 @@ public:
   }
 
   PhysicalOperatorType type() const override { return PhysicalOperatorType::HASH_JOIN; }
-  // void set_expressions(std::vector<std::unique_ptr<Expression>>&& expressions) {
-  //   expressions_ = std::move(expressions);
-  // }
-
-  void set_left_expressions(std::vector<std::unique_ptr<Expression>>&& expressions) {
-    left_expressions_ = std::move(expressions);
-  }
-
-  void set_right_expressions(std::vector<std::unique_ptr<Expression>>&& expressions) {
-    right_expressions_ = std::move(expressions);
+  void set_expressions(std::vector<std::unique_ptr<Expression>>&& expressions) {
+    expressions_ = std::move(expressions);
   }
 
 
   RC open(Trx *trx) override;
   RC next() override;
   RC close() override;
+  RC predicate();
   Tuple *current_tuple() override;
 
 private:
+  void init_expressions();
   Trx *trx_ = nullptr;
 
   //! 左表右表的真实对象是在PhysicalOperator::children_中，这里是为了写的时候更简单
@@ -107,9 +102,9 @@ private:
   Tuple *left_tuple_ = nullptr;
   JoinedTuple joined_tuple_;    //! 当前关联的左右两个tuple
   std::unordered_map<AggregateKey, std::vector<Tuple*>> mp_;     // 存放右表的数据结构
-  // std::vector<std::unique_ptr<Expression>> expressions_;
-  std::vector<std::unique_ptr<Expression>> left_expressions_;
-  std::vector<std::unique_ptr<Expression>> right_expressions_;
+  std::vector<std::unique_ptr<Expression>> expressions_;            // 存放比较表达式，用于过滤
+  std::vector<std::unique_ptr<Expression>> left_expressions_;     // 用于左表的hash join
+  std::vector<std::unique_ptr<Expression>> right_expressions_;    // 用于右表的hash join
 
   std::queue<Tuple*> right_results_;      // 和当前left_tuple匹配的右表 
 };

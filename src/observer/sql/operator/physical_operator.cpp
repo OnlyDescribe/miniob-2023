@@ -26,6 +26,8 @@ std::string physical_operator_type_name(PhysicalOperatorType type)
     case PhysicalOperatorType::DELETE: return "DELETE";
     case PhysicalOperatorType::UPDATE: return "UPDATE";
     case PhysicalOperatorType::PROJECT: return "PROJECT";
+    case PhysicalOperatorType::HASH_JOIN: return "HASH_JOIN";
+    case PhysicalOperatorType::ORDERBY: return "ORDERBY";
     case PhysicalOperatorType::AGGREGATION: return "AGGREGATION";
     case PhysicalOperatorType::STRING_LIST: return "STRING_LIST";
     default: return "UNKNOWN";

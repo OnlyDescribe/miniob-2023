@@ -40,7 +40,6 @@ enum class LogicalOperatorType
   AGGREGATION,  ///< 聚合
   ORDER_BY,      ///< 聚合
   JOIN,         ///< 连接
-  HASH_JOIN,    ///< hash join连表
   INSERT,       ///< 插入
   DELETE,       ///< 删除，删除可能会有子查询
   UPDATE,       ///< 更新
@@ -73,8 +72,6 @@ public:
         return "ORDER_BY";
       case LogicalOperatorType::JOIN:
         return "JOIN";
-      case LogicalOperatorType::HASH_JOIN:
-        return "HASH_JOIN";
       case LogicalOperatorType::INSERT:
         return "INSERT";
       case LogicalOperatorType::DELETE:
@@ -97,9 +94,14 @@ public:
   std::vector<std::unique_ptr<LogicalOperator>> &children() { return children_; }
   std::vector<std::unique_ptr<Expression>> &expressions() { return expressions_; }
 
-  void set_expressions(std::vector<std::unique_ptr<Expression>> &&expression) {
-    expressions_ = std::move(expression);
+  void set_expressions(std::vector<std::unique_ptr<Expression>> &&expressions) {
+    expressions_ = std::move(expressions);
   }
+
+  void add_expressioin(std::unique_ptr<Expression> &&expression) {
+    expressions_.emplace_back(std::move(expression));
+  }
+
 private:
     // 打印逻辑树
   virtual void printTree(const std::string& prefix, LogicalOperator* node, bool isFirst) {
