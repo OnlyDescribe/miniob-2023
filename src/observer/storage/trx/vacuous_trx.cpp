@@ -36,6 +36,24 @@ RC VacuousTrx::insert_record(Table *table, Record &record) { return table->inser
 
 RC VacuousTrx::delete_record(Table *table, Record &record) { return table->delete_record(record); }
 
+RC VacuousTrx::update_record(Table *table, Record &old_record, Record &new_record)
+{
+  RC rc = RC::SUCCESS;
+  rc = table->delete_record(old_record);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to delete record: %s", strrc(rc));
+    return rc;
+  }
+  rc = table->insert_record(new_record);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to insert record by transaction. rc=%s", strrc(rc));
+    // 注意失败后要回滚, 保证一次更新操作(删除+插入)是"原子"的
+    table->insert_record(old_record);
+    return rc;
+  }
+  return rc;
+}
+
 RC VacuousTrx::visit_record(Table *table, Record &record, bool readonly) { return RC::SUCCESS; }
 
 RC VacuousTrx::start_if_need() { return RC::SUCCESS; }

@@ -153,6 +153,7 @@ public:
   }
   RID &rid() { return rid_; }
   const RID &rid() const { return rid_; }
+  bool owner() const { return owner_; }
 
 private:
   RID rid_;
