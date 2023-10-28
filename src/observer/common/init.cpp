@@ -165,11 +165,31 @@ int init_global_objects(ProcessParam *process_param, Ini &properties)
   }
   GCTX.trx_kit_ = TrxKit::instance();
 
-  rc = GCTX.handler_->init("miniob");
+  const char *base_dir = "miniob";
+  rc = GCTX.handler_->init(base_dir);
   if (OB_FAIL(rc)) {
     LOG_ERROR("failed to init handler. rc=%s", strrc(rc));
     return -1;
   }
+
+  // 若事务模式为MVCC, 则创建一个放time-travel表的db在全局的handler_中
+  if (common::is_blank(process_param->trx_kit_name().c_str()) ||
+      0 == strcasecmp(process_param->trx_kit_name().c_str(), "mvcc")) {
+    const char *time_travel_db = "time_travel_db";
+
+    rc = GCTX.handler_->create_db(time_travel_db);
+    if (rc != RC::SUCCESS && rc != RC::SCHEMA_DB_EXIST) {
+      LOG_ERROR("Failed to create system db");
+      ret = -1;
+    }
+
+    rc = GCTX.handler_->open_db(time_travel_db);
+    if (rc != RC::SUCCESS) {
+      LOG_ERROR("Failed to open system db. rc=%s", strrc(rc));
+      ret = -1;
+    }
+  }
+
   return ret;
 }
 
