@@ -62,7 +62,7 @@ RC MvccTrxKit::init()
           8 /*attr_len*/,
           2 /*attr_id=*/,
           false /*visible*/,
-          false /*is_not_null*/),  // 指向newer的record/tuple, 用于rollback
+          false /*is_not_null*/),
   };
 
   LOG_INFO("init mvcc trx kit done.");
@@ -301,6 +301,8 @@ RC MvccTrx::update_record(Table *table, Record &old_record, Record &new_record)
   memcpy(pointer, &travel_old_record_rid, sizeof(RID));
 
   // 4. 将新record复制到old_record原位(注意: 不能直接删除+插入, 否则table_scan会再次扫到新record)
+  // TODO(oldcb): FIX BUG 不是的, 可以直接删除+插入. 原来Append-only的话, 并没有真正删除只是打了标记, 所以才会扫到record.
+  // BUG: 如果复制到原位, 索引的更新就会出现问题
   // TODO(oldcb): MVCC的索引INDEX POINTER
   assert(old_record.owner() == false);
   memcpy(old_record.data(),
