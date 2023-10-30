@@ -44,6 +44,7 @@ enum class PExpType
   AGGRFUNC,    // 聚合
   SUBQUERY,    // 子查询
 };
+// TODO: 析构函数or智能指针, 释放Expr*资源
 struct PExpr
 {
   PExpType type;
@@ -53,6 +54,7 @@ struct PExpr
   PFuncExpr *fexp;
   PSubQueryExpr *sexp;
   std::string name;
+  std::string alias;
 };
 
 // 1.2. 定义 ParsedExpression 中对象
@@ -81,9 +83,9 @@ struct RelAttrSqlNode
 // 一元表达式
 struct PUnaryExpr
 {
-  int is_attr;               ///< TRUE时，操作符是属性名，FALSE时，是属性值
-  Value left_value;          ///< value if left_is_attr = FALSE
-  RelAttrSqlNode left_attr;  ///< attribute
+  int is_attr;          ///< TRUE时，操作符是属性名，FALSE时，是属性值
+  Value value;          ///< value if left_is_attr = FALSE
+  RelAttrSqlNode attr;  ///< attribute
 };
 
 // 1.2.2 二元表达式, 即四则运算表达式
@@ -158,49 +160,54 @@ struct PSubQueryExpr
 // 2. 定义 Select， 即SelectSqlNode
 
 // 2.1 Select
+struct SelectAttr;
+struct Relation;
 struct OrderBy;
-struct GroupBy;
+// struct GroupBy;
 
 struct SelectSqlNode
 {
   // in select clause
-  std::vector<PExpr *> projects;        ///< 语义上返回单行的表达式
-  std::vector<RelAttrSqlNode> attributes;  ///< xxx.xxx形式的字段(包括聚合)
+  std::vector<PExpr *> attributes;
 
   // in from clause
-  std::vector<std::string> relations;                   ///< 查询的表
-  std::vector<std::vector<PConditionExpr>> join_conds;  ///< 做连接时，把relations连接起来的条件。
+  std::vector<Relation> relations;           ///< 查询的表
+  std::vector<PConditionExpr *> join_conds;  ///< 连接条件
+                                             ///< Expr得是指针, 否则在解析阶段会delete, 难通过析构来管理内存
+  // in where clause
+  PConditionExpr *condition;
 
   // in groupby clause
   std::vector<RelAttrSqlNode> groupbys;
-  std::vector<PConditionExpr> havings;
+  PConditionExpr *havings;
 
-  // in where clause
-  std::vector<PConditionExpr> conditions;
+  // in orderby clause
   std::vector<OrderBy> orderbys;
-
-  bool IsAttributesVailid()
-  {
-    int relattr_cnt = 0;
-    for (const auto &node : attributes) {
-      if (node.aggr_type == AggrFuncType::INVALID) {
-        relattr_cnt++;
-      }
-    }
-    return relattr_cnt == 0 || (relattr_cnt == static_cast<int>(attributes.size()));
-  }
 };
 
 // 2.2 Select 中对象的定义
-// 2.2.1 in from clause
-// 把 SelectSqlNode 所有表join起来的条件, N 个表，N-1个条件
-struct JoinSqlNode
+// 2.2.1 in select clause
+// struct SelectAttr  // select的字段/子表达式
+// {
+//   PExpr *expr;               ///< 语义上返回单行的表达式
+//   RelAttrSqlNode attribute;  ///< xxx.xxx形式的字段(包括聚合)
+// };
+
+// 2.2.2 in from clause
+struct Relation
 {
-  std::vector<std::string> relations;                     // 需要join的表
-  std::vector<std::vector<ConditionSqlNode>> join_conds;  // 把表join起来的条件,
+  std::string relation_name;
+  std::string alias;
+};
+// 把 SelectSqlNode 所有表join起来的条件, N 个表，N-1个条件
+struct FromSqlNode
+{
+  std::vector<Relation> relations;           // 需要join的表
+  std::vector<PConditionExpr *> join_conds;  // join的条件
+  // join 目前只需要支持 and, 故实际上PConditionExpr以及其子树的CompOp唯一
 };
 
-// 2.2.2 in where clause
+// 2.2.3 in where clause
 // 排序类型
 enum class SortType
 {
@@ -213,13 +220,6 @@ struct OrderBy
 {
   RelAttrSqlNode attr;  // order_by的属性
   SortType sort_type;   // 排序类型,
-};
-
-// Where句柄，里面会跟Conditions, 以及OrderBy, GroupBy
-struct WhereSqlNode
-{
-  std::vector<PConditionExpr> conditions;  ///< 查询条件，使用AND串联起来多个条件
-  std::vector<OrderBy> orderbys;           ///< orderby条件
 };
 
 /**
@@ -251,7 +251,7 @@ struct InsertSqlNode
 struct DeleteSqlNode
 {
   std::string relation_name;  ///< Relation to delete from
-  std::vector<ConditionSqlNode> conditions;
+  PConditionExpr *conditions;
 };
 
 // 表示 Update 语句中 SET 的赋值
@@ -270,7 +270,7 @@ struct UpdateSqlNode
 {
   std::string relation_name;  ///< Relation to update
   std::vector<AssignmentSqlNode> assignments;
-  std::vector<ConditionSqlNode> conditions;
+  PConditionExpr * conditions;
 };
 
 /**

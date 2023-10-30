@@ -129,12 +129,17 @@ ROUND                                   RETURN_TOKEN(ROUND);
 DATE_FORMAT                             RETURN_TOKEN(DATE_FORMAT);
 INNER                                   RETURN_TOKEN(INNER);
 JOIN                                    RETURN_TOKEN(JOIN);
-LIKE                                    RETURN_TOKEN(LIKE_CONDITION);
+LIKE                                    RETURN_TOKEN(LIKE);
+EXISTS                                  RETURN_TOKEN(EXISTS);
+IN                                      RETURN_TOKEN(IN);
 IS                                      RETURN_TOKEN(IS);
+AS                                      RETURN_TOKEN(AS);
 DEFAULT                                 RETURN_TOKEN(DEFAULT);
 NOT                                     RETURN_TOKEN(NOT);
 ORDER                                   RETURN_TOKEN(ORDER);
+GROUP                                   RETURN_TOKEN(GROUP);
 BY                                      RETURN_TOKEN(BY);
+HAVING                                  RETURN_TOKEN(HAVING);
 {ID}                                    yylval->string=strdup(yytext); RETURN_TOKEN(ID);
 
 "("                                     RETURN_TOKEN(LBRACE);
