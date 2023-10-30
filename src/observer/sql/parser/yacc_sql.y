@@ -207,7 +207,7 @@ bool IsAttributesVailid(const std::vector<PExpr *> &select_attr)
 %type <arith_pexpr>         arith_pexpr
 %type <func_pexpr>          func_pexpr
 %type <cond_pexpr>          cond_pexpr
-/* %type <subquery_pexpr>      subquery_pexpr */
+%type <subquery_pexpr>      subquery_pexpr
 %type <sql_node>            calc_stmt
 %type <sql_node>            select_stmt
 %type <sql_node>            insert_stmt
@@ -236,7 +236,7 @@ bool IsAttributesVailid(const std::vector<PExpr *> &select_attr)
 %left COMMA
 %left OR
 %left AND
-%nonassoc EQ LT GT LE GE NE IS AS LIKE EXISTS IN NOT JOIN
+%nonassoc EQ LT GT LE GE NE IS AS LIKE EXISTS IN NOT
 %left '+' '-'
 %left '*' '/' '%'
 %nonassoc UMINUS
@@ -944,6 +944,43 @@ order_condtions:
     }
     ;
 
+subquery_pexpr:        /*  select 语句的语法解析树*/
+    LBRACE SELECT select_attr FROM select_from where group_by having order_by RBRACE
+    {
+      $$ = new PSubQueryExpr;
+      SelectSqlNode * sub_select = $$->sub_select;
+      if ($3 != nullptr) {
+        sub_select->attributes.swap(*$3);
+        delete $3;
+        if (!IsAttributesVailid(sub_select->attributes)) {
+          yyerror(&@$, sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
+        }
+      }
+
+      if($5 != nullptr)
+      {
+        FromSqlNode* from_node = $5;
+        sub_select->relations.swap(from_node->relations);
+        sub_select->join_conds.swap(from_node->join_conds);
+        delete $5;
+      }
+
+      sub_select->condition = $6;
+
+      if ($7 != nullptr) {
+        sub_select->groupbys = *$7;
+        delete $7;
+      }
+
+      sub_select->havings = $7;
+
+      if ($9 != nullptr) {
+        sub_select->orderbys = *$9;
+        delete $9;
+      }
+    }
+    ;
+
 
 id_list:
     /* empty */
@@ -1412,6 +1449,13 @@ pexpr:
         PExpr *pexpr = new PExpr;
         pexpr->type = PExpType::FUNC;
         pexpr->fexp = $1;
+        pexpr->name = token_name(sql_string, &@$);
+        $$ = pexpr;
+    }
+    | subquery_pexpr { 
+        PExpr *pexpr = new PExpr;
+        pexpr->type = PExpType::SUBQUERY;
+        pexpr->sexp = $1;
         pexpr->name = token_name(sql_string, &@$);
         $$ = pexpr;
     }
