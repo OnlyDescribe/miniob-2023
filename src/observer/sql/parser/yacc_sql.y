@@ -75,6 +75,9 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
         AGGR_SUM
         AGGR_AVG
         AGGR_COUNT
+        LENGTH
+        ROUND
+        DATE_FORMAT
         ASC
         RBRACE
         INNER
@@ -129,6 +132,8 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
   std::vector<OrderBy> *            orderbys;
   AttrInfoSqlNode *                 attr_info;
   Expression *                      expression;
+  PExpr *                           pexpr;
+  PFuncExpr *                       func_pexpr;
   AssignmentSqlNode *               assignment;
   std::vector<Expression *> *       expression_list;
   std::vector<Value> *              value_list;
@@ -176,6 +181,8 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
 %type <expression>          expression
 %type <expression_list>     expression_list
 %type <assignment_list>     assignment_list
+%type <pexpr>               pexpr
+%type <func_pexpr>          func_pexpr
 %type <sql_node>            calc_stmt
 %type <sql_node>            select_stmt
 %type <sql_node>            insert_stmt
@@ -200,8 +207,11 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
 // commands should be a list but I use a single command instead
 %type <sql_node>            commands
 
+%left OR
+%left AND
 %left '+' '-'
-%left '*' '/'
+%left '*' '/' 
+
 %nonassoc UMINUS
 %%
 
@@ -627,6 +637,7 @@ inner_join:   // in
       delete $5;
     }
     ;
+
 select_stmt:        /*  select 语句的语法解析树*/
     SELECT select_attr FROM ID inner_join where
     {
@@ -669,6 +680,7 @@ select_stmt:        /*  select 语句的语法解析树*/
       $$->selection.relations.push_back($4);
       std::reverse($$->selection.relations.begin(), $$->selection.relations.end());
 
+      // TODO(oldcb): 直接传进来, 不用一个个移动了
       if ($6 != nullptr) {
         $$->selection.conditions = std::move($6->conditions);
         $$->selection.orderbys.swap($6->orderbys);
@@ -677,6 +689,11 @@ select_stmt:        /*  select 语句的语法解析树*/
       free($4);
     }
     ;
+
+
+
+
+
 calc_stmt:
     CALC expression_list
     {
@@ -686,7 +703,7 @@ calc_stmt:
       delete $2;
     }
     ;
-
+/*  TODO(oldcb): 和PEXPR 冲突*/ 
 expression_list:
     expression
     {
@@ -730,15 +747,163 @@ expression:
     }
     ;
 
-select_attr:
-    '*' {
-      $$ = new std::vector<RelAttrSqlNode>;
-      RelAttrSqlNode attr;
-      attr.relation_name  = "";
-      attr.attribute_name = "*";
-      $$->emplace_back(attr);
+pexpr:
+    pexpr OR pexpr {
+        ConditionSqlNode *condition_pexpr = new ConditionSqlNode(CompOp::OR, $1, $3);
+        PExpr *pexpr = new PExpr;
+        pexpr->type = PExpType::COMPARISON;
+        pexpr->cexp = condition_pexpr;
+        pexpr->name = token_name(sql_string, &@$);
+        $$ = pexpr;
     }
-    | rel_attr attr_list {
+    | pexpr AND pexpr {
+        ConditionSqlNode *condition_pexpr = new ConditionSqlNode(CompOp::AND, $1, $3);
+        PExpr *pexpr = new PExpr;
+        pexpr->type = PExpType::COMPARISON;
+        pexpr->cexp = condition_pexpr;
+        pexpr->name = token_name(sql_string, &@$);
+        $$ = pexpr;
+    }
+    | pexpr '+' pexpr {
+        PArithmeticExpr *arith_pexpr = new PArithmeticExpr(PArithmeticType::ADD, $1, $3);
+        PExpr *pexpr = new PExpr;
+        pexpr->type = PExpType::ARITHMETIC;
+        pexpr->aexp = arith_pexpr;
+        pexpr->name = token_name(sql_string, &@$);
+        $$ = pexpr;
+    }
+    | pexpr '-' pexpr {
+        PArithmeticExpr *arith_pexpr = new PArithmeticExpr(PArithmeticType::SUB, $1, $3);
+        PExpr *pexpr = new PExpr;
+        pexpr->type = PExpType::ARITHMETIC;
+        pexpr->aexp = arith_pexpr;
+        pexpr->name = token_name(sql_string, &@$);
+        $$ = pexpr;
+    }
+    | pexpr '*' pexpr {
+        PArithmeticExpr *arith_pexpr = new PArithmeticExpr(PArithmeticType::MUL, $1, $3);
+        PExpr *pexpr = new PExpr;
+        pexpr->type = PExpType::ARITHMETIC;
+        pexpr->aexp = arith_pexpr;
+        pexpr->name = token_name(sql_string, &@$);
+        $$ = pexpr;
+    }
+    | pexpr '/' pexpr {
+        PArithmeticExpr *arith_pexpr = new PArithmeticExpr(PArithmeticType::DIV, $1, $3);
+        PExpr *pexpr = new PExpr;
+        pexpr->type = PExpType::ARITHMETIC;
+        pexpr->aexp = arith_pexpr;
+        pexpr->name = token_name(sql_string, &@$);
+        $$ = pexpr;
+    }
+    | LBRACE pexpr RBRACE {
+      $$ = $2;
+      $$->name(token_name(sql_string, &@$));
+    }
+    | pexpr comp_op pexpr {
+      ConditionSqlNode *condition_pexpr = new ConditionSqlNode(comp_op, $1, $3);
+      PExpr *pexpr = new PExpr;
+      pexpr->type = PExpType::COMPARISON;
+      pexpr->cexp = condition_pexpr;
+      pexpr->name = token_name(sql_string, &@$);
+      $$ = pexpr;
+    }
+    | '-' pexpr %prec UMINUS {
+        PArithmeticExpr *arith_pexpr = new PArithmeticExpr(PArithmeticType::NEGATIVE, $2, nullptr);
+        PExpr *pexpr = new PExpr;
+        pexpr->type = PExpType::ARITHMETIC;
+        pexpr->aexp = arith_pexpr;
+        pexpr->name = token_name(sql_string, &@$);
+        $$ = pexpr;
+    }
+    | value {
+        PUnaryExpr *unary_pexpr = new PUnaryExpr;
+        unary_pexpr->is_attr = false;
+        unary_pexpr->left_value = *$1;
+        
+        PExpr *pexpr = new PExpr;
+        pexpr->type = PExpType::UNARY;
+        pexpr->uexp = unary_pexpr;
+        pexpr->name = token_name(sql_string, &@$);
+        $$ = pexpr;
+        delete $1;
+    }
+    | ID {
+        PUnaryExpr *unary_pexpr = new PUnaryExpr;
+        unary_pexpr->is_attr = true;
+        unary_pexpr->left_attr->attribute_name = $1;
+        
+        PExpr *pexpr = new PExpr;
+        pexpr->type = PExpType::UNARY;
+        pexpr->uexp = unary_pexpr;
+        pexpr->name = token_name(sql_string, &@$);
+        $$ = pexpr;
+    }
+    | ID DOT ID{
+        PUnaryExpr *unary_pexpr = new PUnaryExpr;
+        unary_pexpr->is_attr = true;
+        unary_pexpr->left_attr->relation_name = $1;
+        unary_pexpr->left_attr->attribute_name = $3;
+        
+        PExpr *pexpr = new PExpr;
+        pexpr->type = PExpType::UNARY;
+        pexpr->uexp = unary_pexpr;
+        pexpr->name = token_name(sql_string, &@$);
+        $$ = pexpr;
+    }
+    | func_pexpr{        
+        PExpr *pexpr = new PExpr;
+        pexpr->type = PExpType::FUNC;
+        pexpr->fexp = $1;
+        pexpr->name = token_name(sql_string, &@$);
+        $$ = pexpr;
+    }
+    ;
+
+func_pexpr:
+  LENGTH LBRACE pexpr RBRACE
+  {
+    PFuncExpr *func_pexpr = new PFuncExpr;
+    func_pexpr->type = PFuncType::LENGTH;
+    func_pexpr->params.push_back($3);
+    $$ = func_pexpr;
+  }
+  | ROUND LBRACE pexpr RBRACE
+  {
+    PFuncExpr *func_pexpr = new PFuncExpr;
+    func_pexpr->type = PFuncType::ROUND;
+    func_pexpr->params.push_back($3);
+    $$ = func_pexpr;
+  }
+  | ROUND LBRACE pexpr COMMA pexpr RBRACE
+  {
+    PFuncExpr *func_pexpr = new PFuncExpr;
+    func_pexpr->type = PFuncType::ROUND;
+    func_pexpr->params.push_back($3);
+    func_pexpr->params.push_back($5);
+    $$ = func_pexpr;
+  }
+  | DATE_FORMAT LBRACE pexpr COMMA pexpr RBRACE
+  {
+    PFuncExpr *func_pexpr = new PFuncExpr;
+    func_pexpr->type = PFuncType::DATE_FORMAT;
+    func_pexpr->params.push_back($3);
+    func_pexpr->params.push_back($5);
+    $$ = func_pexpr;
+  }
+  ;
+  
+select_attr:
+    rel_attr attr_list {
+      if ($2 != nullptr) {
+        $$ = $2;
+      } else {
+        $$ = new std::vector<RelAttrSqlNode>;
+      }
+      $$->emplace_back(*$1);
+      delete $1;
+    }
+    | pexpr attr_list {
       if ($2 != nullptr) {
         $$ = $2;
       } else {
@@ -785,8 +950,21 @@ field_or_star_list:
       $$->emplace_back($2);
     }
     ;
+
+/*  TODO(oldcb): 注意 PEXPR 包含了ID, aggr_func_type 放进 PEXPR*/ 
 rel_attr:
-    ID {
+    '*' {
+      $$ = new RelAttrSqlNode;
+      $$->relation_name  = "";
+      $$->attribute_name = "*";
+    }
+    | ID DOT '*' {
+      $$ = new RelAttrSqlNode;
+      $$->relation_name  = $1;
+      $$->attribute_name = "*";
+      free($1);
+    }
+    | ID {
       $$ = new RelAttrSqlNode;
       $$->attribute_name = $1;
       free($1);
