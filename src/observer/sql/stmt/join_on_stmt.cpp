@@ -89,7 +89,7 @@ RC JoinOnStmt::create_join_unit(Db *db, Table *default_table, std::unordered_map
   RC rc = RC::SUCCESS;
 
   CompOp comp = condition.comp;
-  if (comp < EQUAL_TO || comp >= NO_OP) {
+  if (comp < CompOp::EQUAL_TO || comp >= CompOp::NO_OP) {
     LOG_WARN("invalid compare operator : %d", comp);
     return RC::INVALID_ARGUMENT;
   }
