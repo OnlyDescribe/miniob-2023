@@ -123,25 +123,25 @@ RC ComparisonExpr::compare_value(const Value &left, const Value &right, bool &re
 {
   RC rc = RC::SUCCESS;
   // LIKE
-  if (comp_ == LIKE || comp_ == NOT_LIKE) {
+  if (comp_ == CompOp::LIKE || comp_ == CompOp::NOT_LIKE) {
     if (left.attr_type() != AttrType::CHARS || right.attr_type() != AttrType::CHARS) {
       result = false;
     }
     result = is_like(left.get_string(), right.get_string());
-    if (comp_ == NOT_LIKE)
+    if (comp_ == CompOp::NOT_LIKE)
       result = !result;
     return rc;
   }
 
   // NULL
-  if (comp_ == IS_NULL) {
+  if (comp_ == CompOp::IS_NULL) {
     if (left.attr_type() == AttrType::NULLS) {
       result = true;
     } else {
       result = false;
     }
     return rc;
-  } else if (comp_ == IS_NOT_NULL) {
+  } else if (comp_ == CompOp::IS_NOT_NULL) {
     if (left.attr_type() != AttrType::NULLS) {
       result = true;
     } else {
@@ -159,22 +159,22 @@ RC ComparisonExpr::compare_value(const Value &left, const Value &right, bool &re
   int cmp_result = left.compare(right);
   result = false;
   switch (comp_) {
-    case EQUAL_TO: {
+    case CompOp::EQUAL_TO: {
       result = (0 == cmp_result);
     } break;
-    case LESS_EQUAL: {
+    case CompOp::LESS_EQUAL: {
       result = (cmp_result <= 0);
     } break;
-    case NOT_EQUAL: {
+    case CompOp::NOT_EQUAL: {
       result = (cmp_result != 0);
     } break;
-    case LESS_THAN: {
+    case CompOp::LESS_THAN: {
       result = (cmp_result < 0);
     } break;
-    case GREAT_EQUAL: {
+    case CompOp::GREAT_EQUAL: {
       result = (cmp_result >= 0);
     } break;
-    case GREAT_THAN: {
+    case CompOp::GREAT_THAN: {
       result = (cmp_result > 0);
     } break;
     default: {

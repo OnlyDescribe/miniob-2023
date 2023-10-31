@@ -13,6 +13,7 @@ See the Mulan PSL v2 for more details. */
 //
 
 #include "sql/stmt/select_stmt.h"
+#include "sql/parser/parse_defs.h"
 #include "sql/stmt/filter_stmt.h"
 #include "common/log/log.h"
 #include "common/lang/string.h"
@@ -76,7 +77,7 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
   std::vector<Table *> tables;
   std::unordered_map<std::string, Table *> table_map;
   for (size_t i = 0; i < select_sql.relations.size(); i++) {
-    const char *table_name = select_sql.relations[i].c_str();
+    const char *table_name = select_sql.relations[i].relation_name.c_str();
     if (nullptr == table_name) {
       LOG_WARN("invalid argument. relation name is null. index=%d", i);
       return RC::INVALID_ARGUMENT;
@@ -98,7 +99,12 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
   // 聚合字段的个数
   int aggr_field_cnt = 0;
   for (int i = static_cast<int>(select_sql.attributes.size()) - 1; i >= 0; i--) {
-    const RelAttrSqlNode &relation_attr = select_sql.attributes[i];
+    // TODO: 考虑表达式或子查询, 这里我默认拿出来的就是一个字段, 即attr_pexp是unary的
+    PExpr *attr_pexp = select_sql.attributes[i];
+    if (attr_pexp->type != PExpType::UNARY || !attr_pexp->uexp->is_attr) {
+      LOG_WARN("not implemented");
+    }
+    const RelAttrSqlNode &relation_attr = attr_pexp->uexp->attr;
     auto aggr_type = relation_attr.aggr_type;
 
     // 检验聚合的合法性
@@ -191,12 +197,7 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
 
   // create filter statement in `where` statement
   FilterStmt *filter_stmt = nullptr;
-  RC rc = FilterStmt::create(db,
-      default_table,
-      &table_map,
-      select_sql.conditions.data(),
-      static_cast<int>(select_sql.conditions.size()),
-      filter_stmt);
+  RC rc = FilterStmt::create(db, default_table, &table_map, select_sql.conditions, filter_stmt);
   if (rc != RC::SUCCESS) {
     LOG_WARN("cannot construct filter stmt");
     return rc;
@@ -204,12 +205,7 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
 
   // create join on statement
   JoinOnStmt *join_on_stmt = nullptr;
-  rc = JoinOnStmt::create(db,
-      default_table,
-      &table_map,
-      select_sql.join_conds.data(),
-      static_cast<int>(select_sql.join_conds.size()),
-      join_on_stmt);
+  rc = JoinOnStmt::create(db, default_table, &table_map, select_sql.join_conds, join_on_stmt);
   if (rc != RC::SUCCESS) {
     LOG_WARN("cannot construct filter stmt");
     return rc;

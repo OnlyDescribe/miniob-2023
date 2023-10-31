@@ -78,10 +78,10 @@ public:
 
 public:
   static RC create(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,
-      const std::vector<ConditionSqlNode> *conditions, int condition_num, JoinOnStmt *&stmt);
+      std::vector<PConditionExpr *> conditions, JoinOnStmt *&stmt);
 
   static RC create_join_unit(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,
-      const ConditionSqlNode &condition, JoinOnUnit *&joinon_unit);
+      PConditionExpr *condition, JoinOnUnit *&join_unit);
 
 private:
   static RC get_table_and_field(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,

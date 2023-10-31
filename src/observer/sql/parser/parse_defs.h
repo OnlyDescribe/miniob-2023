@@ -23,13 +23,71 @@ See the Mulan PSL v2 for more details. */
 
 class Expression;
 
-/**
- * @defgroup SQLParser SQL Parser
- */
+// 1. 定义 ParsedExpression
+// 与 Expression 的子类大致上对应, 为了不与expression.h中的类冲突, 类名加一个P(arsed)
 
-/**
- * @description: 聚合运算符
- */
+// 1.1 将涉及到值字段、过滤条件、函数、子查询、四则运算等所复合形成的表达式统一
+struct PUnaryExpr;
+struct PArithmeticExpr;
+struct ConditionSqlNode;
+struct PFuncExpr;
+struct PSubQueryExpr;
+
+using PConditionExpr = struct ConditionSqlNode;
+
+enum class PExpType
+{
+  UNARY,       // 值、字段
+  ARITHMETIC,  // 四则运算
+  COMPARISON,  // 过滤条件
+  FUNC,        // 函数
+  AGGRFUNC,    // 聚合
+  SUBQUERY,    // 子查询
+};
+// TODO: 析构函数or智能指针, 释放Expr*资源
+struct PExpr
+{
+  PExpType type;
+  PUnaryExpr *uexp;
+  PArithmeticExpr *aexp;
+  PConditionExpr *cexp;
+  PFuncExpr *fexp;
+  PSubQueryExpr *sexp;
+
+  std::string name;
+  std::string alias;
+
+  PExpr() = default;
+  PExpr(PUnaryExpr *exp)
+  {
+    type = PExpType::UNARY;
+    uexp = exp;
+  }
+  PExpr(PArithmeticExpr *exp)
+  {
+    type = PExpType::ARITHMETIC;
+    aexp = exp;
+  }
+  PExpr(PConditionExpr *exp)
+  {
+    type = PExpType::COMPARISON;
+    cexp = exp;
+  }
+  PExpr(PFuncExpr *exp)
+  {
+    type = PExpType::FUNC;
+    fexp = exp;
+  }
+  PExpr(PSubQueryExpr *exp)
+  {
+    type = PExpType::SUBQUERY;
+    sexp = exp;
+  }
+};
+
+// 1.2. 定义 ParsedExpression 中对象
+// 1.2.1 一元表达式, 即值或字段
+// 聚合类型
 enum class AggrFuncType
 {
   INVALID,
@@ -41,13 +99,7 @@ enum class AggrFuncType
   COUNT_STAR
 };
 
-/**
- * @brief 描述一个属性
- * @ingroup SQLParser
- * @details 属性，或者说字段(column, field)
- * Rel -> Relation
- * Attr -> Attribute
- */
+// 字段(column, field)
 struct RelAttrSqlNode
 {
   std::string relation_name;                       ///< relation name (may be NULL) 表名
@@ -56,11 +108,33 @@ struct RelAttrSqlNode
   std::vector<std::string> aggregates;             // 聚合字段
 };
 
-/**
- * @brief 描述比较运算符
- * @ingroup SQLParser
- */
-enum CompOp
+// 一元表达式
+struct PUnaryExpr
+{
+  int is_attr;          ///< TRUE时，操作符是属性名，FALSE时，是属性值
+  Value value;          ///< value if left_is_attr = FALSE
+  RelAttrSqlNode attr;  ///< attribute
+};
+
+// 1.2.2 二元表达式, 即四则运算表达式
+enum class PArithmeticType
+{
+  ADD,
+  SUB,
+  MUL,
+  DIV,
+  NEGATIVE,
+};
+struct PArithmeticExpr
+{
+  PArithmeticType type;
+  PExpr *left;
+  PExpr *right;
+};
+
+// 1.2.3 比较表达式
+// 描述比较运算符
+enum class CompOp
 {
   EQUAL_TO,     ///< "="
   LESS_EQUAL,   ///< "<="
@@ -72,101 +146,108 @@ enum CompOp
   NOT_LIKE,     ///< "not like"
   IS_NULL,      ///< "is null"
   IS_NOT_NULL,  ///< "is not null"
+  IN,           ///< "sub_query in"
+  NOT_IN,       ///< "sub_query not in"
+  EXISTS,       ///< "sub_query exists"
+  NOT_EXISTS,   ///< "sub_query not exists"
+  AND,          ///< "condition and"
+  OR,           ///< "condition or"
   NO_OP
 };
 
-/**
- * @description: 排序类型
- *
- */
+// 条件比较
+// 左边和右边理论上都可以是任意的数据，比如是字段（属性，列），也可以是数值常量。
+struct ConditionSqlNode
+{
+  // 这里的value/attr我们抽象成一元表达式
+  CompOp comp;  ///< comparison operator
+  PExpr *left;
+  PExpr *right;
+};
+
+// 1.2.4 Function
+enum class PFuncType
+{
+  LENGTH,
+  ROUND,
+  DATE_FORMAT,
+};
+struct PFuncExpr
+{
+  PFuncType type;
+  std::vector<PExpr *> params;
+};
+
+// 1.2.5 子查询
+struct SelectSqlNode;
+struct PSubQueryExpr
+{
+  SelectSqlNode *sub_select;
+};
+
+// 2. 定义 Select， 即SelectSqlNode
+
+// 2.1 Select
+struct SelectAttr;
+struct Relation;
+struct OrderBy;
+// struct GroupBy;
+
+struct SelectSqlNode
+{
+  // in select clause
+  std::vector<PExpr *> attributes;
+
+  // in from clause
+  std::vector<Relation> relations;           ///< 查询的表
+  std::vector<PConditionExpr *> join_conds;  ///< 连接条件
+                                             ///< Expr得是指针, 否则在解析阶段会delete, 难通过析构来管理内存
+  // in where clause
+  PConditionExpr *conditions;
+
+  // in groupby clause
+  std::vector<RelAttrSqlNode> groupbys;
+  PConditionExpr *havings;
+
+  // in orderby clause
+  std::vector<OrderBy> orderbys;
+};
+
+// 2.2 Select 中对象的定义
+// 2.2.1 in select clause
+// struct SelectAttr  // select的字段/子表达式
+// {
+//   PExpr *expr;               ///< 语义上返回单行的表达式
+//   RelAttrSqlNode attribute;  ///< xxx.xxx形式的字段(包括聚合)
+// };
+
+// 2.2.2 in from clause
+struct Relation
+{
+  std::string relation_name;
+  std::string alias;
+};
+// 把 SelectSqlNode 所有表join起来的条件, N 个表，N-1个条件
+struct FromSqlNode
+{
+  std::vector<Relation> relations;           // 需要join的表
+  std::vector<PConditionExpr *> join_conds;  // join的条件
+  // join 目前只需要支持 and, 故实际上PConditionExpr以及其子树的CompOp唯一
+};
+
+// 2.2.3 in where clause
+// 排序类型
 enum class SortType
 {
   ASC,
   DESC
 };
 
-/**
- * @description: 一个OrderBy单元
- * @return {*}
- */
+// OrderBy单元
 struct OrderBy
 {
   RelAttrSqlNode attr;  // order_by的属性
   SortType sort_type;   // 排序类型,
-};
-/**
- * @brief 表示一个条件比较
- * @ingroup SQLParser
- * @details 条件比较就是SQL查询中的 where a>b 这种。
- * 一个条件比较是有两部分组成的，称为左边和右边。
- * 左边和右边理论上都可以是任意的数据，比如是字段（属性，列），也可以是数值常量。
- * 这个结构中记录的仅仅支持字段和值。
- */
-struct ConditionSqlNode
-{
-  int left_is_attr;           ///< TRUE if left-hand side is an attribute
-                              ///< 1时，操作符左边是属性名，0时，是属性值
-  Value left_value;           ///< left-hand side value if left_is_attr = FALSE
-  RelAttrSqlNode left_attr;   ///< left-hand side attribute
-  CompOp comp;                ///< comparison operator
-  int right_is_attr;          ///< TRUE if right-hand side is an attribute
-                              ///< 1时，操作符右边是属性名，0时，是属性值
-  RelAttrSqlNode right_attr;  ///< right-hand side attribute if right_is_attr = TRUE 右边的属性
-  Value right_value;          ///< right-hand side value if right_is_attr = FALSE
-};
-
-/**
- * @description: Where句柄，里面会跟Conditions, 以及OrderBy, GroupBy
- * @return {*}
- */
-
-struct WhereSqlNode
-{
-  std::vector<ConditionSqlNode> conditions;
-  std::vector<OrderBy> orderbys;
-};
-
-/**
- * @description: 把 SelectSqlNode 所有表join起来的条件
- * 一个N 个表，N-1个条件
- * @return {*}
- */
-
-struct JoinSqlNode
-{
-  std::vector<std::string> relations;                     // 需要join的表
-  std::vector<std::vector<ConditionSqlNode>> join_conds;  // 把表join起来的条件,
-};
-
-/**
- * @brief 描述一个select语句
- * @ingroup SQLParser
- * @details 一个正常的select语句描述起来比这个要复杂很多，这里做了简化。
- * 一个select语句由三部分组成，分别是select, from, where。
- * select部分表示要查询的字段，from部分表示要查询的表，where部分表示查询的条件。
- * 比如 from 中可以是多个表，也可以是另一个查询语句，这里仅仅支持表，也就是 relations。
- * where 条件 conditions，这里表示使用AND串联起来多个条件。正常的SQL语句会有OR，NOT等，
- * 甚至可以包含复杂的表达式。
- */
-
-struct SelectSqlNode
-{
-  std::vector<RelAttrSqlNode> attributes;                 ///< attributes in select clause
-  std::vector<std::string> relations;                     ///< 查询的表
-  std::vector<ConditionSqlNode> conditions;               ///< 查询条件，使用AND串联起来多个条件
-  std::vector<std::vector<ConditionSqlNode>> join_conds;  ///< 做连接时，把relations连接起来的条件。
-  std::vector<OrderBy> orderbys;                          // oderby条件
-
-  bool IsAttributesVailid()
-  {
-    int relattr_cnt = 0;
-    for (const auto &node : attributes) {
-      if (node.aggr_type == AggrFuncType::INVALID) {
-        relattr_cnt++;
-      }
-    }
-    return relattr_cnt == 0 || (relattr_cnt == static_cast<int>(attributes.size()));
-  }
 };
 
 /**
@@ -198,7 +279,7 @@ struct InsertSqlNode
 struct DeleteSqlNode
 {
   std::string relation_name;  ///< Relation to delete from
-  std::vector<ConditionSqlNode> conditions;
+  PConditionExpr *conditions;
 };
 
 // 表示 Update 语句中 SET 的赋值
@@ -206,7 +287,7 @@ struct AssignmentSqlNode
 {
   std::string attribute_name;  ///< 属性名, 因为只支持单表, 不需要RelAttrSqlNode类型
   Value value;                 ///< 值
-  // TODO(oldcb): 支持表达式
+  PExpr *expr;                 ///< 支持表达式
 };
 
 /**
@@ -215,11 +296,9 @@ struct AssignmentSqlNode
  */
 struct UpdateSqlNode
 {
-  // std::vector<std::string> attribute_names;  ///< 更新的字段，支持多字段
-  // std::vector<Value> values;           ///< 更新的值，支持多字段
   std::string relation_name;  ///< Relation to update
   std::vector<AssignmentSqlNode> assignments;
-  std::vector<ConditionSqlNode> conditions;
+  PConditionExpr *conditions;
 };
 
 /**
