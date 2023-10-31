@@ -181,7 +181,6 @@ bool IsAttributesVailid(const std::vector<PExpr *> &select_attr)
 %type <string>              field_or_star
 %type <std_string_list>     field_or_star_list
 %type <number>              number
-%type <comp>                comp_op
 %type <std_string_list>     id_list
 %type <rel_attr>            rel_attr
 %type <aggr_func_type>      aggr_func_type
@@ -236,7 +235,9 @@ bool IsAttributesVailid(const std::vector<PExpr *> &select_attr)
 %left COMMA
 %left OR
 %left AND
-%nonassoc EQ LT GT LE GE NE IS AS LIKE EXISTS IN NOT
+%left EQ NE LIKE IS AS EXISTS  
+%left IN NOT
+%left LT GT LE GE
 %left '+' '-'
 %left '*' '/' '%'
 %nonassoc UMINUS
@@ -569,7 +570,7 @@ select_attr:
         $$ = new std::vector<PExpr *>;
       }
       $$->push_back($1);
-      std::reverse($$->begin(), $$->end());
+      // std::reverse($$->begin(), $$->end());
     }
     | pexpr ID select_attr_list {
       if ($3 != nullptr) {
@@ -580,7 +581,7 @@ select_attr:
       PExpr * pexpr = $1;
       pexpr->alias = $2;
       $$->push_back(pexpr);
-      std::reverse($$->begin(), $$->end());
+      // std::reverse($$->begin(), $$->end());
       free($2);
     }
     | pexpr AS ID select_attr_list {
@@ -592,7 +593,7 @@ select_attr:
       PExpr * pexpr = $1;
       pexpr->alias = $3;
       $$->push_back(pexpr);
-      std::reverse($$->begin(), $$->end());
+      // std::reverse($$->begin(), $$->end());
       free($3);
     }
     ;
@@ -1286,17 +1287,6 @@ expression:
     }
     ;
 
-comp_op:
-      EQ { $$ = CompOp::EQUAL_TO; }
-    | LT { $$ = CompOp::LESS_THAN; }
-    | GT { $$ = CompOp::GREAT_THAN; }
-    | LE { $$ = CompOp::LESS_EQUAL; }
-    | GE { $$ = CompOp::GREAT_EQUAL; }
-    | NE { $$ = CompOp::NOT_EQUAL; }
-    | LIKE { $$ = CompOp::LIKE; }
-    | NOT LIKE { $$ = CompOp::NOT_LIKE; }
-    ;
-
 
 unary_pexpr:
   value {
@@ -1314,29 +1304,6 @@ unary_pexpr:
     delete $1;
   }
 
-arith_pexpr:
-    pexpr '+' pexpr {
-        PArithmeticExpr *arith_pexpr = new PArithmeticExpr(PArithmeticType::ADD, $1, $3);
-        $$ = arith_pexpr;
-    }
-    | pexpr '-' pexpr {
-        PArithmeticExpr *arith_pexpr = new PArithmeticExpr(PArithmeticType::SUB, $1, $3);
-        $$ = arith_pexpr;
-    }
-    | pexpr '*' pexpr {
-        PArithmeticExpr *arith_pexpr = new PArithmeticExpr(PArithmeticType::MUL, $1, $3);
-        $$ = arith_pexpr;
-    }
-    | pexpr '/' pexpr {
-        PArithmeticExpr *arith_pexpr = new PArithmeticExpr(PArithmeticType::DIV, $1, $3);
-        $$ = arith_pexpr;
-    }
-    | '-' pexpr %prec UMINUS {
-        PArithmeticExpr *arith_pexpr = new PArithmeticExpr(PArithmeticType::NEGATIVE, $2, nullptr);
-        $$ = arith_pexpr;
-    }
-
-
 cond_pexpr:
     pexpr OR pexpr{
       PConditionExpr *condition_pexpr = new PConditionExpr(CompOp::OR, $1, $3);
@@ -1346,9 +1313,44 @@ cond_pexpr:
       PConditionExpr *condition_pexpr = new PConditionExpr(CompOp::AND, $1, $3);
       $$ = condition_pexpr;
     }
-    | pexpr comp_op pexpr
+    | pexpr EQ pexpr
     {
-      PConditionExpr *condition_pexpr = new PConditionExpr($2, $1, $3);
+      PConditionExpr *condition_pexpr = new PConditionExpr(CompOp::EQUAL_TO, $1, $3);
+      $$ = condition_pexpr;
+    }
+    | pexpr NE pexpr
+    {
+      PConditionExpr *condition_pexpr = new PConditionExpr(CompOp::NOT_EQUAL, $1, $3);
+      $$ = condition_pexpr;
+    }
+    | pexpr LT pexpr
+    {
+      PConditionExpr *condition_pexpr = new PConditionExpr(CompOp::LESS_THAN, $1, $3);
+      $$ = condition_pexpr;
+    }
+    | pexpr GT pexpr
+    {
+      PConditionExpr *condition_pexpr = new PConditionExpr(CompOp::GREAT_THAN, $1, $3);
+      $$ = condition_pexpr;
+    }
+    | pexpr LE pexpr
+    {
+      PConditionExpr *condition_pexpr = new PConditionExpr(CompOp::LESS_EQUAL, $1, $3);
+      $$ = condition_pexpr;
+    }
+    | pexpr GE pexpr
+    {
+      PConditionExpr *condition_pexpr = new PConditionExpr(CompOp::GREAT_EQUAL, $1, $3);
+      $$ = condition_pexpr;
+    }
+    | pexpr LIKE pexpr
+    {
+      PConditionExpr *condition_pexpr = new PConditionExpr(CompOp::LIKE, $1, $3);
+      $$ = condition_pexpr;
+    }
+    | pexpr NOT LIKE pexpr
+    {
+      PConditionExpr *condition_pexpr = new PConditionExpr(CompOp::NOT_LIKE, $1, $4);
       $$ = condition_pexpr;
     }
     | pexpr IS NULL_T
@@ -1390,7 +1392,29 @@ cond_pexpr:
       $$ = condition_pexpr;
     }
     ;
-    
+
+  arith_pexpr:
+      pexpr '+' pexpr {
+          PArithmeticExpr *arith_pexpr = new PArithmeticExpr(PArithmeticType::ADD, $1, $3);
+          $$ = arith_pexpr;
+      }
+      | pexpr '-' pexpr {
+          PArithmeticExpr *arith_pexpr = new PArithmeticExpr(PArithmeticType::SUB, $1, $3);
+          $$ = arith_pexpr;
+      }
+      | pexpr '*' pexpr {
+          PArithmeticExpr *arith_pexpr = new PArithmeticExpr(PArithmeticType::MUL, $1, $3);
+          $$ = arith_pexpr;
+      }
+      | pexpr '/' pexpr {
+          PArithmeticExpr *arith_pexpr = new PArithmeticExpr(PArithmeticType::DIV, $1, $3);
+          $$ = arith_pexpr;
+      }
+      | '-' pexpr %prec UMINUS {
+          PArithmeticExpr *arith_pexpr = new PArithmeticExpr(PArithmeticType::NEGATIVE, $2, nullptr);
+          $$ = arith_pexpr;
+      }
+
 func_pexpr:
     LENGTH LBRACE pexpr RBRACE {
       PFuncExpr *func_pexpr = new PFuncExpr;

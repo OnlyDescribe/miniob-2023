@@ -53,8 +53,36 @@ struct PExpr
   PConditionExpr *cexp;
   PFuncExpr *fexp;
   PSubQueryExpr *sexp;
+
   std::string name;
   std::string alias;
+
+  PExpr() = default;
+  PExpr(PUnaryExpr *exp)
+  {
+    type = PExpType::UNARY;
+    uexp = exp;
+  }
+  PExpr(PArithmeticExpr *exp)
+  {
+    type = PExpType::ARITHMETIC;
+    aexp = exp;
+  }
+  PExpr(PConditionExpr *exp)
+  {
+    type = PExpType::COMPARISON;
+    cexp = exp;
+  }
+  PExpr(PFuncExpr *exp)
+  {
+    type = PExpType::FUNC;
+    fexp = exp;
+  }
+  PExpr(PSubQueryExpr *exp)
+  {
+    type = PExpType::SUBQUERY;
+    sexp = exp;
+  }
 };
 
 // 1.2. 定义 ParsedExpression 中对象
@@ -270,7 +298,7 @@ struct UpdateSqlNode
 {
   std::string relation_name;  ///< Relation to update
   std::vector<AssignmentSqlNode> assignments;
-  PConditionExpr * conditions;
+  PConditionExpr *conditions;
 };
 
 /**
