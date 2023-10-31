@@ -120,13 +120,31 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
       if (aggr_type == AggrFuncType::COUNT && relation_attr.aggregates[i] == "*") {
         aggr_type = AggrFuncType::COUNT_STAR;
       }
-      Table *table = tables[0];
-      const FieldMeta *field_meta = table->table_meta().field(relation_attr.aggregates[0].c_str());
-      if (nullptr == field_meta && aggr_type != AggrFuncType::COUNT_STAR) {
-        LOG_WARN("no such field. field=%s.%s.%s", db->name(), table->name(), relation_attr.aggregates[0].c_str());
-        return RC::SCHEMA_FIELD_MISSING;
+      // id.id分隔开
+      std::vector<std::string> result;
+      common::split_string(relation_attr.aggregates[0], ".", result);
+      if (result.size() > 2) {
+        return RC::SQL_SYNTAX;
       }
-      query_fields.push_back(Field(table, field_meta, aggr_type));
+
+      if (result.size() == 1) {
+        Table *table = tables[0];
+        const FieldMeta *field_meta = table->table_meta().field(relation_attr.aggregates[0].c_str());
+        if (nullptr == field_meta && aggr_type != AggrFuncType::COUNT_STAR) {
+          LOG_WARN("no such field. field=%s.%s.%s", db->name(), table->name(), relation_attr.aggregates[0].c_str());
+          return RC::SCHEMA_FIELD_MISSING;
+        }
+        query_fields.push_back(Field(table, field_meta, aggr_type));
+      } else {
+        Field field;
+        RC rc = createField(tables, result[0].c_str(), result[1].c_str(), field);
+        if (rc != RC::SUCCESS) {
+          return rc;
+        }
+        field.set_aggr(aggr_type);
+        query_fields.push_back(field);
+      }
+
       continue;
     }
 

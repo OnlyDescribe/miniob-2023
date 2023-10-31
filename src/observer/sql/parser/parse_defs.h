@@ -130,6 +130,7 @@ struct PArithmeticExpr
   PArithmeticType type;
   PExpr *left;
   PExpr *right;
+  PArithmeticExpr(PArithmeticType atype, PExpr *L, PExpr *R) : type(atype), left(L), right(R) {}
 };
 
 // 1.2.3 比较表达式
@@ -163,6 +164,7 @@ struct ConditionSqlNode
   CompOp comp;  ///< comparison operator
   PExpr *left;
   PExpr *right;
+  ConditionSqlNode(CompOp op, PExpr *L, PExpr *R) : comp(op), left(L), right(R) {}
 };
 
 // 1.2.4 Function

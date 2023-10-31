@@ -25,6 +25,11 @@ See the Mulan PSL v2 for more details. */
 #include "common/log/log.h"
 
 class Tuple;
+class SelectStmt;
+class Stmt;
+class LogicalOperator;
+class PhysicalOperator;
+
 const static std::unordered_map<AggrFuncType, std::string> AggretationExprStr = {
     {AggrFuncType::MAX, "MAX"},
     {AggrFuncType::MIN, "MIN"},
@@ -54,6 +59,7 @@ enum class ExprType
   COMPARISON,    ///< 需要做比较的表达式
   CONJUNCTION,   ///< 多个表达式使用同一种关系(AND或OR)来联结
   ARITHMETIC,    ///< 算术运算
+  SUBQUERY,      ///< 子查询
 };
 
 /**
@@ -107,6 +113,7 @@ public:
       case ExprType::COMPARISON: return "COMPARISON";
       case ExprType::CONJUNCTION: return "CONJUNCTION";
       case ExprType::ARITHMETIC: return "ARITHMETIC";
+      case ExprType::SUBQUERY: return "SUBQUERY";
       default: break;
     }
     return "NOT SUPPORT";
@@ -373,4 +380,34 @@ public:
 private:
   AggrFuncType aggr_func_type_;
   Field field_;
+};
+
+/**
+ * @description: 子查询表达式，可以返回一行或者多行
+ * @return {*}
+ */
+class SubQueryExpr : public Expression
+{
+public:
+  SubQueryExpr();
+  virtual ~SubQueryExpr();
+
+  virtual RC get_value(const Tuple &tuple, Value &value) const;
+
+  // 从子查询里面，确保只能拿一个记录
+  RC get_one_row_value(const Tuple &tuple, Value &value);
+
+  virtual RC try_get_value(Value &value) const { return RC::UNIMPLENMENT; }
+
+  virtual ExprType type() const { return ExprType::SUBQUERY; }
+
+  virtual AttrType value_type() const { return AttrType::UNDEFINED; }
+
+  // should own this?
+  SelectStmt *subquery_stmt{nullptr};
+  std::unique_ptr<LogicalOperator> oper;
+  std::unique_ptr<PhysicalOperator> phy_oper;
+
+private:
+  mutable bool is_open_{false};  // phy_oper是否需要open
 };

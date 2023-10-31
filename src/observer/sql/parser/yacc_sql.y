@@ -947,6 +947,7 @@ subquery_pexpr:        /*  select 语句的语法解析树*/
     LBRACE SELECT select_attr FROM select_from where group_by having order_by RBRACE
     {
       $$ = new PSubQueryExpr;
+      $$->sub_select = new SelectSqlNode();
       SelectSqlNode * sub_select = $$->sub_select;
       if ($3 != nullptr) {
         sub_select->attributes.swap(*$3);
@@ -1181,13 +1182,18 @@ aggr_func_type:
     ;
 field_or_star:
   '*' {
-    $$ = "*";
+    $$ = strdup("*");
   }
   | ID {
     $$ = $1;
   }
+  | ID DOT ID {
+    std::string res = $1;
+    res += ".";
+    res += $3;
+    $$ = strdup(res.c_str());
+  }
   ;
-/* TODO: 可能有内存泄漏 */
 field_or_star_list:
     {
       $$ = nullptr;
@@ -1197,6 +1203,7 @@ field_or_star_list:
       $$->emplace_back($1);
       if ($2 != nullptr) {
         $$->insert($$->end(), $2->begin(), $2->end());
+        delete $2;
       }
     }
     | COMMA field_or_star field_or_star_list {

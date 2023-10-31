@@ -194,23 +194,40 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
   return RC::SUCCESS;
 }
 
+/**
+ * @description: 创造查询过滤条件的算子
+ * @param {FilterStmt} *filter_stmt
+ * @param {unique_ptr<LogicalOperator>} &logical_operator
+ */
 RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<LogicalOperator> &logical_operator)
 {
+  RC rc = RC::SUCCESS;
   std::vector<unique_ptr<Expression>> cmp_exprs;
   const std::vector<FilterUnit *> &filter_units = filter_stmt->filter_units();
-  for (const FilterUnit *filter_unit : filter_units) {
-    const FilterObj &join_on_obj_left = filter_unit->left();
-    const FilterObj &join_on_obj_right = filter_unit->right();
-
-    unique_ptr<Expression> left(join_on_obj_left.is_attr
-                                    ? static_cast<Expression *>(new FieldExpr(join_on_obj_left.field))
-                                    : static_cast<Expression *>(new ValueExpr(join_on_obj_left.value)));
-
-    unique_ptr<Expression> right(join_on_obj_right.is_attr
-                                     ? static_cast<Expression *>(new FieldExpr(join_on_obj_right.field))
-                                     : static_cast<Expression *>(new ValueExpr(join_on_obj_right.value)));
-
-    ComparisonExpr *cmp_expr = new ComparisonExpr(filter_unit->comp(), std::move(left), std::move(right));
+  for (FilterUnit *filter_unit : filter_units) {
+    // 创建filter_unit左右子查询的逻辑算子
+    if (filter_unit->left->type() == ExprType::SUBQUERY) {
+      auto sub_query_expr = static_cast<SubQueryExpr *>(filter_unit->left.get());
+      if (sub_query_expr->subquery_stmt->query_fields().size() != 1) {
+        return RC::SUBQUERY_MANY_COLS;
+      }
+      rc = create_plan(sub_query_expr->subquery_stmt, sub_query_expr->oper);
+      if (rc != RC::SUCCESS) {
+        return rc;
+      }
+    }
+    if (filter_unit->right->type() == ExprType::SUBQUERY) {
+      auto sub_query_expr = static_cast<SubQueryExpr *>(filter_unit->right.get());
+      if (sub_query_expr->subquery_stmt->query_fields().size() != 1) {
+        return RC::SUBQUERY_MANY_COLS;
+      }
+      rc = create_plan(sub_query_expr->subquery_stmt, sub_query_expr->oper);
+      if (rc != RC::SUCCESS) {
+        return rc;
+      }
+    }
+    ComparisonExpr *cmp_expr =
+        new ComparisonExpr(filter_unit->comp, std::move(filter_unit->left), std::move(filter_unit->right));
     cmp_exprs.emplace_back(cmp_expr);
   }
 
@@ -221,7 +238,7 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
   }
 
   logical_operator = std::move(predicate_oper);
-  return RC::SUCCESS;
+  return rc;
 }
 
 RC LogicalPlanGenerator::create_plan(InsertStmt *insert_stmt, unique_ptr<LogicalOperator> &logical_operator)

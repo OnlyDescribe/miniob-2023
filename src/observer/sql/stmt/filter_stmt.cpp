@@ -17,6 +17,7 @@ See the Mulan PSL v2 for more details. */
 #include "common/lang/string.h"
 #include "sql/parser/parse_defs.h"
 #include "sql/stmt/filter_stmt.h"
+#include "sql/stmt/select_stmt.h"
 #include "storage/db/db.h"
 #include "storage/table/table.h"
 #include <cassert>
@@ -111,45 +112,63 @@ RC FilterStmt::create_filter_unit(Db *db, Table *default_table, std::unordered_m
 
   // TODO: 我这里默认左右都是UNARY表达式, 后续要把 FilterUnit 改成递归的送到 Expression
   filter_unit = new FilterUnit;
-  PUnaryExpr *left = condition->left->uexp;    // 暂时默认是UNARY表达式,
-  PUnaryExpr *right = condition->right->uexp;  // 暂时默认是UNARY表达式,
+  filter_unit->comp = comp;
 
-  if (left->is_attr) {
-    Table *table = nullptr;
-    const FieldMeta *field = nullptr;
-    rc = get_table_and_field(db, default_table, tables, left->attr, table, field);
+  if (condition->left->type == PExpType::UNARY) {
+    PUnaryExpr *left = condition->left->uexp;
+    if (left->is_attr) {
+      Table *table = nullptr;
+      const FieldMeta *field = nullptr;
+      rc = get_table_and_field(db, default_table, tables, left->attr, table, field);
+      if (rc != RC::SUCCESS) {
+        LOG_WARN("cannot find attr");
+        return rc;
+      }
+      filter_unit->left = std::make_unique<FieldExpr>(Field(table, field));
+    } else {
+      filter_unit->left = std::make_unique<ValueExpr>(left->value);
+    }
+  } else if (condition->left->type == PExpType::SUBQUERY) {
+    Stmt *subquery_stmt = nullptr;
+    rc = SelectStmt::create(db, *condition->left->sexp->sub_select, subquery_stmt);
     if (rc != RC::SUCCESS) {
-      LOG_WARN("cannot find attr");
       return rc;
     }
-    FilterObj filter_obj;
-    filter_obj.init_attr(Field(table, field));
-    filter_unit->set_left(filter_obj);
+    auto subquery_expr = std::make_unique<SubQueryExpr>();
+    subquery_expr->subquery_stmt = static_cast<SelectStmt *>(subquery_stmt);
+    filter_unit->left = std::move(subquery_expr);
   } else {
-    FilterObj filter_obj;
-    filter_obj.init_value(left->value);
-    filter_unit->set_left(filter_obj);
+    LOG_ERROR("not support expr type");
+    return RC::INVALID_ARGUMENT;
   }
 
-  if (right->is_attr) {
-    Table *table = nullptr;
-    const FieldMeta *field = nullptr;
-    rc = get_table_and_field(db, default_table, tables, right->attr, table, field);
+  if (condition->right->type == PExpType::UNARY) {
+    PUnaryExpr *right = condition->right->uexp;
+    if (right->is_attr) {
+      Table *table = nullptr;
+      const FieldMeta *field = nullptr;
+      rc = get_table_and_field(db, default_table, tables, right->attr, table, field);
+      if (rc != RC::SUCCESS) {
+        LOG_WARN("cannot find attr");
+        return rc;
+      }
+      filter_unit->right = std::make_unique<FieldExpr>(Field(table, field));
+    } else {
+      filter_unit->right = std::make_unique<ValueExpr>(right->value);
+    }
+  } else if (condition->right->type == PExpType::SUBQUERY) {  // 子查询表达式
+    Stmt *subquery_stmt = nullptr;
+    rc = SelectStmt::create(db, *condition->right->sexp->sub_select, subquery_stmt);
     if (rc != RC::SUCCESS) {
-      LOG_WARN("cannot find attr");
       return rc;
     }
-    FilterObj filter_obj;
-    filter_obj.init_attr(Field(table, field));
-    filter_unit->set_right(filter_obj);
+    auto subquery_expr = std::make_unique<SubQueryExpr>();
+    subquery_expr->subquery_stmt = static_cast<SelectStmt *>(subquery_stmt);
+    filter_unit->right = std::move(subquery_expr);
   } else {
-    FilterObj filter_obj;
-    filter_obj.init_value(right->value);
-    filter_unit->set_right(filter_obj);
+    LOG_ERROR("not support expr type");
+    return RC::INVALID_ARGUMENT;
   }
-
-  filter_unit->set_comp(comp);
-
   // 检查两个类型是否能够比较
   return rc;
 }

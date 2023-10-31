@@ -286,6 +286,46 @@ RC PhysicalPlanGenerator::create_plan(PredicateLogicalOperator &pred_oper, uniqu
   vector<unique_ptr<Expression>> &expressions = pred_oper.expressions();
   ASSERT(expressions.size() == 1, "predicate logical operator's children should be 1");
 
+  // 这是一个conjunction的表达式，由多个cmp expr组成，需要把里面和子查询有关的，创建成物理算子
+  if (expressions[0]->type() == ExprType::CONJUNCTION) {
+    auto conj_expr = static_cast<ConjunctionExpr *>(expressions[0].get());
+    for (auto &expression : conj_expr->children()) {
+      if (expression->type() == ExprType::COMPARISON) {
+        ComparisonExpr *cmp_expr = static_cast<ComparisonExpr *>(expression.get());
+        if (cmp_expr->left()->type() == ExprType::SUBQUERY) {
+          auto sub_query_expr = static_cast<SubQueryExpr *>(cmp_expr->left().get());
+          rc = create(*sub_query_expr->oper, sub_query_expr->phy_oper);
+          if (rc != RC::SUCCESS) {
+            return rc;
+          }
+        }
+        if (cmp_expr->right()->type() == ExprType::SUBQUERY) {
+          auto sub_query_expr = static_cast<SubQueryExpr *>(cmp_expr->right().get());
+          rc = create(*sub_query_expr->oper, sub_query_expr->phy_oper);
+          if (rc != RC::SUCCESS) {
+            return rc;
+          }
+        }
+      }
+    }
+  } else if (expressions[0]->type() == ExprType::COMPARISON) {
+    ComparisonExpr *cmp_expr = static_cast<ComparisonExpr *>(expressions[0].get());
+    if (cmp_expr->left()->type() == ExprType::SUBQUERY) {
+      auto sub_query_expr = static_cast<SubQueryExpr *>(cmp_expr->left().get());
+      rc = create(*sub_query_expr->oper, sub_query_expr->phy_oper);
+      if (rc != RC::SUCCESS) {
+        return rc;
+      }
+    }
+    if (cmp_expr->right()->type() == ExprType::SUBQUERY) {
+      auto sub_query_expr = static_cast<SubQueryExpr *>(cmp_expr->right().get());
+      rc = create(*sub_query_expr->oper, sub_query_expr->phy_oper);
+      if (rc != RC::SUCCESS) {
+        return rc;
+      }
+    }
+  }
+
   unique_ptr<Expression> expression = std::move(expressions.front());
   oper = unique_ptr<PhysicalOperator>(new PredicatePhysicalOperator(std::move(expression)));
   oper->add_child(std::move(child_phy_oper));

@@ -278,7 +278,7 @@ RC MvccTrx::update_record(Table *table, Record &old_record, Record &new_record)
   RID null_rid{0, 0};                            // 用 null_rid 来表示最旧的record
   time_travel_table->insert_record(old_record);  // 插入后, 此时old_record的rid改变成在time-travel table的rid
   RID travel_old_record_rid = old_record.rid();
-  Record travel_old_record;  // old_record在travel table中的拷贝
+  Record travel_old_record;                      // old_record在travel table中的拷贝
   time_travel_table->get_record(travel_old_record_rid, travel_old_record);
 
   // 若存在在 time-travel table 的record

@@ -184,11 +184,11 @@ void Value::set_value(const Value &value)
       if (attr_type_ == value.attr_type_) {
         set_date(value.str_value_.c_str());
       }
-      ASSERT(false, "not implemented");
     } break;
     case UNDEFINED: {
       ASSERT(false, "got an invalid value type");
     } break;
+    default: break;
   }
 }
 
