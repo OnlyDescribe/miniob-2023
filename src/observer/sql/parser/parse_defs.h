@@ -106,7 +106,7 @@ struct PArithmeticExpr
 
 // 1.2.3 比较表达式
 // 描述比较运算符
-enum CompOp
+enum class CompOp
 {
   EQUAL_TO,     ///< "="
   LESS_EQUAL,   ///< "<="
@@ -175,7 +175,7 @@ struct SelectSqlNode
   std::vector<PConditionExpr *> join_conds;  ///< 连接条件
                                              ///< Expr得是指针, 否则在解析阶段会delete, 难通过析构来管理内存
   // in where clause
-  PConditionExpr *condition;
+  PConditionExpr *conditions;
 
   // in groupby clause
   std::vector<RelAttrSqlNode> groupbys;

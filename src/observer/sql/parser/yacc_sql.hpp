@@ -63,22 +63,22 @@ extern int yydebug;
     UNIQUE = 264,                  /* UNIQUE  */
     CALC = 265,                    /* CALC  */
     SELECT = 266,                  /* SELECT  */
-    DESC = 267,                    /* DESC  */
-    SHOW = 268,                    /* SHOW  */
-    SYNC = 269,                    /* SYNC  */
-    INSERT = 270,                  /* INSERT  */
-    DELETE = 271,                  /* DELETE  */
-    UPDATE = 272,                  /* UPDATE  */
-    LBRACE = 273,                  /* LBRACE  */
-    AGGR_MAX = 274,                /* AGGR_MAX  */
-    AGGR_MIN = 275,                /* AGGR_MIN  */
-    AGGR_SUM = 276,                /* AGGR_SUM  */
-    AGGR_AVG = 277,                /* AGGR_AVG  */
-    AGGR_COUNT = 278,              /* AGGR_COUNT  */
-    LENGTH = 279,                  /* LENGTH  */
-    ROUND = 280,                   /* ROUND  */
-    DATE_FORMAT = 281,             /* DATE_FORMAT  */
-    ASC = 282,                     /* ASC  */
+    SHOW = 267,                    /* SHOW  */
+    SYNC = 268,                    /* SYNC  */
+    INSERT = 269,                  /* INSERT  */
+    DELETE = 270,                  /* DELETE  */
+    UPDATE = 271,                  /* UPDATE  */
+    LBRACE = 272,                  /* LBRACE  */
+    AGGR_MAX = 273,                /* AGGR_MAX  */
+    AGGR_MIN = 274,                /* AGGR_MIN  */
+    AGGR_SUM = 275,                /* AGGR_SUM  */
+    AGGR_AVG = 276,                /* AGGR_AVG  */
+    AGGR_COUNT = 277,              /* AGGR_COUNT  */
+    LENGTH = 278,                  /* LENGTH  */
+    ROUND = 279,                   /* ROUND  */
+    DATE_FORMAT = 280,             /* DATE_FORMAT  */
+    ASC = 281,                     /* ASC  */
+    DESC = 282,                    /* DESC  */
     RBRACE = 283,                  /* RBRACE  */
     INNER = 284,                   /* INNER  */
     JOIN = 285,                    /* JOIN  */
@@ -148,8 +148,8 @@ union YYSTYPE
   PFuncExpr *                       func_pexpr;
   PSubQueryExpr *                   subquery_pexpr;
   Value *                           value;
-  enum CompOp                       comp;
-  enum AggrFuncType                 aggr_func_type;
+  enum  CompOp                      comp;
+  enum  AggrFuncType                aggr_func_type;
   Expression *                      expression;
   RelAttrSqlNode *                  rel_attr;
   AttrInfoSqlNode *                 attr_info;

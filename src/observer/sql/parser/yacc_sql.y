@@ -45,11 +45,11 @@ bool IsAttributesVailid(const std::vector<PExpr *> &select_attr)
 {
   int relattr_cnt = 0;
   for (const PExpr *node : select_attr) {
-    if (node->type == PExpType::UNARY && node->uexp->attr.attribute.aggr_type == AggrFuncType::INVALID) {
+    if (node->type == PExpType::UNARY && node->uexp->attr.aggr_type == AggrFuncType::INVALID) {
       relattr_cnt++;
     }
   }
-  return relattr_cnt == 0 || (relattr_cnt == static_cast<int>(attributes.size()));
+  return relattr_cnt == 0 || (relattr_cnt == static_cast<int>(select_attr.size()));
 }
 
 %}
@@ -145,8 +145,8 @@ bool IsAttributesVailid(const std::vector<PExpr *> &select_attr)
   PFuncExpr *                       func_pexpr;
   PSubQueryExpr *                   subquery_pexpr;
   Value *                           value;
-  enum CompOp                       comp;
-  enum AggrFuncType                 aggr_func_type;
+  enum  CompOp                      comp;
+  enum  AggrFuncType                aggr_func_type;
   Expression *                      expression;
   RelAttrSqlNode *                  rel_attr;
   AttrInfoSqlNode *                 attr_info;
@@ -232,7 +232,7 @@ bool IsAttributesVailid(const std::vector<PExpr *> &select_attr)
 // commands should be a list but I use a single command instead
 %type <sql_node>            commands
 
-%expect 0
+/* %expect 0 */
 %left COMMA
 %left OR
 %left AND
@@ -456,10 +456,7 @@ delete_stmt:    /*  delete 语句的语法解析树*/
     {
       $$ = new ParsedSqlNode(SCF_DELETE);
       $$->deletion.relation_name = $3;
-      if ($4 != nullptr) {
-        $$->deletion.conditions.swap($4);
-        delete $4;
-      }
+      $$->deletion.conditions = $4;
       free($3);
     }
     ;
@@ -474,11 +471,9 @@ update_stmt:      /*  update 语句的语法解析树*/
         $$->update.assignments.swap(*$7);
         delete $7;
       }
-      if ($8 != nullptr) {
-        $$->update.conditions.swap($8);
-        delete $8;
-      }
 
+      $$->update.conditions = $8;
+      
       AssignmentSqlNode node = {
         .attribute_name = std::string{$4},
         .value = *$6
@@ -514,7 +509,7 @@ select_stmt:        /*  select 语句的语法解析树*/
         delete $4;
       }
 
-      $$->selection.condition = $5;
+      $$->selection.conditions = $5;
 
       if ($6 != nullptr) {
         $$->selection.groupbys = *$6;
@@ -615,8 +610,8 @@ select_attr_list:
       $$->push_back($2);
     }
     | COMMA pexpr ID select_attr_list {
-      if ($3 != nullptr) {
-        $$ = $3;
+      if ($4 != nullptr) {
+        $$ = $4;
       } else {
         $$ = new std::vector<PExpr *>;
       }
@@ -648,7 +643,8 @@ select_from:
       Relation rel;
       rel.relation_name = $1;
       $$->relations.push_back(std::move(rel));
-      std::reverse($$->begin(), $$->end());
+      std::reverse($$->relations.begin(), $$->relations.end());
+      std::reverse($$->join_conds.begin(), $$->join_conds.end());
       free($1);
     }
     | ID ID from_list {
@@ -661,7 +657,8 @@ select_from:
       rel.relation_name = $1;
       rel.alias = $2;
       $$->relations.push_back(std::move(rel));
-      std::reverse($$->begin(), $$->end());
+      std::reverse($$->relations.begin(), $$->relations.end());
+      std::reverse($$->join_conds.begin(), $$->join_conds.end());
       free($1);
       free($2);
     }
@@ -675,7 +672,8 @@ select_from:
       rel.relation_name = $1;
       rel.alias = $3;
       $$->relations.push_back(std::move(rel));
-      std::reverse($$->begin(), $$->end());
+      std::reverse($$->relations.begin(), $$->relations.end());
+      std::reverse($$->join_conds.begin(), $$->join_conds.end());
       free($1);
       free($3);
     }
@@ -696,8 +694,8 @@ from_list:
       free($2);
     }
     | COMMA ID ID from_list {
-      if ($3 != nullptr) {
-        $$ = $3;
+      if ($4 != nullptr) {
+        $$ = $4;
       } else {
         $$ = new FromSqlNode;
       }
@@ -730,12 +728,12 @@ from_list:
       Relation rel;
       rel.relation_name = $3;
       $$->relations.push_back(rel);
-      $$->join_conds.push_back($4)
+      $$->join_conds.push_back($4);
       free($3);
     }
     | INNER JOIN ID ID inner_join from_list {
-      if ($5 != nullptr) {
-        $$ = $5;
+      if ($6 != nullptr) {
+        $$ = $6;
       } else {
         $$ = new FromSqlNode;
       }
@@ -743,13 +741,13 @@ from_list:
       rel.relation_name = $3;
       rel.alias = $4;
       $$->relations.push_back(rel);
-      $$->join_conds.push_back($5)
+      $$->join_conds.push_back($5);
       free($3);
       free($4);
     }
     | INNER JOIN ID AS ID inner_join from_list {
-      if ($5 != nullptr) {
-        $$ = $5;
+      if ($7 != nullptr) {
+        $$ = $7;
       } else {
         $$ = new FromSqlNode;
       }
@@ -757,7 +755,7 @@ from_list:
       rel.relation_name = $3;
       rel.alias = $5;
       $$->relations.push_back(rel);
-      $$->join_conds.push_back($6)
+      $$->join_conds.push_back($6);
       free($3);
       free($5);
     }
@@ -828,7 +826,7 @@ group_by_list:
       RelAttrSqlNode rel_attr;
       rel_attr.attribute_name = $2;
       rel_attr.relation_name = $2;
-      $$->push_back(rerel_attrl);
+      $$->push_back(rel_attr);
       free($2);
     }
     | COMMA ID DOT ID group_by_list {
@@ -965,14 +963,14 @@ subquery_pexpr:        /*  select 语句的语法解析树*/
         delete $5;
       }
 
-      sub_select->condition = $6;
+      sub_select->conditions = $6;
 
       if ($7 != nullptr) {
         sub_select->groupbys = *$7;
         delete $7;
       }
 
-      sub_select->havings = $7;
+      sub_select->havings = $8;
 
       if ($9 != nullptr) {
         sub_select->orderbys = *$9;
@@ -1289,14 +1287,14 @@ expression:
     ;
 
 comp_op:
-      EQ { $$ = EQUAL_TO; }
-    | LT { $$ = LESS_THAN; }
-    | GT { $$ = GREAT_THAN; }
-    | LE { $$ = LESS_EQUAL; }
-    | GE { $$ = GREAT_EQUAL; }
-    | NE { $$ = NOT_EQUAL; }
-    | LIKE { $$ = LIKE; }
-    | NOT LIKE { $$ = NOT_LIKE; }
+      EQ { $$ = CompOp::EQUAL_TO; }
+    | LT { $$ = CompOp::LESS_THAN; }
+    | GT { $$ = CompOp::GREAT_THAN; }
+    | LE { $$ = CompOp::LESS_EQUAL; }
+    | GE { $$ = CompOp::GREAT_EQUAL; }
+    | NE { $$ = CompOp::NOT_EQUAL; }
+    | LIKE { $$ = CompOp::LIKE; }
+    | NOT LIKE { $$ = CompOp::NOT_LIKE; }
     ;
 
 
@@ -1350,7 +1348,7 @@ cond_pexpr:
     }
     | pexpr comp_op pexpr
     {
-      PConditionExpr *condition_pexpr = new PConditionExpr(comp_op, $1, $3);
+      PConditionExpr *condition_pexpr = new PConditionExpr($2, $1, $3);
       $$ = condition_pexpr;
     }
     | pexpr IS NULL_T
@@ -1358,7 +1356,10 @@ cond_pexpr:
       PUnaryExpr *unary_pexpr = new PUnaryExpr;
       unary_pexpr->is_attr = false;
       unary_pexpr->value = Value(AttrType::NULLS);
-      PConditionExpr *condition_pexpr = new PConditionExpr(CompOp::IS_NULL, $1, unary_pexpr);
+      PExpr *pexpr = new PExpr;
+      pexpr->type = PExpType::UNARY;
+      pexpr->uexp = unary_pexpr;
+      PConditionExpr *condition_pexpr = new PConditionExpr(CompOp::IS_NULL, $1, pexpr);
       $$ = condition_pexpr;
     }
     | pexpr IS NOT NULL_T
@@ -1366,7 +1367,10 @@ cond_pexpr:
       PUnaryExpr *unary_pexpr = new PUnaryExpr;
       unary_pexpr->is_attr = false;
       unary_pexpr->value = Value(AttrType::NULLS);
-      PConditionExpr *condition_pexpr = new PConditionExpr(CompOp::IS_NOT_NULL, $1, unary_pexpr);
+      PExpr *pexpr = new PExpr;
+      pexpr->type = PExpType::UNARY;
+      pexpr->uexp = unary_pexpr;
+      PConditionExpr *condition_pexpr = new PConditionExpr(CompOp::IS_NOT_NULL, $1, pexpr);
       $$ = condition_pexpr;
     }
     | pexpr IN pexpr{
@@ -1436,7 +1440,7 @@ pexpr:
     }
     | LBRACE pexpr RBRACE {
       $$ = $2;
-      $$->name(token_name(sql_string, &@$));
+      $$->name = token_name(sql_string, &@$);
     }
     | unary_pexpr {
       PExpr *pexpr = new PExpr;
