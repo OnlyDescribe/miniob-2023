@@ -42,29 +42,35 @@ RC JoinOnStmt::create(Db *db, Table *default_table, std::unordered_map<std::stri
     std::vector<JoinOnUnit *> join_units;
 
     // 创建当前表的链接条件
-    auto create_stmt = [&](auto self, PExpr *cond) -> RC {
+    auto create_stmt = [&](auto self, PExpr *cond, RC &rc) -> void {
+      if (rc != RC::SUCCESS) {
+        return;
+      }
       if (cond->type == PExpType::COMPARISON) {
-        RC rc = RC::SUCCESS;
         if (cond && cond->cexp->comp != CompOp::AND) {  // 注意cond可能是空指针
           JoinOnUnit *join_unit = nullptr;
           rc = create_join_unit(db, default_table, tables, cond->cexp, join_unit);
           if (rc != RC::SUCCESS) {
             delete tmp_stmt;
             LOG_WARN("failed to create filter unit");
-            return rc;
+            return;
           }
           join_units.push_back(join_unit);
-          return RC::SUCCESS;
+          return;
         }
-        rc = self(self, cond->cexp->left);
-        rc = self(self, cond->cexp->right);
+        self(self, cond->cexp->left, rc);
+        self(self, cond->cexp->right, rc);
       }
-      return rc;
+      return;
     };
     if (conditions[i] != nullptr)  // 注意conditions可能是空指针
     {
       PExpr pexp(conditions[i]);
-      create_stmt(create_stmt, &pexp);
+      create_stmt(create_stmt, &pexp, rc);
+      if (rc != RC::SUCCESS) {
+        LOG_WARN("failed to create filter unit");
+        return rc;
+      }
     }
     tmp_stmt->join_units_.push_back(join_units);
   }
