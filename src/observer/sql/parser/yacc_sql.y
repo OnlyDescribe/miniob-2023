@@ -45,7 +45,7 @@ bool IsAttributesVailid(const std::vector<PExpr *> &select_attr)
 {
   int relattr_cnt = 0;
   for (const PExpr *node : select_attr) {
-    if (node->type == PExpType::UNARY && node->uexp->attr.aggr_type == AggrFuncType::INVALID) {
+    if (node->type == PExpType::UNARY && node->uexp->attr.aggr_type == AggrFuncType::INVALID || node->type != PExpType::UNARY) {
       relattr_cnt++;
     }
   }
