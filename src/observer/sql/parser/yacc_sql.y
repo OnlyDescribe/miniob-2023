@@ -484,6 +484,54 @@ create_table_select_stmt:
         delete $12;
       }
     }
+    | CREATE TABLE ID LBRACE attr_def attr_def_list RBRACE SELECT select_attr FROM select_from where group_by having order_by
+    {
+      $$ = new ParsedSqlNode(SCF_CREATE_TABLE_SELECT);
+      CreateTableSelectSqlNode &create_table_select = $$->create_table_select;
+      create_table_select.relation_name = $3;
+      free($3);
+
+      std::vector<AttrInfoSqlNode> *src_attrs = $6;
+
+      if (src_attrs != nullptr) {
+        create_table_select.attr_infos.swap(*src_attrs);
+      }
+      create_table_select.attr_infos.emplace_back(*$5);
+      std::reverse(create_table_select.attr_infos.begin(), create_table_select.attr_infos.end());
+
+      delete $5;
+
+      SelectSqlNode& select = create_table_select.select;
+      if ($9 != nullptr) {
+        select.attributes.swap(*$9);
+        delete $9;
+        if (!IsAttributesVailid(select.attributes)) {
+          yyerror(&@$, sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
+        }
+      }
+
+      if($11 != nullptr)
+      {
+        FromSqlNode* from_node = $11;
+        select.relations.swap(from_node->relations);
+        select.join_conds.swap(from_node->join_conds);
+        delete $11;
+      }
+
+      select.conditions = $12;
+
+      if ($13 != nullptr) {
+        select.groupbys = *$13;
+        delete $13;
+      }
+
+      select.havings = $14;
+
+      if ($15 != nullptr) {
+        select.orderbys = *$15;
+        delete $15;
+      }
+    }
     ;
 
 create_view_stmt:    

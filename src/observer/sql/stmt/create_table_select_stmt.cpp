@@ -20,6 +20,7 @@ RC CreateTableSelectStmt::create(Db *db, const CreateTableSelectSqlNode &create_
 {
   CreateTableSelectStmt *create_table_select_stmt = new CreateTableSelectStmt();
   create_table_select_stmt->table_name_ = create_table_select.relation_name;
+  create_table_select_stmt->attr_infos_ = create_table_select.attr_infos;
 
   Stmt *select_stmt = nullptr;
   SelectStmt::create(db, create_table_select.select, select_stmt);
