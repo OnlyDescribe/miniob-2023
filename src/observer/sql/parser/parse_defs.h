@@ -32,6 +32,7 @@ struct PArithmeticExpr;
 struct ConditionSqlNode;
 struct PFuncExpr;
 struct PSubQueryExpr;
+struct PListExpr;
 
 using PConditionExpr = struct ConditionSqlNode;
 
@@ -43,6 +44,7 @@ enum class PExpType
   FUNC,        // 函数
   AGGRFUNC,    // 聚合
   SUBQUERY,    // 子查询
+  LIST,        // 值列表
 };
 // TODO: 析构函数or智能指针, 释放Expr*资源
 struct PExpr
@@ -53,6 +55,7 @@ struct PExpr
   PConditionExpr *cexp;
   PFuncExpr *fexp;
   PSubQueryExpr *sexp;
+  PListExpr *lexp;
 
   std::string name;
   std::string alias;
@@ -82,6 +85,11 @@ struct PExpr
   {
     type = PExpType::SUBQUERY;
     sexp = exp;
+  }
+  PExpr(PListExpr *exp)
+  {
+    type = PExpType::LIST;
+    lexp = exp;
   }
 };
 
@@ -187,6 +195,12 @@ struct PSubQueryExpr
   SelectSqlNode *sub_select;
 };
 
+// 1.2.6 值列表
+struct PListExpr
+{
+  std::vector<Value> value_list;
+};
+
 // 2. 定义 Select， 即SelectSqlNode
 
 // 2.1 Select
@@ -288,6 +302,7 @@ struct DeleteSqlNode
 struct AssignmentSqlNode
 {
   std::string attribute_name;  ///< 属性名, 因为只支持单表, 不需要RelAttrSqlNode类型
+  bool is_value;               ///< 赋值
   Value value;                 ///< 值
   PExpr *expr;                 ///< 支持表达式
 };

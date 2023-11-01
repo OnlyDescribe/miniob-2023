@@ -211,49 +211,59 @@ RC ComparisonExpr::try_get_value(Value &cell) const
   return RC::INVALID_ARGUMENT;
 }
 
+RC ComparisonExpr::get_one_row_value(const std::unique_ptr<Expression> &expr, const Tuple &tuple, Value &value) const
+{
+  RC rc = RC::SUCCESS;
+  if (expr->type() == ExprType::FIELD || expr->type() == ExprType::VALUE) {
+    rc = expr->get_value(tuple, value);
+  } else if (expr->type() == ExprType::SUBQUERY) {
+    auto sub_query = static_cast<SubQueryExpr *>(expr.get());
+    // rc = sub_query->get_one_row_value(tuple, value);
+    // 用于复杂子查询
+    rc = sub_query->get_and_set_one_row_value(tuple, value, parent_tuple_.get());
+  } else {
+    LOG_WARN("不支持的表达式类型 %s", __LINE__);
+  }
+  return rc;
+}
+
 RC ComparisonExpr::get_value(const Tuple &tuple, Value &value) const
 {
   Value left_value;
   Value right_value;
   RC rc = RC::SUCCESS;
 
-  // 非子查询的比较
-  if (left_->type() != ExprType::SUBQUERY && right_->type() != ExprType::SUBQUERY) {
-    rc = left_->get_value(tuple, left_value);
-    if (rc != RC::SUCCESS) {
-      LOG_WARN("failed to get value of left expression. rc=%s", strrc(rc));
-      return rc;
-    }
-    rc = right_->get_value(tuple, right_value);
-    if (rc != RC::SUCCESS) {
-      LOG_WARN("failed to get value of right expression. rc=%s", strrc(rc));
-      return rc;
-    }
-
-    bool bool_value = false;
-    rc = compare_value(left_value, right_value, bool_value);
-    if (rc == RC::SUCCESS) {
-      value.set_boolean(bool_value);
-    }
-
-  } else if (left_->type() != ExprType::SUBQUERY && right_->type() == ExprType::SUBQUERY) {
-    auto sub_query = static_cast<SubQueryExpr *>(right_.get());
-    rc = left_->get_value(tuple, left_value);
-    if (rc != RC::SUCCESS) {
-      LOG_WARN("failed to get value of left expression. rc=%s", strrc(rc));
-      return rc;
-    }
-
-    // in [not in]
-    if (comp_ == CompOp::IN || comp_ == CompOp::NOT_IN) {
+  switch (comp_) {
+    // 右表达式只支持子查询，以及List, in [not in]
+    case CompOp::NOT_IN:
+    case CompOp::IN: {
+      // 左边只能有一个value
       bool is_in = false;
-      sub_query->phy_oper->open(nullptr);
-      while ((rc = sub_query->get_value(tuple, right_value)) == RC::SUCCESS) {
-        if (left_value.compare(right_value) == 0) {
-          is_in = true;
-          break;
-        }
+      rc = get_one_row_value(left_, tuple, left_value);
+      if (rc != RC::SUCCESS) {
+        return rc;
       }
+      if (right_->type() == ExprType::SUBQUERY) {
+        auto sub_query = static_cast<SubQueryExpr *>(right_.get());
+        sub_query->phy_oper->open(nullptr);
+        while ((rc = sub_query->get_and_set_value(tuple, right_value, parent_tuple_.get())) == RC::SUCCESS) {
+          if (left_value.compare(right_value) == 0) {
+            is_in = true;
+            break;
+          }
+        }
+      } else if (right_->type() == ExprType::LIST) {
+        static_cast<ListExpr *>(right_.get())->reset();
+        while ((rc = right_->get_value(tuple, right_value)) == RC::SUCCESS) {
+          if (left_value.compare(right_value) == 0) {
+            is_in = true;
+            break;
+          }
+        }
+      } else {
+        return RC::SQL_SYNTAX;
+      }
+
       if (comp_ == CompOp::NOT_IN)
         is_in = !is_in;
       if (rc == RC::RECORD_EOF) {
@@ -264,11 +274,14 @@ RC ComparisonExpr::get_value(const Tuple &tuple, Value &value) const
         return rc;
       }
       value.set_boolean(is_in);
-      return rc;
-    }
-
-    // exists [not exist]
-    if (comp_ == CompOp::EXISTS || comp_ == CompOp::NOT_EXISTS) {
+    } break;
+    case CompOp::NOT_EXISTS:
+    case CompOp::EXISTS: {
+      if (right_->type() != ExprType::SUBQUERY) {
+        return RC::SQL_SYNTAX;
+      }
+      auto sub_query = static_cast<SubQueryExpr *>(right_.get());
+      sub_query->phy_oper->open(nullptr);
       RC rc = sub_query->phy_oper->open(nullptr);
       if (rc != RC::SUCCESS) {
         return rc;
@@ -281,61 +294,50 @@ RC ComparisonExpr::get_value(const Tuple &tuple, Value &value) const
         value.set_boolean(comp_ == CompOp::NOT_EXISTS ? true : false);
         return rc;
       }
-      return rc;
-    }
+    } break;
 
-    // 运算符比较
-    rc = sub_query->get_one_row_value(tuple, right_value);
-    if (rc != RC::SUCCESS) {
-      LOG_WARN("failed to get_one_row. rc=%d:%s", rc, strrc(rc));
-      return rc;
-    }
+    default: {
+      // 正常就是原来的运算符，只不过左右表达式是子查询的时候，需要求一元表达式
+      SubQueryExpr *sub_query = nullptr;
 
-    bool res;
-    rc = compare_value(left_value, right_value, res);
-    value.set_boolean(res);
-    return rc;
+      // 获取左表达式的值
+      if (left_->type() == ExprType::SUBQUERY) {
+        sub_query = static_cast<SubQueryExpr *>(left_.get());
+        // rc = sub_query->get_one_row_value(tuple, left_value);
+        // 用于复杂子查询
+        rc = sub_query->get_and_set_one_row_value(tuple, left_value, parent_tuple_.get());
+      } else {
+        rc = left_->get_value(tuple, left_value);
+        if (rc != RC::SUCCESS && parent_tuple_ != nullptr) {
+          rc = left_->get_value(*parent_tuple_, left_value);
+        }
+      }
+      if (rc != RC::SUCCESS) {
+        LOG_WARN("左表达式非法");
+        return rc;
+      }
+      // 获取右表达式的值
+      if (right_->type() == ExprType::SUBQUERY) {
+        sub_query = static_cast<SubQueryExpr *>(right_.get());
+        // rc = sub_query->get_one_row_value(tuple, right_value);
+        // 用于复杂子查询
+        rc = sub_query->get_and_set_one_row_value(tuple, right_value, parent_tuple_.get());
+      } else {
+        rc = right_->get_value(tuple, right_value);
+        if (rc != RC::SUCCESS && parent_tuple_ != nullptr) {
+          rc = right_->get_value(*parent_tuple_, right_value);
+        }
+      }
+      if (rc != RC::SUCCESS) {
+        LOG_WARN("failed to get_one_row. rc=%d:%s", rc, strrc(rc));
+        return rc;
+      }
 
-  } else if (left_->type() == ExprType::SUBQUERY && right_->type() != ExprType::SUBQUERY) {
-    // 只支持运算符比较
-    auto sub_query = static_cast<SubQueryExpr *>(left_.get());
-    rc = right_->get_value(tuple, right_value);
-    if (rc != RC::SUCCESS) {
-      LOG_WARN("failed to get value of left expression. rc=%s", strrc(rc));
-      return rc;
-    }
-    rc = sub_query->get_one_row_value(tuple, left_value);
-    if (rc != RC::SUCCESS) {
-      LOG_WARN("failed to get_one_row. rc=%d:%s", rc, strrc(rc));
-      return rc;
-    }
-
-    bool res;
-    rc = compare_value(left_value, right_value, res);
-    value.set_boolean(res);
-  } else if (left_->type() == ExprType::SUBQUERY && right_->type() == ExprType::SUBQUERY) {
-    auto left_sub_query = static_cast<SubQueryExpr *>(left_.get());
-    auto right_sub_query = static_cast<SubQueryExpr *>(right_.get());
-
-    rc = left_sub_query->get_one_row_value(tuple, left_value);
-    if (rc != RC::SUCCESS) {
-      LOG_WARN("failed to get_one_row. rc=%d:%s", rc, strrc(rc));
-      return rc;
-    }
-
-    rc = right_sub_query->get_one_row_value(tuple, left_value);
-    if (rc != RC::SUCCESS) {
-      LOG_WARN("failed to get_one_row. rc=%d:%s", rc, strrc(rc));
-      return rc;
-    }
-    bool res;
-    rc = compare_value(left_value, right_value, res);
-    value.set_boolean(res);
-
-  } else {
-    LOG_WARN("不支持的表达式比较类型");
+      bool res;
+      rc = compare_value(left_value, right_value, res);
+      value.set_boolean(res);
+    } break;
   }
-
   return rc;
 }
 
@@ -549,6 +551,45 @@ SubQueryExpr::~SubQueryExpr()
   }
 }
 
+RC SubQueryExpr::get_and_set_value(const Tuple &tuple, Value &value, Tuple *parent) const
+{
+  if (phy_oper == nullptr) {
+    return RC::RECORD_EOF;
+  }
+  //  ------ 将当前的tuple和父查询传来tuple需要组合后，再传到下面的子查询 --------
+  std::shared_ptr<Tuple> join_tuple;
+  Tuple *right_tuple = nullptr;
+
+  if (parent == nullptr) {
+    join_tuple.reset(tuple.copy_tuple());
+  } else {
+    right_tuple = tuple.copy_tuple();
+    auto tmp = std::make_shared<JoinedTuple>();
+    tmp->set_left(parent);
+    tmp->set_right(right_tuple);
+    join_tuple = tmp;
+  }
+  phy_oper->set_sub_query(join_tuple);
+  if (right_tuple != nullptr) {
+    delete right_tuple;
+  }
+  //  ------ 将当前的tuple和父查询传来tuple需要组合后，再传到下面的子查询 --------
+
+  RC rc = RC::SUCCESS;
+  rc = phy_oper->next();
+  if (rc != RC::SUCCESS) {
+    return rc;
+  }
+  Tuple *sub_tuple = phy_oper->current_tuple();
+  // 不支持多列比较的情况
+  if (sub_tuple->cell_num() != 1) {
+    LOG_ERROR("sub query return multi cols");
+    return RC::SQL_SYNTAX;
+  }
+  rc = sub_tuple->cell_at(0, value);
+  return rc;
+}
+
 RC SubQueryExpr::get_value(const Tuple &tuple, Value &value) const
 {
   if (phy_oper == nullptr) {
@@ -578,13 +619,19 @@ RC SubQueryExpr::get_value(const Tuple &tuple, Value &value) const
 RC SubQueryExpr::get_one_row_value(const Tuple &tuple, Value &value)
 {
   RC rc = RC::SUCCESS;
-  phy_oper->open(nullptr);
+  rc = phy_oper->open(nullptr);
+  if (rc != RC::SUCCESS) {
+    return rc;
+  }
   // 里面会调用next方法
   rc = get_value(tuple, value);
   // 空值也返回成功, 但是返回null
   if (rc == RC::RECORD_EOF) {
     value.set_null();
     return RC::SUCCESS;
+  }
+  if (phy_oper->current_tuple()->cell_num() > 1) {
+    return RC::TOO_MANY_COLS;
   }
   // 否则这里value有值了，但还是调用一次，多于1条记录
   rc = get_value(tuple, value);
@@ -596,4 +643,62 @@ RC SubQueryExpr::get_one_row_value(const Tuple &tuple, Value &value)
     return RC::TOO_MANY_ROW;
   }
   return rc;
+}
+
+RC SubQueryExpr::get_and_set_one_row_value(const Tuple &tuple, Value &value, Tuple *parent)
+{
+  RC rc = RC::SUCCESS;
+  //  ------ 将当前的tuple和父查询传来tuple需要组合后，再传到下面的子查询 --------
+  std::shared_ptr<Tuple> join_tuple;
+  Tuple *right_tuple = nullptr;
+
+  if (parent == nullptr) {
+    join_tuple.reset(tuple.copy_tuple());
+  } else {
+    right_tuple = tuple.copy_tuple();
+    auto tmp = std::make_shared<JoinedTuple>();
+    tmp->set_left(parent);
+    tmp->set_right(right_tuple);
+    join_tuple = tmp;
+  }
+  phy_oper->set_sub_query(join_tuple);
+  if (right_tuple != nullptr) {
+    delete right_tuple;
+  }
+  //  ------ 将当前的tuple和父查询传来tuple需要组合后，再传到下面的子查询 --------
+
+  rc = phy_oper->open(nullptr);
+  if (rc != RC::SUCCESS && rc != RC::RECORD_EOF) {
+    return rc;
+  }
+  // 里面会调用next方法
+  rc = get_value(tuple, value);
+  // 空值也返回成功, 但是返回null
+  if (rc == RC::RECORD_EOF) {
+    value.set_null();
+    return RC::SUCCESS;
+  }
+  if (phy_oper->current_tuple()->cell_num() > 1) {
+    return RC::TOO_MANY_COLS;
+  }
+  // 否则这里value有值了，但还是调用一次，多于1条记录
+  rc = get_value(tuple, value);
+  if (rc == RC::RECORD_EOF) {
+    return RC::SUCCESS;
+  }
+  if (rc == RC::SUCCESS) {
+    LOG_WARN("sub query return more than 1 row");
+    return RC::TOO_MANY_ROW;
+  }
+  return rc;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+RC ListExpr::get_value(const Tuple &tuple, Value &value) const
+{
+  if (idx_ >= values_.size()) {
+    return RC::RECORD_EOF;
+  }
+  value = values_[idx_++];
+  return RC::SUCCESS;
 }

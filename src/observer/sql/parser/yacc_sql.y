@@ -113,6 +113,7 @@ bool IsAttributesVailid(const std::vector<PExpr *> &select_attr)
         FROM
         WHERE
         AND
+        OR
         SET
         ON
         LOAD
@@ -144,6 +145,7 @@ bool IsAttributesVailid(const std::vector<PExpr *> &select_attr)
   PConditionExpr *                  cond_pexpr;
   PFuncExpr *                       func_pexpr;
   PSubQueryExpr *                   subquery_pexpr;
+  PListExpr *                       list_pexpr;
   Value *                           value;
   enum  CompOp                      comp;
   enum  AggrFuncType                aggr_func_type;
@@ -207,6 +209,7 @@ bool IsAttributesVailid(const std::vector<PExpr *> &select_attr)
 %type <func_pexpr>          func_pexpr
 %type <cond_pexpr>          cond_pexpr
 %type <subquery_pexpr>      subquery_pexpr
+%type <list_pexpr>          list_pexpr
 %type <sql_node>            calc_stmt
 %type <sql_node>            select_stmt
 %type <sql_node>            insert_stmt
@@ -1400,27 +1403,27 @@ cond_pexpr:
     }
     ;
 
-  arith_pexpr:
-      pexpr '+' pexpr {
-          PArithmeticExpr *arith_pexpr = new PArithmeticExpr(PArithmeticType::ADD, $1, $3);
-          $$ = arith_pexpr;
-      }
-      | pexpr '-' pexpr {
-          PArithmeticExpr *arith_pexpr = new PArithmeticExpr(PArithmeticType::SUB, $1, $3);
-          $$ = arith_pexpr;
-      }
-      | pexpr '*' pexpr {
-          PArithmeticExpr *arith_pexpr = new PArithmeticExpr(PArithmeticType::MUL, $1, $3);
-          $$ = arith_pexpr;
-      }
-      | pexpr '/' pexpr {
-          PArithmeticExpr *arith_pexpr = new PArithmeticExpr(PArithmeticType::DIV, $1, $3);
-          $$ = arith_pexpr;
-      }
-      | '-' pexpr %prec UMINUS {
-          PArithmeticExpr *arith_pexpr = new PArithmeticExpr(PArithmeticType::NEGATIVE, $2, nullptr);
-          $$ = arith_pexpr;
-      }
+arith_pexpr:
+    pexpr '+' pexpr {
+        PArithmeticExpr *arith_pexpr = new PArithmeticExpr(PArithmeticType::ADD, $1, $3);
+        $$ = arith_pexpr;
+    }
+    | pexpr '-' pexpr {
+        PArithmeticExpr *arith_pexpr = new PArithmeticExpr(PArithmeticType::SUB, $1, $3);
+        $$ = arith_pexpr;
+    }
+    | pexpr '*' pexpr {
+        PArithmeticExpr *arith_pexpr = new PArithmeticExpr(PArithmeticType::MUL, $1, $3);
+        $$ = arith_pexpr;
+    }
+    | pexpr '/' pexpr {
+        PArithmeticExpr *arith_pexpr = new PArithmeticExpr(PArithmeticType::DIV, $1, $3);
+        $$ = arith_pexpr;
+    }
+    | '-' pexpr %prec UMINUS {
+        PArithmeticExpr *arith_pexpr = new PArithmeticExpr(PArithmeticType::NEGATIVE, $2, nullptr);
+        $$ = arith_pexpr;
+    }
 
 func_pexpr:
     LENGTH LBRACE pexpr RBRACE {
@@ -1454,6 +1457,20 @@ func_pexpr:
     }
     ;
 
+list_pexpr:
+    LBRACE value value_list RBRACE
+    {
+      PListExpr *list_pexpr = new PListExpr;
+      if($3 != nullptr){
+        list_pexpr->value_list = *$3;
+      }
+      list_pexpr->value_list.push_back(*$2);
+      std::reverse(list_pexpr->value_list.begin(), list_pexpr->value_list.end());
+      delete $2;
+      delete $3;
+      $$ = list_pexpr;
+    }
+
 pexpr:
     cond_pexpr {
       PExpr *pexpr = new PExpr;
@@ -1468,10 +1485,6 @@ pexpr:
       pexpr->aexp = $1;
       pexpr->name = token_name(sql_string, &@$);
       $$ = pexpr;
-    }
-    | LBRACE pexpr RBRACE {
-      $$ = $2;
-      $$->name = token_name(sql_string, &@$);
     }
     | unary_pexpr {
       PExpr *pexpr = new PExpr;
@@ -1493,6 +1506,13 @@ pexpr:
         pexpr->sexp = $1;
         pexpr->name = token_name(sql_string, &@$);
         $$ = pexpr;
+    }
+    | list_pexpr{
+        PExpr *pexpr = new PExpr;
+          pexpr->type = PExpType::LIST;
+          pexpr->lexp = $1;
+          pexpr->name = token_name(sql_string, &@$);
+          $$ = pexpr;
     }
     ;
 

@@ -140,6 +140,7 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
     }
   }
 
+  // predicate 过滤
   unique_ptr<LogicalOperator> predicate_oper;
   RC rc = create_plan(select_stmt->filter_stmt(), predicate_oper);
   if (rc != RC::SUCCESS) {
@@ -209,7 +210,7 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
     if (filter_unit->left->type() == ExprType::SUBQUERY) {
       auto sub_query_expr = static_cast<SubQueryExpr *>(filter_unit->left.get());
       if (sub_query_expr->subquery_stmt->query_fields().size() != 1) {
-        return RC::SUBQUERY_MANY_COLS;
+        return RC::TOO_MANY_COLS;
       }
       rc = create_plan(sub_query_expr->subquery_stmt, sub_query_expr->oper);
       if (rc != RC::SUCCESS) {
@@ -219,7 +220,7 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
     if (filter_unit->right->type() == ExprType::SUBQUERY) {
       auto sub_query_expr = static_cast<SubQueryExpr *>(filter_unit->right.get());
       if (sub_query_expr->subquery_stmt->query_fields().size() != 1) {
-        return RC::SUBQUERY_MANY_COLS;
+        return RC::TOO_MANY_COLS;
       }
       rc = create_plan(sub_query_expr->subquery_stmt, sub_query_expr->oper);
       if (rc != RC::SUCCESS) {
@@ -233,7 +234,8 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
 
   unique_ptr<PredicateLogicalOperator> predicate_oper;
   if (!cmp_exprs.empty()) {
-    unique_ptr<ConjunctionExpr> conjunction_expr(new ConjunctionExpr(ConjunctionExpr::Type::AND, cmp_exprs));
+    unique_ptr<ConjunctionExpr> conjunction_expr(
+        new ConjunctionExpr(filter_stmt->is_or ? ConjunctionExpr::Type::OR : ConjunctionExpr::Type::AND, cmp_exprs));
     predicate_oper = unique_ptr<PredicateLogicalOperator>(new PredicateLogicalOperator(std::move(conjunction_expr)));
   }
 
