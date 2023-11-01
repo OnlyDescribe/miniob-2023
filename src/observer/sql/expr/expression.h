@@ -412,9 +412,6 @@ public:
   SelectStmt *subquery_stmt{nullptr};
   std::unique_ptr<LogicalOperator> oper;
   std::unique_ptr<PhysicalOperator> phy_oper;
-
-private:
-  mutable bool is_open_{false};  // phy_oper是否需要open
 };
 
 /**
@@ -435,10 +432,12 @@ public:
   virtual ExprType type() const { return ExprType::LIST; }
 
   virtual AttrType value_type() const { return AttrType::UNDEFINED; }
-
+  
+  // 移动到values里面取
+  void set_values(std::vector<Value>& values) { values_.swap(values); }
 
 private:
-  std::vector<Value> value_;
+  std::vector<Value> values_;
   mutable int idx_{0};
 };
 

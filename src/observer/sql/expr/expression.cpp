@@ -590,9 +590,9 @@ RC SubQueryExpr::get_one_row_value(const Tuple &tuple, Value &value)
 
 ////////////////////////////////////////////////////////////////////////////////
 RC ListExpr::get_value(const Tuple &tuple, Value &value) const {
-  if (idx_ >= value_.size()) {
-    return RC::EMPTY;
+  if (idx_ >= values_.size()) {
+    return RC::RECORD_EOF;
   }
-  value = value_[idx_++];
+  value = values_[idx_++];
   return RC::SUCCESS;
 }

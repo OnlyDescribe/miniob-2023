@@ -50,8 +50,8 @@ public:
   static RC create_filter_unit(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,
       PConditionExpr *condition, FilterUnit *&filter_unit);
 
-private:
-  // 创建
+  // 题目的连接条件要么全是and，要么全是or
+  bool is_or{false};
 private:
   std::vector<FilterUnit *> filter_units_;  // 默认当前都是AND关系
 };

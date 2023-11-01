@@ -45,7 +45,7 @@ RC FilterStmt::create(Db *db, Table *default_table, std::unordered_map<std::stri
   auto create_stmt = [&](auto self, PExpr *cond) -> RC {
     if (cond->type == PExpType::COMPARISON) {
       RC rc = RC::SUCCESS;
-      if (cond->cexp->comp != CompOp::AND) {
+      if (cond->cexp->comp != CompOp::AND && cond->cexp->comp != CompOp::OR) {
         FilterUnit *filter_unit = nullptr;
         rc = create_filter_unit(db, default_table, tables, cond->cexp, filter_unit);
         if (rc != RC::SUCCESS) {
@@ -55,6 +55,8 @@ RC FilterStmt::create(Db *db, Table *default_table, std::unordered_map<std::stri
         }
         tmp_stmt->filter_units_.push_back(filter_unit);
         return RC::SUCCESS;
+      } else {
+        tmp_stmt->is_or = cond->cexp->comp == CompOp::OR;
       }
       rc = self(self, cond->cexp->left);
       rc = self(self, cond->cexp->right);
@@ -167,6 +169,9 @@ RC FilterStmt::create_filter_unit(Db *db, Table *default_table, std::unordered_m
     filter_unit->right = std::move(subquery_expr);
   } else if (condition->right->type == PExpType::LIST) {
     PListExpr* right = condition->right->lexp;
+    auto list_expr = std::make_unique<ListExpr>();
+    list_expr->set_values(right->value_list);
+    filter_unit->right = std::move(list_expr);
   } else {
     LOG_ERROR("not support expr type");
     return RC::INVALID_ARGUMENT;
