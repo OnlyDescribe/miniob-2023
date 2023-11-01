@@ -28,6 +28,7 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/aggregation_logical_operator.h"
 #include "sql/operator/update_logical_operator.h"
 
+#include "sql/stmt/create_table_select_stmt.h"
 #include "sql/stmt/stmt.h"
 #include "sql/stmt/calc_stmt.h"
 #include "sql/stmt/select_stmt.h"
@@ -50,6 +51,12 @@ RC LogicalPlanGenerator::create(Stmt *stmt, unique_ptr<LogicalOperator> &logical
 
     case StmtType::SELECT: {
       SelectStmt *select_stmt = static_cast<SelectStmt *>(stmt);
+      rc = create_plan(select_stmt, logical_operator);
+    } break;
+
+    case StmtType::CREATE_TABLE_SELECT: {
+      CreateTableSelectStmt *create_table_select_stmt = static_cast<CreateTableSelectStmt *>(stmt);
+      SelectStmt *select_stmt = create_table_select_stmt->select_stmt().get();
       rc = create_plan(select_stmt, logical_operator);
     } break;
 

@@ -42,6 +42,7 @@ public:
   void set_operator(std::unique_ptr<PhysicalOperator> oper);
 
   bool has_operator() const { return operator_ != nullptr; }
+  std::unique_ptr<PhysicalOperator> &physical_operator() { return operator_; }
   const TupleSchema &tuple_schema() const { return tuple_schema_; }
   RC return_code() const { return return_code_; }
   const std::string &state_string() const { return state_string_; }
