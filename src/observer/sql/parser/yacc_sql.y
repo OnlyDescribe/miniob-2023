@@ -70,6 +70,7 @@ bool IsAttributesVailid(const std::vector<PExpr *> &select_attr)
         DROP
         TABLE
         TABLES
+        VIEW
         INDEX
         UNIQUE
         CALC
@@ -215,6 +216,8 @@ bool IsAttributesVailid(const std::vector<PExpr *> &select_attr)
 %type <sql_node>            update_stmt
 %type <sql_node>            delete_stmt
 %type <sql_node>            create_table_stmt
+%type <sql_node>            create_table_select_stmt
+%type <sql_node>            create_view_stmt
 %type <sql_node>            drop_table_stmt
 %type <sql_node>            show_tables_stmt
 %type <sql_node>            desc_table_stmt
@@ -259,6 +262,8 @@ command_wrapper:
   | update_stmt
   | delete_stmt
   | create_table_stmt
+  | create_table_select_stmt
+  | create_view_stmt
   | drop_table_stmt
   | show_tables_stmt
   | desc_table_stmt
@@ -436,6 +441,88 @@ create_table_stmt:    /*create table 语句的语法解析树*/
       create_table.attr_infos.emplace_back(*$5);
       std::reverse(create_table.attr_infos.begin(), create_table.attr_infos.end());
       delete $5;
+    }
+    ;
+
+create_table_select_stmt:    
+    CREATE TABLE ID AS SELECT select_attr FROM select_from where group_by having order_by
+    {
+      $$ = new ParsedSqlNode(SCF_CREATE_TABLE_SELECT);
+      CreateTableSelectSqlNode &create_table_select = $$->create_table_select;
+      create_table_select.relation_name = $3;
+      free($3);
+
+      SelectSqlNode& select = create_table_select.select;
+      if ($6 != nullptr) {
+        select.attributes.swap(*$6);
+        delete $6;
+        if (!IsAttributesVailid(select.attributes)) {
+          yyerror(&@$, sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
+        }
+      }
+
+      if($8 != nullptr)
+      {
+        FromSqlNode* from_node = $8;
+        select.relations.swap(from_node->relations);
+        select.join_conds.swap(from_node->join_conds);
+        delete $8;
+      }
+
+      select.conditions = $9;
+
+      if ($10 != nullptr) {
+        select.groupbys = *$10;
+        delete $10;
+      }
+
+      select.havings = $11;
+
+      if ($12 != nullptr) {
+        select.orderbys = *$12;
+        delete $12;
+      }
+    }
+    ;
+
+create_view_stmt:    
+    CREATE VIEW ID AS SELECT select_attr FROM select_from where group_by having order_by
+    {
+      $$ = new ParsedSqlNode(SCF_CREATE_VIEW);
+      CreateViewSqlNode &create_view = $$->create_view;
+      create_view.relation_name = $3;
+      free($3);
+
+      SelectSqlNode& select = create_view.select;
+      if ($6 != nullptr) {
+        select.attributes.swap(*$6);
+        delete $6;
+        if (!IsAttributesVailid(select.attributes)) {
+          yyerror(&@$, sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
+        }
+      }
+
+      if($8 != nullptr)
+      {
+        FromSqlNode* from_node = $8;
+        select.relations.swap(from_node->relations);
+        select.join_conds.swap(from_node->join_conds);
+        delete $8;
+      }
+
+      select.conditions = $9;
+
+      if ($10 != nullptr) {
+        select.groupbys = *$10;
+        delete $10;
+      }
+
+      select.havings = $11;
+
+      if ($12 != nullptr) {
+        select.orderbys = *$12;
+        delete $12;
+      }
     }
     ;
 
