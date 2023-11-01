@@ -418,7 +418,7 @@ public:
 
   // 从子查询里面，确保只能拿一个记录
   RC get_one_row_value(const Tuple &tuple, Value &value);
-  
+
   // tuple和parent需要组合, 用于复杂子查询
   RC get_and_set_one_row_value(const Tuple &tuple, Value &value, Tuple* parent = nullptr);
 
@@ -452,6 +452,8 @@ public:
   virtual ExprType type() const { return ExprType::LIST; }
 
   virtual AttrType value_type() const { return AttrType::UNDEFINED; }
+
+  void reset() { idx_ = 0; }
   
   // 移动到values里面取
   void set_values(std::vector<Value>& values) { values_.swap(values); }

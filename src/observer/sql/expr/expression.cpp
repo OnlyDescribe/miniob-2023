@@ -253,6 +253,7 @@ RC ComparisonExpr::get_value(const Tuple &tuple, Value &value) const
           }
         }
       } else if (right_->type() == ExprType::LIST) {
+        static_cast<ListExpr*>(right_.get())->reset();
         while ((rc = right_->get_value(tuple, right_value)) == RC::SUCCESS) {
           if (left_value.compare(right_value) == 0) {
             is_in = true;
