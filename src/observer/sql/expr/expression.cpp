@@ -623,7 +623,10 @@ RC SubQueryExpr::get_value(const Tuple &tuple, Value &value) const
 RC SubQueryExpr::get_one_row_value(const Tuple &tuple, Value &value)
 {
   RC rc = RC::SUCCESS;
-  phy_oper->open(nullptr);
+  rc = phy_oper->open(nullptr);
+  if (rc != RC::SUCCESS) {
+    return rc;
+  }
   // 里面会调用next方法
   rc = get_value(tuple, value);
   // 空值也返回成功, 但是返回null
@@ -669,7 +672,10 @@ RC SubQueryExpr::get_and_set_one_row_value(const Tuple &tuple, Value &value, Tup
   }
   //  ------ 将当前的tuple和父查询传来tuple需要组合后，再传到下面的子查询 --------
 
-  phy_oper->open(nullptr);
+  rc = phy_oper->open(nullptr);
+  if (rc != RC::SUCCESS && rc != RC::RECORD_EOF) {
+    return rc;
+  }
   // 里面会调用next方法
   rc = get_value(tuple, value);
   // 空值也返回成功, 但是返回null

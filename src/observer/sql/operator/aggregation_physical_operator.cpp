@@ -26,7 +26,7 @@ RC AggregationPhysicalOperator::open(Trx *trx)
   const auto child_op = children_.front().get();
   RC rc = child_op->open(trx);
   Tuple *tuple;
-  while (child_op->next() == RC::SUCCESS) {
+  while ((rc = child_op->next()) == RC::SUCCESS) {
     tuple = child_op->current_tuple();
 
     // 从列中获取聚合表达式的值
@@ -40,6 +40,9 @@ RC AggregationPhysicalOperator::open(Trx *trx)
     ht_->combine_aggregate_values(&aggr_results_, aggr_value, not_null_record_num_);
   }
   is_execute_ = false;
+  if (rc == RC::RECORD_EOF) {
+    rc = RC::SUCCESS;
+  }
   return rc;
 }
 
