@@ -257,6 +257,10 @@ public:
    */
   RC compare_value(const Value &left, const Value &right, bool &value) const;
 
+  void set_parent_tuple(const std::shared_ptr<Tuple>& tuple) {
+    parent_tuple_ = tuple;
+  }
+
 private:
   // 返回表达式的值，必须为空或者单值类型
   RC get_one_row_value(const std::unique_ptr<Expression>& expr, const Tuple &tuple, Value &value) const;
@@ -264,6 +268,7 @@ private:
   CompOp comp_;
   std::unique_ptr<Expression> left_;
   std::unique_ptr<Expression> right_;
+  std::shared_ptr<Tuple> parent_tuple_;
 };
 
 /**
@@ -292,6 +297,15 @@ public:
   RC get_value(const Tuple &tuple, Value &value) const override;
 
   Type conjunction_type() const { return conjunction_type_; }
+
+  void set_parent_tuple(const std::shared_ptr<Tuple>& tuple) {
+    for (auto& child: children_) {
+      if (child->type() == ExprType::COMPARISON) {
+        auto cmp_expr = static_cast<ComparisonExpr*>(child.get());
+        cmp_expr->set_parent_tuple(tuple);
+      }
+    }
+  }
 
   std::vector<std::unique_ptr<Expression>> &children() { return children_; }
 
@@ -397,10 +411,16 @@ public:
   SubQueryExpr();
   virtual ~SubQueryExpr();
 
+
   virtual RC get_value(const Tuple &tuple, Value &value) const;
+  // tuple和parent需要组合, 用于复杂子查询
+  RC get_and_set_value(const Tuple &tuple, Value &value, Tuple* parent = nullptr) const;
 
   // 从子查询里面，确保只能拿一个记录
   RC get_one_row_value(const Tuple &tuple, Value &value);
+  
+  // tuple和parent需要组合, 用于复杂子查询
+  RC get_and_set_one_row_value(const Tuple &tuple, Value &value, Tuple* parent = nullptr);
 
   virtual RC try_get_value(Value &value) const { return RC::UNIMPLENMENT; }
 

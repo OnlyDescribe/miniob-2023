@@ -218,7 +218,9 @@ RC ComparisonExpr::get_one_row_value(const std::unique_ptr<Expression>& expr, co
       rc = expr->get_value(tuple, value);
   } else if (expr->type() == ExprType::SUBQUERY) {
     auto sub_query = static_cast<SubQueryExpr *>(expr.get());
-    rc = sub_query->get_one_row_value(tuple, value);
+    // rc = sub_query->get_one_row_value(tuple, value);
+    // 用于复杂子查询
+    rc = sub_query->get_and_set_one_row_value(tuple, value, parent_tuple_.get());
   } else {
     LOG_WARN("不支持的表达式类型 %s", __LINE__);
   }
@@ -244,16 +246,23 @@ RC ComparisonExpr::get_value(const Tuple &tuple, Value &value) const
       if (right_->type() == ExprType::SUBQUERY) {
         auto sub_query = static_cast<SubQueryExpr *>(right_.get());
         sub_query->phy_oper->open(nullptr);
-      } else if (right_->type() != ExprType::LIST) {
+        while ((rc = sub_query->get_and_set_value(tuple, right_value, parent_tuple_.get())) == RC::SUCCESS) {
+          if (left_value.compare(right_value) == 0) {
+            is_in = true;
+            break;
+          }
+        }
+      } else if (right_->type() == ExprType::LIST) {
+        while ((rc = right_->get_value(tuple, right_value)) == RC::SUCCESS) {
+          if (left_value.compare(right_value) == 0) {
+            is_in = true;
+            break;
+          }
+        }
+      } else {
         return RC::SQL_SYNTAX;
       }
       
-      while ((rc = right_->get_value(tuple, right_value)) == RC::SUCCESS) {
-        if (left_value.compare(right_value) == 0) {
-          is_in = true;
-          break;
-        }
-      }
       if (comp_ == CompOp::NOT_IN)
         is_in = !is_in;
       if (rc == RC::RECORD_EOF) {
@@ -295,9 +304,14 @@ RC ComparisonExpr::get_value(const Tuple &tuple, Value &value) const
       // 获取左表达式的值
       if (left_->type() == ExprType::SUBQUERY) {
         sub_query = static_cast<SubQueryExpr*>(left_.get());
-        rc = sub_query->get_one_row_value(tuple, left_value);
+        // rc = sub_query->get_one_row_value(tuple, left_value);
+        // 用于复杂子查询
+        rc = sub_query->get_and_set_one_row_value(tuple, left_value, parent_tuple_.get());
       } else {
         rc = left_->get_value(tuple, left_value);
+        if (rc != RC::SUCCESS && parent_tuple_ != nullptr) {
+          rc = left_->get_value(*parent_tuple_, left_value);
+        }
       }
       if (rc != RC::SUCCESS) {
         LOG_WARN("左表达式非法");
@@ -306,9 +320,14 @@ RC ComparisonExpr::get_value(const Tuple &tuple, Value &value) const
       // 获取右表达式的值
       if (right_->type() == ExprType::SUBQUERY) {
         sub_query = static_cast<SubQueryExpr*>(right_.get());
-        rc = sub_query->get_one_row_value(tuple, right_value);
+        // rc = sub_query->get_one_row_value(tuple, right_value);
+        // 用于复杂子查询
+        rc = sub_query->get_and_set_one_row_value(tuple, right_value, parent_tuple_.get());
       } else {
         rc = right_->get_value(tuple, right_value);
+        if (rc != RC::SUCCESS && parent_tuple_ != nullptr) {
+          rc = right_->get_value(*parent_tuple_, right_value);
+        }
       }
       if (rc != RC::SUCCESS) {
         LOG_WARN("failed to get_one_row. rc=%d:%s", rc, strrc(rc));
@@ -535,6 +554,45 @@ SubQueryExpr::~SubQueryExpr()
   }
 }
 
+RC SubQueryExpr::get_and_set_value(const Tuple &tuple, Value &value, Tuple* parent) const
+{
+  if (phy_oper == nullptr) {
+    return RC::RECORD_EOF;
+  }
+  //  ------ 将当前的tuple和父查询传来tuple需要组合后，再传到下面的子查询 --------
+  std::shared_ptr<Tuple> join_tuple;
+  Tuple* right_tuple = nullptr;
+  
+  if (parent == nullptr) {
+    join_tuple.reset(tuple.copy_tuple());
+  } else {
+    right_tuple = tuple.copy_tuple();
+    auto tmp = std::make_shared<JoinedTuple>();
+    tmp->set_left(parent);
+    tmp->set_right(right_tuple);
+    join_tuple = tmp; 
+  }
+  phy_oper->set_sub_query(join_tuple);
+  if (right_tuple != nullptr) {
+    delete right_tuple;
+  }
+  //  ------ 将当前的tuple和父查询传来tuple需要组合后，再传到下面的子查询 --------
+
+  RC rc = RC::SUCCESS;
+  rc = phy_oper->next();
+  if (rc != RC::SUCCESS) {
+    return rc;
+  }
+  Tuple *sub_tuple = phy_oper->current_tuple();
+  // 不支持多列比较的情况
+  if (sub_tuple->cell_num() != 1) {
+    LOG_ERROR("sub query return multi cols");
+    return RC::SQL_SYNTAX;
+  }
+  rc = sub_tuple->cell_at(0, value);
+  return rc;
+}
+
 RC SubQueryExpr::get_value(const Tuple &tuple, Value &value) const
 {
   if (phy_oper == nullptr) {
@@ -587,6 +645,51 @@ RC SubQueryExpr::get_one_row_value(const Tuple &tuple, Value &value)
   return rc;
 }
 
+
+RC SubQueryExpr::get_and_set_one_row_value(const Tuple &tuple, Value &value, Tuple* parent)
+{
+  RC rc = RC::SUCCESS;
+  //  ------ 将当前的tuple和父查询传来tuple需要组合后，再传到下面的子查询 --------
+  std::shared_ptr<Tuple> join_tuple;
+  Tuple* right_tuple = nullptr;
+  
+  if (parent == nullptr) {
+    join_tuple.reset(tuple.copy_tuple());
+  } else {
+    right_tuple = tuple.copy_tuple();
+    auto tmp = std::make_shared<JoinedTuple>();
+    tmp->set_left(parent);
+    tmp->set_right(right_tuple);
+    join_tuple = tmp; 
+  }
+  phy_oper->set_sub_query(join_tuple);
+  if (right_tuple != nullptr) {
+    delete right_tuple;
+  }
+  //  ------ 将当前的tuple和父查询传来tuple需要组合后，再传到下面的子查询 --------
+
+  phy_oper->open(nullptr);
+  // 里面会调用next方法
+  rc = get_value(tuple, value);
+  // 空值也返回成功, 但是返回null
+  if (rc == RC::RECORD_EOF) {
+    value.set_null();
+    return RC::SUCCESS;
+  }
+  if (phy_oper->current_tuple()->cell_num() > 1) {
+    return RC::TOO_MANY_COLS;
+  }
+  // 否则这里value有值了，但还是调用一次，多于1条记录
+  rc = get_value(tuple, value);
+  if (rc == RC::RECORD_EOF) {
+    return RC::SUCCESS;
+  }
+  if (rc == RC::SUCCESS) {
+    LOG_WARN("sub query return more than 1 row");
+    return RC::TOO_MANY_ROW;
+  }
+  return rc;
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 RC ListExpr::get_value(const Tuple &tuple, Value &value) const {

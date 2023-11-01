@@ -83,7 +83,9 @@ RC get_table_and_field(Db *db, Table *default_table, std::unordered_map<std::str
     if (iter != tables->end()) {
       table = iter->second;
     }
-  } else {
+  }
+
+  if (table == nullptr) {
     table = db->find_table(attr.relation_name.c_str());
   }
   if (nullptr == table) {

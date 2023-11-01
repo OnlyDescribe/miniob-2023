@@ -197,7 +197,7 @@ RC PlainCommunicator::write_result_internal(SessionEvent *event, bool &need_disc
   const TupleSchema &schema = sql_result->tuple_schema();
   const int cell_num = schema.cell_num();
 
-  auto write_header = [&]() {
+  auto write_header = [&]() -> RC {
     for (int i = 0; i < cell_num; i++) {
       const TupleCellSpec &spec = schema.cell_at(i);
       const char *alias = spec.alias();
@@ -230,6 +230,8 @@ RC PlainCommunicator::write_result_internal(SessionEvent *event, bool &need_disc
         return rc;
       }
     }
+
+    return RC::SUCCESS;
   };
 
   rc = RC::SUCCESS;
