@@ -211,44 +211,44 @@ RC ComparisonExpr::try_get_value(Value &cell) const
   return RC::INVALID_ARGUMENT;
 }
 
+
+RC ComparisonExpr::get_one_row_value(const std::unique_ptr<Expression>& expr, const Tuple &tuple, Value &value) const {
+  RC rc = RC::SUCCESS;
+  if (expr->type() == ExprType::FIELD || expr->type() == ExprType::VALUE) {
+      rc = expr->get_value(tuple, value);
+  } else if (expr->type() == ExprType::SUBQUERY) {
+    auto sub_query = static_cast<SubQueryExpr *>(expr.get());
+    rc = sub_query->get_one_row_value(tuple, value);
+  } else {
+    LOG_WARN("不支持的表达式类型 %s", __LINE__);
+  }
+  return rc;
+}
+
 RC ComparisonExpr::get_value(const Tuple &tuple, Value &value) const
 {
   Value left_value;
   Value right_value;
   RC rc = RC::SUCCESS;
 
-  // 非子查询的比较
-  if (left_->type() != ExprType::SUBQUERY && right_->type() != ExprType::SUBQUERY) {
-    rc = left_->get_value(tuple, left_value);
-    if (rc != RC::SUCCESS) {
-      LOG_WARN("failed to get value of left expression. rc=%s", strrc(rc));
-      return rc;
-    }
-    rc = right_->get_value(tuple, right_value);
-    if (rc != RC::SUCCESS) {
-      LOG_WARN("failed to get value of right expression. rc=%s", strrc(rc));
-      return rc;
-    }
-
-    bool bool_value = false;
-    rc = compare_value(left_value, right_value, bool_value);
-    if (rc == RC::SUCCESS) {
-      value.set_boolean(bool_value);
-    }
-
-  } else if (left_->type() != ExprType::SUBQUERY && right_->type() == ExprType::SUBQUERY) {
-    auto sub_query = static_cast<SubQueryExpr *>(right_.get());
-    rc = left_->get_value(tuple, left_value);
-    if (rc != RC::SUCCESS) {
-      LOG_WARN("failed to get value of left expression. rc=%s", strrc(rc));
-      return rc;
-    }
-
-    // in [not in]
-    if (comp_ == CompOp::IN || comp_ == CompOp::NOT_IN) {
+  switch (comp_) {
+    // 右表达式只支持子查询，以及List, in [not in]
+    case CompOp::NOT_IN:
+    case CompOp::IN: {
+      // 左边只能有一个value
       bool is_in = false;
-      sub_query->phy_oper->open(nullptr);
-      while ((rc = sub_query->get_value(tuple, right_value)) == RC::SUCCESS) {
+      rc = get_one_row_value(left_, tuple, left_value);
+      if (rc != RC::SUCCESS) {
+        return rc;
+      }
+      if (right_->type() == ExprType::SUBQUERY) {
+        auto sub_query = static_cast<SubQueryExpr *>(right_.get());
+        sub_query->phy_oper->open(nullptr);
+      } else if (right_->type() != ExprType::LIST) {
+        return RC::SQL_SYNTAX;
+      }
+      
+      while ((rc = right_->get_value(tuple, right_value)) == RC::SUCCESS) {
         if (left_value.compare(right_value) == 0) {
           is_in = true;
           break;
@@ -264,11 +264,15 @@ RC ComparisonExpr::get_value(const Tuple &tuple, Value &value) const
         return rc;
       }
       value.set_boolean(is_in);
-      return rc;
     }
-
-    // exists [not exist]
-    if (comp_ == CompOp::EXISTS || comp_ == CompOp::NOT_EXISTS) {
+    break;
+    case CompOp::NOT_EXISTS:
+    case CompOp::EXISTS: {
+      if (right_->type() != ExprType::SUBQUERY) {
+        return RC::SQL_SYNTAX;
+      }
+      auto sub_query = static_cast<SubQueryExpr *>(right_.get());
+      sub_query->phy_oper->open(nullptr);
       RC rc = sub_query->phy_oper->open(nullptr);
       if (rc != RC::SUCCESS) {
         return rc;
@@ -281,62 +285,44 @@ RC ComparisonExpr::get_value(const Tuple &tuple, Value &value) const
         value.set_boolean(comp_ == CompOp::NOT_EXISTS ? true : false);
         return rc;
       }
-      return rc;
     }
+    break;
 
-    // 运算符比较
-    rc = sub_query->get_one_row_value(tuple, right_value);
-    if (rc != RC::SUCCESS) {
-      LOG_WARN("failed to get_one_row. rc=%d:%s", rc, strrc(rc));
-      return rc;
+    default: {
+      // 正常就是原来的运算符，只不过左右表达式是子查询的时候，需要求一元表达式
+      SubQueryExpr* sub_query = nullptr;
+
+      // 获取左表达式的值
+      if (left_->type() == ExprType::SUBQUERY) {
+        sub_query = static_cast<SubQueryExpr*>(left_.get());
+        rc = sub_query->get_one_row_value(tuple, left_value);
+      } else {
+        rc = left_->get_value(tuple, left_value);
+      }
+      if (rc != RC::SUCCESS) {
+        LOG_WARN("左表达式非法");
+        return rc;
+      }
+      // 获取右表达式的值
+      if (right_->type() == ExprType::SUBQUERY) {
+        sub_query = static_cast<SubQueryExpr*>(right_.get());
+        rc = sub_query->get_one_row_value(tuple, right_value);
+      } else {
+        rc = right_->get_value(tuple, right_value);
+      }
+      if (rc != RC::SUCCESS) {
+        LOG_WARN("failed to get_one_row. rc=%d:%s", rc, strrc(rc));
+        return rc;
+      }
+
+      bool res;
+      rc = compare_value(left_value, right_value, res);
+      value.set_boolean(res);
     }
-
-    bool res;
-    rc = compare_value(left_value, right_value, res);
-    value.set_boolean(res);
-    return rc;
-
-  } else if (left_->type() == ExprType::SUBQUERY && right_->type() != ExprType::SUBQUERY) {
-    // 只支持运算符比较
-    auto sub_query = static_cast<SubQueryExpr *>(left_.get());
-    rc = right_->get_value(tuple, right_value);
-    if (rc != RC::SUCCESS) {
-      LOG_WARN("failed to get value of left expression. rc=%s", strrc(rc));
-      return rc;
-    }
-    rc = sub_query->get_one_row_value(tuple, left_value);
-    if (rc != RC::SUCCESS) {
-      LOG_WARN("failed to get_one_row. rc=%d:%s", rc, strrc(rc));
-      return rc;
-    }
-
-    bool res;
-    rc = compare_value(left_value, right_value, res);
-    value.set_boolean(res);
-  } else if (left_->type() == ExprType::SUBQUERY && right_->type() == ExprType::SUBQUERY) {
-    auto left_sub_query = static_cast<SubQueryExpr *>(left_.get());
-    auto right_sub_query = static_cast<SubQueryExpr *>(right_.get());
-
-    rc = left_sub_query->get_one_row_value(tuple, left_value);
-    if (rc != RC::SUCCESS) {
-      LOG_WARN("failed to get_one_row. rc=%d:%s", rc, strrc(rc));
-      return rc;
-    }
-
-    rc = right_sub_query->get_one_row_value(tuple, left_value);
-    if (rc != RC::SUCCESS) {
-      LOG_WARN("failed to get_one_row. rc=%d:%s", rc, strrc(rc));
-      return rc;
-    }
-    bool res;
-    rc = compare_value(left_value, right_value, res);
-    value.set_boolean(res);
-
-  } else {
-    LOG_WARN("不支持的表达式比较类型");
+    break;
   }
-
   return rc;
+
 }
 
 // 反转比较符号
@@ -586,6 +572,9 @@ RC SubQueryExpr::get_one_row_value(const Tuple &tuple, Value &value)
     value.set_null();
     return RC::SUCCESS;
   }
+  if (phy_oper->current_tuple()->cell_num() > 1) {
+    return RC::TOO_MANY_COLS;
+  }
   // 否则这里value有值了，但还是调用一次，多于1条记录
   rc = get_value(tuple, value);
   if (rc == RC::RECORD_EOF) {
@@ -596,4 +585,14 @@ RC SubQueryExpr::get_one_row_value(const Tuple &tuple, Value &value)
     return RC::TOO_MANY_ROW;
   }
   return rc;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+RC ListExpr::get_value(const Tuple &tuple, Value &value) const {
+  if (idx_ >= value_.size()) {
+    return RC::EMPTY;
+  }
+  value = value_[idx_++];
+  return RC::SUCCESS;
 }

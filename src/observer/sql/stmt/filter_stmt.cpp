@@ -165,6 +165,8 @@ RC FilterStmt::create_filter_unit(Db *db, Table *default_table, std::unordered_m
     auto subquery_expr = std::make_unique<SubQueryExpr>();
     subquery_expr->subquery_stmt = static_cast<SelectStmt *>(subquery_stmt);
     filter_unit->right = std::move(subquery_expr);
+  } else if (condition->right->type == PExpType::LIST) {
+    PListExpr* right = condition->right->lexp;
   } else {
     LOG_ERROR("not support expr type");
     return RC::INVALID_ARGUMENT;

@@ -60,6 +60,7 @@ enum class ExprType
   CONJUNCTION,   ///< 多个表达式使用同一种关系(AND或OR)来联结
   ARITHMETIC,    ///< 算术运算
   SUBQUERY,      ///< 子查询
+  LIST            ///< 列表达式
 };
 
 /**
@@ -237,6 +238,7 @@ public:
 
   CompOp comp() const { return comp_; }
 
+
   // 反转比较符号
   void reverse_comp();
 
@@ -256,6 +258,9 @@ public:
   RC compare_value(const Value &left, const Value &right, bool &value) const;
 
 private:
+  // 返回表达式的值，必须为空或者单值类型
+  RC get_one_row_value(const std::unique_ptr<Expression>& expr, const Tuple &tuple, Value &value) const;
+
   CompOp comp_;
   std::unique_ptr<Expression> left_;
   std::unique_ptr<Expression> right_;
@@ -411,3 +416,29 @@ public:
 private:
   mutable bool is_open_{false};  // phy_oper是否需要open
 };
+
+/**
+ * @description: List表达式，形如(1,2,3,4)
+ * @return {*}
+ */
+
+class ListExpr: public Expression {
+public:
+  ListExpr() = default;
+
+  virtual ~ListExpr() = default;
+
+  virtual RC get_value(const Tuple &tuple, Value &value) const;
+
+  virtual RC try_get_value(Value &value) const { return RC::UNIMPLENMENT; }
+
+  virtual ExprType type() const { return ExprType::LIST; }
+
+  virtual AttrType value_type() const { return AttrType::UNDEFINED; }
+
+
+private:
+  std::vector<Value> value_;
+  mutable int idx_{0};
+};
+

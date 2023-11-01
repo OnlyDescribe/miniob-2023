@@ -209,7 +209,7 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
     if (filter_unit->left->type() == ExprType::SUBQUERY) {
       auto sub_query_expr = static_cast<SubQueryExpr *>(filter_unit->left.get());
       if (sub_query_expr->subquery_stmt->query_fields().size() != 1) {
-        return RC::SUBQUERY_MANY_COLS;
+        return RC::TOO_MANY_COLS;
       }
       rc = create_plan(sub_query_expr->subquery_stmt, sub_query_expr->oper);
       if (rc != RC::SUCCESS) {
@@ -219,7 +219,7 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
     if (filter_unit->right->type() == ExprType::SUBQUERY) {
       auto sub_query_expr = static_cast<SubQueryExpr *>(filter_unit->right.get());
       if (sub_query_expr->subquery_stmt->query_fields().size() != 1) {
-        return RC::SUBQUERY_MANY_COLS;
+        return RC::TOO_MANY_COLS;
       }
       rc = create_plan(sub_query_expr->subquery_stmt, sub_query_expr->oper);
       if (rc != RC::SUCCESS) {
