@@ -98,6 +98,9 @@ RC PlainCommunicator::write_state(SessionEvent *event, bool &need_disconnect)
   const int buf_size = 2048;
   char *buf = new char[buf_size];
   const std::string &state_string = sql_result->state_string();
+  if (RC::SUCCESS != sql_result->return_code()) {
+    writer_->clear();
+  }
   if (state_string.empty()) {
     const char *result = RC::SUCCESS == sql_result->return_code() ? "SUCCESS" : "FAILURE";
     snprintf(buf, buf_size, "%s\n", result);
@@ -232,9 +235,11 @@ RC PlainCommunicator::write_result_internal(SessionEvent *event, bool &need_disc
 
   rc = RC::SUCCESS;
   Tuple *tuple = nullptr;
+
+  bool is_write_header = false;
+
   while (RC::SUCCESS == (rc = sql_result->next_tuple(tuple))) {
     assert(tuple != nullptr);
-
     // int cell_num = tuple->cell_num(); // 使用 schema.cell_num()
     for (int i = 0; i < cell_num; i++) {
       if (i != 0) {

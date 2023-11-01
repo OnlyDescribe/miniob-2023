@@ -60,6 +60,7 @@ enum class ExprType
   CONJUNCTION,   ///< 多个表达式使用同一种关系(AND或OR)来联结
   ARITHMETIC,    ///< 算术运算
   SUBQUERY,      ///< 子查询
+  LIST           ///< 列表达式
 };
 
 /**
@@ -255,10 +256,16 @@ public:
    */
   RC compare_value(const Value &left, const Value &right, bool &value) const;
 
+  void set_parent_tuple(const std::shared_ptr<Tuple> &tuple) { parent_tuple_ = tuple; }
+
 private:
+  // 返回表达式的值，必须为空或者单值类型
+  RC get_one_row_value(const std::unique_ptr<Expression> &expr, const Tuple &tuple, Value &value) const;
+
   CompOp comp_;
   std::unique_ptr<Expression> left_;
   std::unique_ptr<Expression> right_;
+  std::shared_ptr<Tuple> parent_tuple_;
 };
 
 /**
@@ -287,6 +294,16 @@ public:
   RC get_value(const Tuple &tuple, Value &value) const override;
 
   Type conjunction_type() const { return conjunction_type_; }
+
+  void set_parent_tuple(const std::shared_ptr<Tuple> &tuple)
+  {
+    for (auto &child : children_) {
+      if (child->type() == ExprType::COMPARISON) {
+        auto cmp_expr = static_cast<ComparisonExpr *>(child.get());
+        cmp_expr->set_parent_tuple(tuple);
+      }
+    }
+  }
 
   std::vector<std::unique_ptr<Expression>> &children() { return children_; }
 
@@ -393,9 +410,14 @@ public:
   virtual ~SubQueryExpr();
 
   virtual RC get_value(const Tuple &tuple, Value &value) const;
+  // tuple和parent需要组合, 用于复杂子查询
+  RC get_and_set_value(const Tuple &tuple, Value &value, Tuple *parent = nullptr) const;
 
   // 从子查询里面，确保只能拿一个记录
   RC get_one_row_value(const Tuple &tuple, Value &value);
+
+  // tuple和parent需要组合, 用于复杂子查询
+  RC get_and_set_one_row_value(const Tuple &tuple, Value &value, Tuple *parent = nullptr);
 
   virtual RC try_get_value(Value &value) const { return RC::UNIMPLENMENT; }
 
@@ -407,7 +429,34 @@ public:
   SelectStmt *subquery_stmt{nullptr};
   std::unique_ptr<LogicalOperator> oper;
   std::unique_ptr<PhysicalOperator> phy_oper;
+};
+
+/**
+ * @description: List表达式，形如(1,2,3,4)
+ * @return {*}
+ */
+
+class ListExpr : public Expression
+{
+public:
+  ListExpr() = default;
+
+  virtual ~ListExpr() = default;
+
+  virtual RC get_value(const Tuple &tuple, Value &value) const;
+
+  virtual RC try_get_value(Value &value) const { return RC::UNIMPLENMENT; }
+
+  virtual ExprType type() const { return ExprType::LIST; }
+
+  virtual AttrType value_type() const { return AttrType::UNDEFINED; }
+
+  void reset() { idx_ = 0; }
+
+  // 移动到values里面取
+  void set_values(std::vector<Value> &values) { values_.swap(values); }
 
 private:
-  mutable bool is_open_{false};  // phy_oper是否需要open
+  std::vector<Value> values_;
+  mutable int idx_{0};
 };

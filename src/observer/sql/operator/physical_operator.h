@@ -82,6 +82,18 @@ public:
 
   std::vector<std::unique_ptr<PhysicalOperator>> &children() { return children_; }
 
+  void set_sub_query(const std::shared_ptr<Tuple> &tuple)
+  {
+    parent_tuple_ = tuple;
+    for (const auto &child : children_) {
+      child->set_sub_query(tuple);
+    }
+  }
+
+  virtual Tuple *parrent_tuple() { return parent_tuple_.get(); }
+
 protected:
   std::vector<std::unique_ptr<PhysicalOperator>> children_;
+  // for sub query
+  std::shared_ptr<Tuple> parent_tuple_;
 };

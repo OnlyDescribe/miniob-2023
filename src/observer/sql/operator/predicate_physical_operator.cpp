@@ -47,6 +47,13 @@ RC PredicatePhysicalOperator::next()
     }
 
     Value value;
+    if (parent_tuple_ != nullptr) {
+      if (expression_->type() == ExprType::CONJUNCTION) {
+        static_cast<ConjunctionExpr *>(expression_.get())->set_parent_tuple(parent_tuple_);
+      } else if (expression_->type() == ExprType::COMPARISON) {
+        static_cast<ComparisonExpr *>(expression_.get())->set_parent_tuple(parent_tuple_);
+      }
+    }
     rc = expression_->get_value(*tuple, value);
     if (rc != RC::SUCCESS) {
       return rc;

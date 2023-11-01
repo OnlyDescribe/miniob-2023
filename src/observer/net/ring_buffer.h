@@ -79,6 +79,9 @@ public:
    */
   int32_t remain() const { return capacity() - size(); }
 
+  // 清空缓存
+  void clear() { data_size_ = 0; }
+
   /**
    * @brief 缓存中已经写入数据的空间大小
    */
