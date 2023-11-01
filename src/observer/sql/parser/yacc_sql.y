@@ -114,6 +114,7 @@ bool IsAttributesVailid(const std::vector<PExpr *> &select_attr)
         FROM
         WHERE
         AND
+        OR
         SET
         ON
         LOAD
@@ -1554,6 +1555,7 @@ list_pexpr:
       std::reverse(list_pexpr->value_list.begin(), list_pexpr->value_list.end());
       delete $2;
       delete $3;
+      $$ = list_pexpr;
     }
 
 pexpr:
