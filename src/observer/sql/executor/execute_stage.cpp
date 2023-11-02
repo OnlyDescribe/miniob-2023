@@ -25,6 +25,7 @@ See the Mulan PSL v2 for more details. */
 #include "event/session_event.h"
 #include "sql/parser/value.h"
 #include "sql/stmt/create_table_select_stmt.h"
+#include "sql/stmt/create_view_stmt.h"
 #include "sql/stmt/stmt.h"
 #include "sql/stmt/select_stmt.h"
 #include "storage/default/default_handler.h"
@@ -104,6 +105,24 @@ RC ExecuteStage::handle_request_with_physical_operator(SQLStageEvent *sql_event)
       }
     } break;
 
+    case StmtType::CREATE_VIEW: {
+      SelectStmt *select_stmt = static_cast<CreateViewStmt *>(stmt)->select_stmt().get();
+
+      bool with_table_name = select_stmt->tables().size() > 1;
+
+      for (const Field &field : select_stmt->query_fields()) {
+        if (select_stmt->is_aggregation_stmt()) {
+          schema.append_cell(AggretationExpr::to_string(field, field.get_aggr_type()).c_str());
+        } else {
+          if (with_table_name) {
+            schema.append_cell(field.table_name(), field.field_name());
+          } else {
+            schema.append_cell(field.field_name());
+          }
+        }
+      }
+    } break;
+
     case StmtType::CALC: {
       CalcPhysicalOperator *calc_operator = static_cast<CalcPhysicalOperator *>(physical_operator.get());
       for (const unique_ptr<Expression> &expr : calc_operator->expressions()) {
@@ -124,8 +143,8 @@ RC ExecuteStage::handle_request_with_physical_operator(SQLStageEvent *sql_event)
   sql_result->set_operator(std::move(physical_operator));
 
   // 除了处理物理算子
-  // CREATE_TABLE_SELECT 还需要执行创表
-  if (stmt->type() == StmtType::CREATE_TABLE_SELECT) {
+  // CREATE_TABLE_SELECT 和 CREATE_VIEW 还需要执行创表
+  if (stmt->type() == StmtType::CREATE_TABLE_SELECT || stmt->type() == StmtType::CREATE_VIEW) {
     SessionEvent *session_event = sql_event->session_event();
 
     Stmt *stmt = sql_event->stmt();

@@ -793,6 +793,31 @@ select_attr_list:
       $$->push_back(pexpr);
       free($4);
     }
+    | COMMA pexpr AS aggr_func_type select_attr_list {
+      if ($5 != nullptr) {
+        $$ = $5;
+      } else {
+        $$ = new std::vector<PExpr *>;
+      }
+      PExpr * pexpr = $2;
+      if($4 == AggrFuncType::MIN) {
+        pexpr->alias = "min";
+      }
+      if($4 == AggrFuncType::MAX) {
+        pexpr->alias = "max";
+      }
+      if($4 == AggrFuncType::SUM) {
+        pexpr->alias = "sum";
+      }
+      if($4 == AggrFuncType::AVG) {
+        pexpr->alias = "avg";
+      }
+      if($4 == AggrFuncType::COUNT) {
+        pexpr->alias = "count";
+      }
+      $$->push_back(pexpr);
+      // std::reverse($$->begin(), $$->end());
+    }
     ;
 
 select_from:   
@@ -987,7 +1012,6 @@ group_by_list:
       }
       RelAttrSqlNode rel_attr;
       rel_attr.attribute_name = $2;
-      rel_attr.relation_name = $2;
       $$->push_back(rel_attr);
       free($2);
     }

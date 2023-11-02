@@ -22,6 +22,7 @@ See the Mulan PSL v2 for more details. */
 #include "common/log/log.h"
 #include "sql/expr/tuple_cell.h"
 #include "sql/parser/parse.h"
+#include "sql/parser/parse_defs.h"
 #include "sql/parser/value.h"
 #include "sql/expr/expression.h"
 #include "storage/buffer/disk_buffer_pool.h"
@@ -88,6 +89,10 @@ public:
    * @param[out] cell  返回的Cell
    */
   virtual RC cell_at(int index, Value &cell) const = 0;
+
+  // 根据spec, 找到对应record的位置
+  virtual RC find_record(const TupleCellSpec &spec, RecordPos &record_pos) const = 0;
+  virtual RC record_at(int index, RecordPos &record_pos) const = 0;
 
   /**
    * @brief 根据cell的描述，获取cell的值
@@ -196,7 +201,7 @@ public:
       Frame *frame = nullptr;
       std::string texts;  // 文本内容
 
-      PageNum page_num;   // 溢出页号
+      PageNum page_num;  // 溢出页号
       int record_offset{0};
       memcpy(&page_num,
           this->record_->data() + field_meta->offset() + record_offset,
@@ -221,6 +226,18 @@ public:
     else {
       cell.set_data(this->record_->data() + field_meta->offset(), field_meta->len());
     }
+    return RC::SUCCESS;
+  }
+
+  RC record_at(int index, RecordPos &record_pos) const override
+  {
+    record_pos = RecordPos(table_, record_->rid());
+    return RC::SUCCESS;
+  }
+
+  RC find_record(const TupleCellSpec &spec, RecordPos &record_pos) const override
+  {
+    record_pos = RecordPos(table_, record_->rid());
     return RC::SUCCESS;
   }
 
@@ -335,6 +352,24 @@ public:
 
   RC find_cell(const TupleCellSpec &spec, Value &cell) const override { return tuple_->find_cell(spec, cell); }
 
+  RC record_at(int index, RecordPos &record_pos) const override
+  {
+    if (index < 0 || index >= static_cast<int>(speces_.size())) {
+      return RC::INTERNAL;
+    }
+    if (tuple_ == nullptr) {
+      return RC::INTERNAL;
+    }
+
+    const TupleCellSpec *spec = speces_[index];
+    return tuple_->find_record(*spec, record_pos);
+  }
+
+  RC find_record(const TupleCellSpec &spec, RecordPos &record_pos) const override
+  {
+    return tuple_->find_record(spec, record_pos);
+  }
+
   Tuple *copy_tuple() const override
   {
     ProjectTuple *tuple = new ProjectTuple();
@@ -400,6 +435,10 @@ public:
     return RC::NOTFOUND;
   }
 
+  RC record_at(int index, RecordPos &record_pos) const override { return RC::NOTFOUND; }
+
+  RC find_record(const TupleCellSpec &spec, RecordPos &record_pos) const override { return RC::NOTFOUND; }
+
   // TODO
   // 不能 Copy 应该, 因为成员对象是引用
   Tuple *copy_tuple() const override
@@ -447,6 +486,10 @@ public:
   }
 
   virtual RC find_cell(const TupleCellSpec &spec, Value &cell) const override { return RC::INTERNAL; }
+
+  RC record_at(int index, RecordPos &record_pos) const override { return RC::NOTFOUND; }
+
+  RC find_record(const TupleCellSpec &spec, RecordPos &record_pos) const override { return RC::NOTFOUND; }
 
 private:
   std::vector<Value> cells_;
@@ -496,6 +539,30 @@ public:
     }
 
     return right_->find_cell(spec, value);
+  }
+
+  RC record_at(int index, RecordPos &record_pos) const override
+  {
+    const int left_cell_num = left_->cell_num();
+    if (index > 0 && index < left_cell_num) {
+      return left_->record_at(index, record_pos);
+    }
+
+    if (index >= left_cell_num && index < left_cell_num + right_->cell_num()) {
+      return right_->record_at(index - left_cell_num, record_pos);
+    }
+
+    return RC::NOTFOUND;
+  }
+
+  RC find_record(const TupleCellSpec &spec, RecordPos &record_pos) const override
+  {
+    RC rc = left_->find_record(spec, record_pos);
+    if (rc == RC::SUCCESS || rc != RC::NOTFOUND) {
+      return rc;
+    }
+
+    return right_->find_record(spec, record_pos);
   }
 
   auto &get_left() const { return left_; }
@@ -556,6 +623,10 @@ public:
     }
     return RC::NOTFOUND;
   }
+
+  RC record_at(int index, RecordPos &record_pos) const override { return RC::NOTFOUND; }
+
+  RC find_record(const TupleCellSpec &spec, RecordPos &record_pos) const override { return RC::NOTFOUND; }
 
   Tuple *copy_tuple() const override
   {

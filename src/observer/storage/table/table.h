@@ -96,6 +96,7 @@ public:
   const TableMeta &table_meta() const;
   DiskBufferPool *data_buffer_pool() { return data_buffer_pool_; }  // 为了让tuple能根据这个从表中拿到溢出页
   const DiskBufferPool *data_buffer_pool() const { return data_buffer_pool_; }
+  bool &is_view() { return is_view_; }
   RC sync();
 
 private:
@@ -115,4 +116,8 @@ private:
   DiskBufferPool *data_buffer_pool_ = nullptr;   /// 数据文件关联的buffer pool
   RecordFileHandler *record_handler_ = nullptr;  /// 记录操作
   std::vector<Index *> indexes_;
+
+  bool is_view_ = false;
+  bool modifiable = false;
+  bool updatable = false;
 };
