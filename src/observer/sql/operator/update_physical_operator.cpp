@@ -47,6 +47,9 @@ RC UpdatePhysicalOperator::open(Trx *trx)
 
   // TODO(oldcb): 处理多个交的表达式(如子查询), 生成子查询的physical operator, 并执行返回表达式的值
   for (int i = 0; i < values_exprs_.size(); i++) {
+    // 注意: 如果这里判断字段和值类型无法类型转换或是子查询返回多行, 先不能直接报错
+    // 而是要等到next中扫表的时候, 如果没有拿到需要更改的tuple值, 则不报错
+
     Value value;
 
     if (values_exprs_[i]->type() == ExprType::VALUE) {
@@ -57,7 +60,8 @@ RC UpdatePhysicalOperator::open(Trx *trx)
       // 只支持简单子查询, 先不支持和其他查询联动
       rc = sub_query_expr->get_one_row_value(RowTuple(), value);
       if (rc != RC::SUCCESS) {
-        return rc;
+        schema_field_type_mismatch_ = true;
+        break;
       }
     } else {
       return RC::NOT_IMPLEMENT;
@@ -68,8 +72,6 @@ RC UpdatePhysicalOperator::open(Trx *trx)
     AttrType field_type = field_meta->type();
     AttrType value_type = value.attr_type();
     if (field_type != value_type) {
-      // 注意: 如果这里判断字段和值类型无法类型转换, 先不能直接报错
-      // 而是要等到next中扫表的时候, 如果没有拿到需要更改的tuple值, 则不报错
 
       // 1) 因为更新操作的词法解析无法判断字符串是TEXTS还是CHARS
       // 目前可能会出现值 TEXTS 类型而字段是 CHARS 类型
