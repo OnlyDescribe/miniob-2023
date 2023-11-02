@@ -77,18 +77,18 @@ RC UpdateStmt::create(Db *db, UpdateSqlNode &update, Stmt *&stmt)
     // 如果右赋值是UNARY
     // 检查字段和值类型是否冲突
     ASSERT(!field_metas.empty(), "");
-    const FieldMeta *field_meta = field_metas.back();
-    AttrType value_type = AttrType::UNDEFINED;
-
     if (update.assignments[i].expr->type == PExpType::UNARY) {
       if (update.assignments[i].expr->uexp->is_attr) {
         LOG_WARN("等号右边不应该是attr类型");
         return RC::SQL_SYNTAX;
       }
-      value_type = update.assignments[i].expr->uexp->value.attr_type();
     }
 
+#if 0
+    // 下面的Resolve需要放到update的物理算子
     // 尽可能解决Unary表达式与字段类型不统一的冲突
+    const FieldMeta *field_meta = field_metas.back();
+    const AttrType value_type = update.assignments[i].expr->uexp->value.attr_type();
     const AttrType field_type = field_meta->type();
 
     if (field_type != value_type && update.assignments[i].expr->type == PExpType::UNARY) {
@@ -134,7 +134,7 @@ RC UpdateStmt::create(Db *db, UpdateSqlNode &update, Stmt *&stmt)
         return RC::SCHEMA_FIELD_TYPE_MISMATCH;
       }
     }
-
+#endif
     // 处理 value_exprs
     if (update.assignments[i].expr->type == PExpType::UNARY) {
       value_exprs.emplace_back(new ValueExpr(update.assignments[i].expr->uexp->value));
@@ -153,7 +153,6 @@ RC UpdateStmt::create(Db *db, UpdateSqlNode &update, Stmt *&stmt)
       return RC::SQL_SYNTAX;
     }
   }
-
   // 2. 处理过滤条件
   std::unordered_map<std::string, Table *> table_map;
   table_map.insert(std::pair<std::string, Table *>(std::string(table_name), table));

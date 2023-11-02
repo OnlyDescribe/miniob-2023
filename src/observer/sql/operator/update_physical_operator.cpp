@@ -45,11 +45,9 @@ RC UpdatePhysicalOperator::open(Trx *trx)
   trx_ = trx;
 
   // TODO(oldcb): 处理多个交的表达式(如子查询), 生成子查询的physical operator, 并执行返回表达式的值
-  // 目前只有一个字段和相应的值
-
-  // TODO(oldcb): 支持 NULL
   for (int i = 0; i < values_exprs_.size(); i++) {
     Value value;
+
     if (values_exprs_[i]->type() == ExprType::VALUE) {
       auto value_expr = static_cast<ValueExpr *>(values_exprs_[i].get());
       value_expr->get_value(value);
@@ -57,27 +55,36 @@ RC UpdatePhysicalOperator::open(Trx *trx)
       auto sub_query_expr = static_cast<SubQueryExpr *>(values_exprs_[i].get());
       // 只支持简单子查询, 先不支持和其他查询联动
       rc = sub_query_expr->get_one_row_value(RowTuple(), value);
+      if (rc != RC::SUCCESS) {
+        return rc;
+      }
+    } else {
+      return RC::NOT_IMPLEMENT;
+    }
 
-      // 如果value的类型, 与类型不匹配, 需要尽可能类型转换(这里的判断逻辑与update_stmt.cpp中相同)
-      const FieldMeta *field_meta = field_metas_[i];
-      AttrType field_type = field_meta->type();
-      AttrType value_type = value.attr_type();
-      if (field_type != value_type) {
-        // 1) 因为更新操作的词法解析无法判断字符串是TEXTS还是CHARS
-        // 目前可能会出现值 TEXTS 类型而字段是 CHARS 类型
-        if (field_type == AttrType::TEXTS && value_type == AttrType::CHARS) {
-          value.set_type(AttrType::TEXTS);
+    // 尽可能解决Unary表达式与字段类型不统一的冲突
+    const FieldMeta *field_meta = field_metas_[i];
+    AttrType field_type = field_meta->type();
+    AttrType value_type = value.attr_type();
+    if (field_type != value_type) {
+      // 注意: 如果这里判断字段和值类型无法类型转换, 先不能直接报错
+      // 而是要等到next中扫表的时候, 如果没有拿到需要更改的tuple值, 则不报错
+
+      // 1) 因为更新操作的词法解析无法判断字符串是TEXTS还是CHARS
+      // 目前可能会出现值 TEXTS 类型而字段是 CHARS 类型
+      if (field_type == AttrType::TEXTS && value_type == AttrType::CHARS) {
+        value.set_type(AttrType::TEXTS);
+      }
+      // 2) 如果值为 NULL, 判断该字段是否设置了 NOT NULL
+      else if (value_type == AttrType::NULLS) {
+        if (field_meta->is_not_null()) {
+          schema_field_type_mismatch_ = true;
+          break;
         }
-        // 2) 如果值为 NULL, 判断该字段是否设置了 NOT NULL
-        else if (value_type == AttrType::NULLS) {
-          if (field_meta->is_not_null()) {
-            LOG_WARN("value can not be null. table=%s, field=%s, field type=%d, value_type=%d",
-          table_->name(), field_meta->name(), field_type, value_type);
-            return RC::SCHEMA_FIELD_TYPE_MISMATCH;
-          }
-        }
-      } else if ((field_type == AttrType::INTS || field_type == AttrType::FLOATS || field_type == AttrType::CHARS) and
-                 (value_type == AttrType::INTS || value_type == AttrType::FLOATS || value_type == AttrType::CHARS)) {
+      }
+      // 3) 处理INTS, FLOATS和CHARS之间的类型转换
+      else if ((field_type == AttrType::INTS || field_type == AttrType::FLOATS || field_type == AttrType::CHARS) and
+               (value_type == AttrType::INTS || value_type == AttrType::FLOATS || value_type == AttrType::CHARS)) {
         switch (field_type) {
             // 注意: FLOATS 要截断值; CHARS 若是纯数字同样阶段转换值, 否则报错
           case AttrType::INTS: {
@@ -91,19 +98,16 @@ RC UpdatePhysicalOperator::open(Trx *trx)
             value = Value(value.get_string().data());
           } break;
           default: {
-            LOG_WARN("field type mismatch. table=%s, field=%s, field type=%d, value_type=%d",
-          table_->name(), field_meta->name(), field_type, value_type);
-            return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+            schema_field_type_mismatch_ = true;
           } break;
         }
       }
-
-      if (rc != RC::SUCCESS) {
-        return rc;
-      }
-    } else {
-      return RC::NOT_IMPLEMENT;
     }
+
+    if (schema_field_type_mismatch_) {
+      break;
+    }
+
     values_.emplace_back(value);
   }
 
@@ -122,6 +126,11 @@ RC UpdatePhysicalOperator::next()
     if (nullptr == tuple) {
       LOG_WARN("failed to get current record: %s", strrc(rc));
       return rc;
+    }
+
+    if (schema_field_type_mismatch_ == true) {
+      LOG_WARN("field type mismatch. table=%s", table_->name());
+      return RC::SCHEMA_FIELD_TYPE_MISMATCH;
     }
 
     // 得到需要删除的Tuple
