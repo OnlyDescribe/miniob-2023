@@ -57,9 +57,27 @@ RC UpdatePhysicalOperator::open(Trx *trx)
       auto sub_query_expr = static_cast<SubQueryExpr *>(values_exprs_[i].get());
       // 只支持简单子查询, 先不支持和其他查询联动
       rc = sub_query_expr->get_one_row_value(RowTuple(), value);
-      // 如果value的类型, 与类型不匹配, 需要尽可能类型转换
-      for (const FieldMeta *field_meta : field_metas_) {
-        AttrType field_type = field_meta->type();
+
+      // 如果value的类型, 与类型不匹配, 需要尽可能类型转换(这里的判断逻辑与update_stmt.cpp中相同)
+      const FieldMeta *field_meta = field_metas_[i];
+      AttrType field_type = field_meta->type();
+      AttrType value_type = value.attr_type();
+      if (field_type != value_type) {
+        // 1) 因为更新操作的词法解析无法判断字符串是TEXTS还是CHARS
+        // 目前可能会出现值 TEXTS 类型而字段是 CHARS 类型
+        if (field_type == AttrType::TEXTS && value_type == AttrType::CHARS) {
+          value.set_type(AttrType::TEXTS);
+        }
+        // 2) 如果值为 NULL, 判断该字段是否设置了 NOT NULL
+        else if (value_type == AttrType::NULLS) {
+          if (field_meta->is_not_null()) {
+            LOG_WARN("value can not be null. table=%s, field=%s, field type=%d, value_type=%d",
+          table_->name(), field_meta->name(), field_type, value_type);
+            return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+          }
+        }
+      } else if ((field_type == AttrType::INTS || field_type == AttrType::FLOATS || field_type == AttrType::CHARS) and
+                 (value_type == AttrType::INTS || value_type == AttrType::FLOATS || value_type == AttrType::CHARS)) {
         switch (field_type) {
             // 注意 floats 要截断值; CHARS 若是纯数字同样阶段转换值, 否则报错
           case AttrType::INTS: {
@@ -73,7 +91,7 @@ RC UpdatePhysicalOperator::open(Trx *trx)
           } break;
           default: {
             LOG_WARN("field type mismatch. table=%s, field=%s, field type=%d, value_type=%d",
-          table_->name(), field_meta->name(), field_type, value.attr_type());
+          table_->name(), field_meta->name(), field_type, value_type);
             return RC::SCHEMA_FIELD_TYPE_MISMATCH;
           } break;
         }
@@ -84,11 +102,6 @@ RC UpdatePhysicalOperator::open(Trx *trx)
       }
     } else {
       return RC::NOT_IMPLEMENT;
-    }
-    // 不支持空类型 赋值给非空类型
-    if (value.is_null() && field_metas_[i]->is_not_null()) {
-      LOG_WARN("value can not be null.");
-      return RC::SCHEMA_FIELD_TYPE_MISMATCH;
     }
     values_.emplace_back(value);
   }
