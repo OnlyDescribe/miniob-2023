@@ -351,7 +351,7 @@ RC PhysicalPlanGenerator::create_plan(ProjectLogicalOperator &project_oper, uniq
   ProjectPhysicalOperator *project_operator = new ProjectPhysicalOperator;
   const vector<Field> &project_fields = project_oper.fields();
   for (const Field &field : project_fields) {
-    project_operator->add_projection(field.table(), field.meta()); // TODO: alias
+    project_operator->add_projection(field.table(), field.meta());  // TODO: alias
   }
 
   if (child_phy_oper) {
@@ -413,8 +413,18 @@ RC PhysicalPlanGenerator::create_plan(UpdateLogicalOperator &update_oper, unique
     }
   }
 
+  for (const auto &expr : update_oper.value_exprs) {
+    if (expr->type() == ExprType::SUBQUERY) {
+      auto sub_query = static_cast<SubQueryExpr *>(expr.get());
+      rc = create(*sub_query->oper, sub_query->phy_oper);
+      if (rc != RC::SUCCESS) {
+        return rc;
+      }
+    }
+  }
+
   oper = unique_ptr<PhysicalOperator>(
-      new UpdatePhysicalOperator(update_oper.table(), update_oper.values(), update_oper.field_metas()));
+      new UpdatePhysicalOperator(update_oper.table(), std::move(update_oper.value_exprs), update_oper.field_metas()));
 
   if (child_physical_oper) {
     oper->add_child(std::move(child_physical_oper));

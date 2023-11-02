@@ -302,9 +302,8 @@ struct DeleteSqlNode
 struct AssignmentSqlNode
 {
   std::string attribute_name;  ///< 属性名, 因为只支持单表, 不需要RelAttrSqlNode类型
-  bool is_value;               ///< 赋值
-  Value value;                 ///< 值
   PExpr *expr;                 ///< 支持表达式
+  // Value value;                 ///< 值
 };
 
 /**

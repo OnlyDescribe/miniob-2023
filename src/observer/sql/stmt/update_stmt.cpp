@@ -13,13 +13,14 @@ See the Mulan PSL v2 for more details. */
 //
 
 #include "sql/stmt/update_stmt.h"
+#include "sql/stmt/select_stmt.h"
 #include "common/log/log.h"
 #include "sql/stmt/filter_stmt.h"
 #include "storage/db/db.h"
 
-UpdateStmt::UpdateStmt(Table *table, const std::vector<const Value *> &values,
+UpdateStmt::UpdateStmt(Table *table, std::vector<std::unique_ptr<Expression>> &&values_exprs,
     const std::vector<const FieldMeta *> &field_metas, FilterStmt *filter_stmt)
-    : table_(table), values_(values), field_metas_(field_metas), filter_stmt_(filter_stmt)
+    : table_(table), value_exprs_(std::move(values_exprs)), field_metas_(field_metas), filter_stmt_(filter_stmt)
 {}
 
 RC UpdateStmt::create(Db *db, UpdateSqlNode &update, Stmt *&stmt)
@@ -38,7 +39,8 @@ RC UpdateStmt::create(Db *db, UpdateSqlNode &update, Stmt *&stmt)
   }
 
   // 1. 处理更新字段
-  std::vector<const Value *> values;
+  // std::vector<const Value *> values;
+  std::vector<std::unique_ptr<Expression>> value_exprs;
   std::vector<const FieldMeta *> field_metas;
 
   const int value_amount = update.assignments.size();
@@ -75,13 +77,21 @@ RC UpdateStmt::create(Db *db, UpdateSqlNode &update, Stmt *&stmt)
     // 检查字段和值类型是否冲突
     ASSERT(!field_metas.empty(), "");
     const FieldMeta *field_meta = field_metas.back();
-    const AttrType value_type = update.assignments[i].value.attr_type();
+    AttrType value_type = AttrType::UNDEFINED;
+    if (update.assignments[i].expr->type == PExpType::UNARY) {
+      if (update.assignments[i].expr->uexp->is_attr) {
+        LOG_WARN("等号右边不应该是attr类型");
+        return RC::SQL_SYNTAX;
+      }
+      value_type = update.assignments[i].expr->uexp->value.attr_type();
+    }
+
     const AttrType field_type = field_meta->type();
-    if (field_type != value_type) {
+    if (field_type != value_type && update.assignments[i].expr->type != PExpType::SUBQUERY) {
       // 因为更新操作的词法解析无法判断字符串是TEXTS还是CHARS
       // 目前可能会出现值 TEXTS 类型而字段是 CHARS 类型
       if (field_type == AttrType::TEXTS && value_type == AttrType::CHARS) {
-        update.assignments[i].value.set_type(AttrType::TEXTS);
+        update.assignments[i].expr->uexp->value.set_type(AttrType::TEXTS);
       }  // 如果值为 NULL, 判断该字段是否设置了 NOT NULL
       else if (value_type == AttrType::NULLS) {
         if (field_meta->is_not_null()) {
@@ -96,8 +106,26 @@ RC UpdateStmt::create(Db *db, UpdateSqlNode &update, Stmt *&stmt)
       }
     }
 
-    // TODO(oldcb) 处理表达式: 子查询
-    values.push_back(&update.assignments[i].value);  // 注意update资源的生命周期
+    if (update.assignments[i].expr->type == PExpType::UNARY) {
+      if (update.assignments[i].expr->uexp->is_attr) {
+        LOG_WARN("等号右边不应该是attr类型");
+        return RC::SQL_SYNTAX;
+      }
+      value_exprs.emplace_back(new ValueExpr(update.assignments[i].expr->uexp->value));
+    } else if (update.assignments[i].expr->type == PExpType::SUBQUERY) {
+      auto &sub_select = update.assignments[i].expr->sexp;
+      Stmt *subquery_stmt = nullptr;
+      RC rc = SelectStmt::create(db, *sub_select->sub_select, subquery_stmt);
+      if (rc != RC::SUCCESS) {
+        return rc;
+      }
+      auto sub_query_expr = new SubQueryExpr();
+      sub_query_expr->subquery_stmt = static_cast<SelectStmt *>(subquery_stmt);
+      value_exprs.emplace_back(sub_query_expr);
+    } else {
+      LOG_WARN("暂时不支持的类型");
+      return RC::SQL_SYNTAX;
+    }
   }
 
   // 2. 处理过滤条件
@@ -113,6 +141,6 @@ RC UpdateStmt::create(Db *db, UpdateSqlNode &update, Stmt *&stmt)
   }
 
   // 3. everything alright
-  stmt = new UpdateStmt(table, values, field_metas, filter_stmt);
+  stmt = new UpdateStmt(table, std::move(value_exprs), field_metas, filter_stmt);
   return RC::SUCCESS;
 }

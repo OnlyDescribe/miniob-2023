@@ -7,8 +7,8 @@ class Trx;
 class UpdatePhysicalOperator : public PhysicalOperator
 {
 public:
-  UpdatePhysicalOperator(
-      Table *table, const std::vector<const Value *> &values, const std::vector<const FieldMeta *> &field_metas);
+  UpdatePhysicalOperator(Table *table, std::vector<std::unique_ptr<Expression>> &&values_exprs,
+      const std::vector<const FieldMeta *> &field_metas);
 
   virtual ~UpdatePhysicalOperator() = default;
 
@@ -22,7 +22,8 @@ public:
 
 private:
   Table *table_ = nullptr;
-  std::vector<const Value *> values_;
+  std::vector<std::unique_ptr<Expression>> values_exprs_;
+  std::vector<Value> values_;
   std::vector<const FieldMeta *> field_metas_;
   std::vector<int> index_field_metas_;  // 需要修改的字段是第几个, 不考虑系统字段
 

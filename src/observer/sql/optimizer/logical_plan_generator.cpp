@@ -327,10 +327,20 @@ RC LogicalPlanGenerator::create_plan(UpdateStmt *update_stmt, unique_ptr<Logical
     return rc;
   }
 
-  const std::vector<const Value *> &values_ = update_stmt->values();
   const std::vector<const FieldMeta *> &field_metas_ = update_stmt->field_metas();
 
-  unique_ptr<LogicalOperator> update_oper(new UpdateLogicalOperator(table, values_, field_metas_));
+  for (const auto &expr : update_stmt->values_exprs()) {
+    if (expr->type() == ExprType::SUBQUERY) {
+      auto sub_query = static_cast<SubQueryExpr *>(expr.get());
+      rc = create(sub_query->subquery_stmt, sub_query->oper);
+      if (rc != RC::SUCCESS) {
+        return rc;
+      }
+    }
+  }
+
+  unique_ptr<LogicalOperator> update_oper(
+      new UpdateLogicalOperator(table, std::move(update_stmt->values_exprs()), field_metas_));
 
   if (predicate_oper) {
     predicate_oper->add_child(std::move(table_get_oper));

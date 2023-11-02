@@ -601,7 +601,7 @@ delete_stmt:    /*  delete 语句的语法解析树*/
     ;
 
 update_stmt:      /*  update 语句的语法解析树*/
-    UPDATE ID SET ID EQ value assignment_list where 
+    UPDATE ID SET ID EQ pexpr assignment_list where 
     {
       $$ = new ParsedSqlNode(SCF_UPDATE);
       $$->update.relation_name = $2;
@@ -613,17 +613,15 @@ update_stmt:      /*  update 语句的语法解析树*/
 
       $$->update.conditions = $8;
       
-      AssignmentSqlNode node = {
-        .attribute_name = std::string{$4},
-        .value = *$6
-      };
+      AssignmentSqlNode node;
+      node.attribute_name = std::string{$4};
+      node.expr = $6;
 
       $$->update.assignments.push_back(std::move(node));
       std::reverse($$->update.assignments.begin(), $$->update.assignments.end());
 
       free($2);
       free($4);
-      free($6);
     }
     ;
 
@@ -681,7 +679,7 @@ assignment_list:
     {
       $$ = nullptr;
     }
-    | COMMA ID EQ value assignment_list
+    | COMMA ID EQ pexpr assignment_list
     {
       if ($5 != nullptr) {
         $$ = $5;
@@ -691,12 +689,11 @@ assignment_list:
 
       AssignmentSqlNode node = {
         .attribute_name = std::string{$2},
-        .value = *$4
+        .expr = $4
       };
 
       $$->push_back(std::move(node));
       free($2);
-      delete $4;
     }
     ;
 

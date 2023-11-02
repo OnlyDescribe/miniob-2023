@@ -5,9 +5,9 @@
 #include "storage/trx/trx.h"
 #include "sql/stmt/update_stmt.h"
 
-UpdatePhysicalOperator::UpdatePhysicalOperator(
-    Table *table, const std::vector<const Value *> &values, const std::vector<const FieldMeta *> &field_metas)
-    : table_(table), values_(values), field_metas_(field_metas)
+UpdatePhysicalOperator::UpdatePhysicalOperator(Table *table, std::vector<std::unique_ptr<Expression>> &&values_exprs,
+    const std::vector<const FieldMeta *> &field_metas)
+    : table_(table), values_exprs_(std::move(values_exprs)), field_metas_(field_metas)
 {
   // TODO(oldcb): 目前可以被field的 id 值替代
   // 找到需要修改的字段是第几个
@@ -47,11 +47,29 @@ RC UpdatePhysicalOperator::open(Trx *trx)
   // TODO(oldcb): 处理多个交的表达式(如子查询), 生成子查询的physical operator, 并执行返回表达式的值
   // 目前只有一个字段和相应的值
 
-  // TODO(oldcb): 多字段
   // TODO(oldcb): 支持 NULL
-  // TODO(oldcb): 支持 类型转换
-  //   const AttrType value_type = values_->attr_type();
-  //   const AttrType field_type = field_metas_->type();
+  for (int i = 0; i < values_exprs_.size(); i++) {
+    Value value;
+    if (values_exprs_[i]->type() == ExprType::VALUE) {
+      auto value_expr = static_cast<ValueExpr *>(values_exprs_[i].get());
+      value_expr->get_value(value);
+    } else if (values_exprs_[i]->type() == ExprType::SUBQUERY) {
+      auto sub_query_expr = static_cast<SubQueryExpr *>(values_exprs_[i].get());
+      // 只支持简单子查询, 先不支持和其他查询联动
+      rc = sub_query_expr->get_one_row_value(RowTuple(), value);
+      if (rc != RC::SUCCESS) {
+        return rc;
+      }
+    } else {
+      return RC::NOT_IMPLEMENT;
+    }
+    // 不支持空类型 赋值给非空类型
+    if (value.is_null() && field_metas_[i]->is_not_null()) {
+      LOG_WARN("value can not be null.");
+      return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+    }
+    values_.emplace_back(value);
+  }
 
   return RC::SUCCESS;
 }
@@ -86,7 +104,7 @@ RC UpdatePhysicalOperator::next()
 
     for (int i = 0, j = 0; i < value_num; ++i) {
       if (index_field_metas_[j] == i) {
-        values.push_back(*values_[j]);
+        values.push_back(values_[j]);
         ++j;
       } else {
         row_tuple->cell_at(i, cell);
