@@ -306,7 +306,8 @@ int Value::compare(const Value &other) const
   return -1;  // TODO return rc?
 }
 
-int Value::get_int() const
+// 如果error_is_zero为true, 那么如果无法转换返回0, 否则为最大值
+int Value::get_int(bool error_is_zero) const
 {
   switch (attr_type_) {
     case CHARS:
@@ -316,7 +317,7 @@ int Value::get_int() const
         return std::round(std::stof(str_value_));
       } catch (std::exception const &ex) {
         LOG_TRACE("failed to convert string to number. s=%s, ex=%s", str_value_.c_str(), ex.what());
-        return 0;
+        return error_is_zero ? 0 : std::numeric_limits<int>::max();
       }
     }
     case INTS: {
@@ -339,7 +340,8 @@ int Value::get_int() const
   return 0;
 }
 
-float Value::get_float() const
+// 如果error_is_zero为true, 那么如果无法转换返回0, 否则为最大值
+float Value::get_float(bool error_is_zero) const
 {
   switch (attr_type_) {
     case CHARS:
@@ -348,7 +350,7 @@ float Value::get_float() const
         return std::stof(str_value_);
       } catch (std::exception const &ex) {
         LOG_TRACE("failed to convert string to float. s=%s, ex=%s", str_value_.c_str(), ex.what());
-        return 0.0;
+        return error_is_zero ? 0.0 : std::numeric_limits<float>::max();
       }
     } break;
     case INTS: {

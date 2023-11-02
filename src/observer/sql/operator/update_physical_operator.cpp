@@ -4,6 +4,7 @@
 #include "storage/table/table.h"
 #include "storage/trx/trx.h"
 #include "sql/stmt/update_stmt.h"
+#include <limits>
 
 UpdatePhysicalOperator::UpdatePhysicalOperator(Table *table, std::vector<std::unique_ptr<Expression>> &&values_exprs,
     const std::vector<const FieldMeta *> &field_metas)
@@ -89,10 +90,19 @@ RC UpdatePhysicalOperator::open(Trx *trx)
             // 注意: FLOATS 要截断值; CHARS 若是纯数字同样阶段转换值, 否则报错
           case AttrType::INTS: {
             // 注意: 转INTS要四舍五入
-            value = Value(value.get_int());
+            int v = value.get_int(false);
+            if (v != std::numeric_limits<int>::max()) {
+              value = Value(v);
+            } else {
+            }
           } break;
           case AttrType::FLOATS: {
-            value = Value(value.get_float());
+            int v = value.get_float(false);
+            if (v != std::numeric_limits<float>::max()) {
+              value = Value(v);
+            } else {
+              schema_field_type_mismatch_ = true;
+            }
           } break;
           case AttrType::CHARS: {
             value = Value(value.get_string().data());
