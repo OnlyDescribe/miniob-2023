@@ -79,8 +79,9 @@ RC UpdatePhysicalOperator::open(Trx *trx)
       } else if ((field_type == AttrType::INTS || field_type == AttrType::FLOATS || field_type == AttrType::CHARS) and
                  (value_type == AttrType::INTS || value_type == AttrType::FLOATS || value_type == AttrType::CHARS)) {
         switch (field_type) {
-            // 注意 floats 要截断值; CHARS 若是纯数字同样阶段转换值, 否则报错
+            // 注意: FLOATS 要截断值; CHARS 若是纯数字同样阶段转换值, 否则报错
           case AttrType::INTS: {
+            // 注意: 转INTS要四舍五入
             value = Value(value.get_int());
           } break;
           case AttrType::FLOATS: {

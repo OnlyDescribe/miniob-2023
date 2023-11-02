@@ -12,6 +12,7 @@ See the Mulan PSL v2 for more details. */
 // Created by WangYunlai on 2023/06/28.
 //
 
+#include <cmath>
 #include <sstream>
 #include <iomanip>
 #include "sql/parser/value.h"
@@ -311,7 +312,8 @@ int Value::get_int() const
     case CHARS:
     case TEXTS: {
       try {
-        return (int)(std::stol(str_value_));
+        // return (int)(std::stol(str_value_));
+        return std::round(std::stof(str_value_));
       } catch (std::exception const &ex) {
         LOG_TRACE("failed to convert string to number. s=%s, ex=%s", str_value_.c_str(), ex.what());
         return 0;
@@ -321,7 +323,7 @@ int Value::get_int() const
       return num_value_.int_value_;
     }
     case FLOATS: {
-      return (int)(num_value_.float_value_);
+      return (int)(std::round(num_value_.float_value_));
     }
     case BOOLEANS: {
       return (int)(num_value_.bool_value_);
