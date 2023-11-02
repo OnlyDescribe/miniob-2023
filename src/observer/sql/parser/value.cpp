@@ -12,6 +12,7 @@ See the Mulan PSL v2 for more details. */
 // Created by WangYunlai on 2023/06/28.
 //
 
+#include <cmath>
 #include <sstream>
 #include <iomanip>
 #include "sql/parser/value.h"
@@ -305,23 +306,25 @@ int Value::compare(const Value &other) const
   return -1;  // TODO return rc?
 }
 
-int Value::get_int() const
+// 如果error_is_zero为true, 那么如果无法转换返回0, 否则为最大值
+int Value::get_int(bool error_is_zero) const
 {
   switch (attr_type_) {
     case CHARS:
     case TEXTS: {
       try {
-        return (int)(std::stol(str_value_));
+        // return (int)(std::stol(str_value_));
+        return std::round(std::stof(str_value_));
       } catch (std::exception const &ex) {
         LOG_TRACE("failed to convert string to number. s=%s, ex=%s", str_value_.c_str(), ex.what());
-        return 0;
+        return error_is_zero ? 0 : std::numeric_limits<int>::max();
       }
     }
     case INTS: {
       return num_value_.int_value_;
     }
     case FLOATS: {
-      return (int)(num_value_.float_value_);
+      return (int)(std::round(num_value_.float_value_));
     }
     case BOOLEANS: {
       return (int)(num_value_.bool_value_);
@@ -337,7 +340,8 @@ int Value::get_int() const
   return 0;
 }
 
-float Value::get_float() const
+// 如果error_is_zero为true, 那么如果无法转换返回0, 否则为最大值
+float Value::get_float(bool error_is_zero) const
 {
   switch (attr_type_) {
     case CHARS:
@@ -346,7 +350,7 @@ float Value::get_float() const
         return std::stof(str_value_);
       } catch (std::exception const &ex) {
         LOG_TRACE("failed to convert string to float. s=%s, ex=%s", str_value_.c_str(), ex.what());
-        return 0.0;
+        return error_is_zero ? 0.0 : std::numeric_limits<float>::max();
       }
     } break;
     case INTS: {

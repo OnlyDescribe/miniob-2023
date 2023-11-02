@@ -639,7 +639,7 @@ RC SubQueryExpr::get_one_row_value(const Tuple &tuple, Value &value)
     return RC::SUCCESS;
   }
   if (rc == RC::SUCCESS) {
-    LOG_WARN("sub query return more than 1 row");
+    // LOG_WARN("sub query return more than 1 row"); // 对于update, 当且仅当存在修改的tuple且返回多行时才会报该错
     return RC::TOO_MANY_ROW;
   }
   return rc;

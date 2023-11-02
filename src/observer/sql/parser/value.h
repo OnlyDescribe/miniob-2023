@@ -126,8 +126,8 @@ public:
    * 获取对应的值
    * 如果当前的类型与期望获取的类型不符，就会执行转换操作
    */
-  int get_int() const;
-  float get_float() const;
+  int get_int(bool error_is_zero = true) const;  // 如果error_is_zero为true, 那么如果无法转换返回0, 否则为最大值
+  float get_float(bool error_is_zero = true) const;  // 如果error_is_zero为true, 那么如果无法转换返回0, 否则为最大值
   std::string get_string() const;
   bool get_boolean() const;
 
