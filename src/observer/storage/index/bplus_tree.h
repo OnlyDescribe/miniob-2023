@@ -87,11 +87,11 @@ public:
 
     for (int i = 0; i < attr_type_.size() - 1; ++i) {
       if (v2_null_bitmap.get_bit(attr_id_[i])) {
-        if (v1_null_bitmap.get_bit(attr_id_[i])) {
-          continue;   // NULL和NULL相等
-        } else {
-          return -1;  // NULL比其它值(不包括NULL)大
-        }
+        // if (v1_null_bitmap.get_bit(attr_id_[i])) {
+        //   continue;   // NULL和NULL相等
+        // } else {
+        return -1;  // NULL比其它值(不包括NULL)大
+        // }
       } else if (v1_null_bitmap.get_bit(attr_id_[i])) {
         return 1;
       }
