@@ -74,10 +74,12 @@ RC UpdateStmt::create(Db *db, UpdateSqlNode &update, Stmt *&stmt)
       return RC::SCHEMA_TABLE_NOT_EXIST;
     }
 
+    // 如果右赋值是UNARY
     // 检查字段和值类型是否冲突
     ASSERT(!field_metas.empty(), "");
     const FieldMeta *field_meta = field_metas.back();
     AttrType value_type = AttrType::UNDEFINED;
+
     if (update.assignments[i].expr->type == PExpType::UNARY) {
       if (update.assignments[i].expr->uexp->is_attr) {
         LOG_WARN("等号右边不应该是attr类型");
@@ -86,31 +88,55 @@ RC UpdateStmt::create(Db *db, UpdateSqlNode &update, Stmt *&stmt)
       value_type = update.assignments[i].expr->uexp->value.attr_type();
     }
 
+    // 尽可能解决Unary表达式与字段类型不统一的冲突
     const AttrType field_type = field_meta->type();
-    if (field_type != value_type && update.assignments[i].expr->type != PExpType::SUBQUERY) {
-      // 因为更新操作的词法解析无法判断字符串是TEXTS还是CHARS
+
+    if (field_type != value_type && update.assignments[i].expr->type == PExpType::UNARY) {
+      // 1) 因为更新操作的词法解析无法判断字符串是TEXTS还是CHARS
       // 目前可能会出现值 TEXTS 类型而字段是 CHARS 类型
       if (field_type == AttrType::TEXTS && value_type == AttrType::CHARS) {
         update.assignments[i].expr->uexp->value.set_type(AttrType::TEXTS);
-      }  // 如果值为 NULL, 判断该字段是否设置了 NOT NULL
+      }
+      // 2) 如果值为 NULL, 判断该字段是否设置了 NOT NULL
       else if (value_type == AttrType::NULLS) {
         if (field_meta->is_not_null()) {
           LOG_WARN("value can not be null. table=%s, field=%s, field type=%d, value_type=%d",
           table_name, field_meta->name(), field_type, value_type);
           return RC::SCHEMA_FIELD_TYPE_MISMATCH;
         }
-      } else {
+      }
+      // 3) 处理INTS, FLOATS和CHARS之间的类型转换
+      else if ((field_type == AttrType::INTS || field_type == AttrType::FLOATS || field_type == AttrType::CHARS) and
+               (value_type == AttrType::INTS || value_type == AttrType::FLOATS || value_type == AttrType::CHARS)) {
+        Value &v = update.assignments[i].expr->uexp->value;
+        switch (field_type) {
+            // 注意 floats 要截断值; CHARS 若是纯数字同样阶段转换值, 否则报错
+          case AttrType::INTS: {
+            v = Value(v.get_int());
+          } break;
+          case AttrType::FLOATS: {
+            v = Value(v.get_float());
+          } break;
+          case AttrType::CHARS: {
+            v = Value(v.get_string().data());
+          } break;
+          default: {
+            LOG_WARN("field type mismatch. table=%s, field=%s, field type=%d, value_type=%d",
+          table_name, field_meta->name(), field_type, value_type);
+            return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+          } break;
+        }
+      }
+
+      else {
         LOG_WARN("field type mismatch. table=%s, field=%s, field type=%d, value_type=%d",
           table_name, field_meta->name(), field_type, value_type);
         return RC::SCHEMA_FIELD_TYPE_MISMATCH;
       }
     }
 
+    // 处理 value_exprs
     if (update.assignments[i].expr->type == PExpType::UNARY) {
-      if (update.assignments[i].expr->uexp->is_attr) {
-        LOG_WARN("等号右边不应该是attr类型");
-        return RC::SQL_SYNTAX;
-      }
       value_exprs.emplace_back(new ValueExpr(update.assignments[i].expr->uexp->value));
     } else if (update.assignments[i].expr->type == PExpType::SUBQUERY) {
       auto &sub_select = update.assignments[i].expr->sexp;

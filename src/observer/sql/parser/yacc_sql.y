@@ -731,6 +731,32 @@ select_attr:
       // std::reverse($$->begin(), $$->end());
       free($3);
     }
+    /* TODO(oldcb): 取消聚合和Func的token, 转为ID进行判断 */
+    | pexpr AS aggr_func_type select_attr_list {
+      if ($4 != nullptr) {
+        $$ = $4;
+      } else {
+        $$ = new std::vector<PExpr *>;
+      }
+      PExpr * pexpr = $1;
+      if($3 == AggrFuncType::MIN) {
+        pexpr->alias = "min";
+      }
+      if($3 == AggrFuncType::MAX) {
+        pexpr->alias = "max";
+      }
+      if($3 == AggrFuncType::SUM) {
+        pexpr->alias = "sum";
+      }
+      if($3 == AggrFuncType::AVG) {
+        pexpr->alias = "avg";
+      }
+      if($3 == AggrFuncType::COUNT) {
+        pexpr->alias = "count";
+      }
+      $$->push_back(pexpr);
+      // std::reverse($$->begin(), $$->end());
+    }
     ;
 
 select_attr_list:

@@ -57,6 +57,28 @@ RC UpdatePhysicalOperator::open(Trx *trx)
       auto sub_query_expr = static_cast<SubQueryExpr *>(values_exprs_[i].get());
       // 只支持简单子查询, 先不支持和其他查询联动
       rc = sub_query_expr->get_one_row_value(RowTuple(), value);
+      // 如果value的类型, 与类型不匹配, 需要尽可能类型转换
+      for (const FieldMeta *field_meta : field_metas_) {
+        AttrType field_type = field_meta->type();
+        switch (field_type) {
+            // 注意 floats 要截断值; CHARS 若是纯数字同样阶段转换值, 否则报错
+          case AttrType::INTS: {
+            value = Value(value.get_int());
+          } break;
+          case AttrType::FLOATS: {
+            value = Value(value.get_float());
+          } break;
+          case AttrType::CHARS: {
+            value = Value(value.get_string().data());
+          } break;
+          default: {
+            LOG_WARN("field type mismatch. table=%s, field=%s, field type=%d, value_type=%d",
+          table_->name(), field_meta->name(), field_type, value.attr_type());
+            return RC::SCHEMA_FIELD_TYPE_MISMATCH;
+          } break;
+        }
+      }
+
       if (rc != RC::SUCCESS) {
         return rc;
       }
@@ -79,8 +101,6 @@ RC UpdatePhysicalOperator::next()
   RC rc = RC::SUCCESS;
 
   PhysicalOperator *child = children_[0].get();
-
-  int sys_field_num = table_->table_meta().sys_field_num();
 
   // next
   while (RC::SUCCESS == (rc = child->next())) {
