@@ -54,6 +54,8 @@ RC OptimizeStage::handle_request(SQLStageEvent *sql_event)
     return rc;
   }
 
+  // TODO(oldcb)
+  if (sql_event->sql_node()->flag == SCF_CREATE_VIEW) {}
   unique_ptr<PhysicalOperator> physical_operator;
   rc = generate_physical_plan(logical_operator, physical_operator);
   if (rc != RC::SUCCESS) {

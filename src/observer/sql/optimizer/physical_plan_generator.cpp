@@ -17,6 +17,7 @@ See the Mulan PSL v2 for more details. */
 #include <utility>
 #include <vector>
 
+#include "common/rc.h"
 #include "sql/operator/update_logical_operator.h"
 #include "sql/operator/update_physical_operator.h"
 #include "sql/optimizer/physical_plan_generator.h"
@@ -109,6 +110,21 @@ RC PhysicalPlanGenerator::create_plan(TableGetLogicalOperator &table_get_oper, u
   // 看看是否有可以用于索引查找的表达式
   Table *table = table_get_oper.table();
 
+  // 1. 如果table是视图, 应该下面接视图的物理算子
+  if (table->is_view()) {
+    RC rc = RC::SUCCESS;
+    std::unique_ptr<PhysicalOperator> phy_oper;
+    rc = create(*table->logical_operator(), phy_oper);
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("failed to create project logical operator's child physical operator. rc=%s", strrc(rc));
+      return rc;
+    }
+    oper = std::move(phy_oper);
+
+    return rc;
+  }
+
+  // 2. 如果table不是视图, 正常选择table_scan/index_scan
   Index *index = nullptr;
   ValueExpr *value_expr = nullptr;
 

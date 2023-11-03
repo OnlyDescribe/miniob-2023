@@ -20,11 +20,11 @@ public:
 
   static RC create(Db *db, const CreateViewSqlNode &create_view_sql, Stmt *&stmt);
 
-  const std::vector<AttrInfoSqlNode> &attr_infos() const { return attr_infos_; }
+  const std::vector<std::string> &alias() const { return alias_; }
   std::unique_ptr<SelectStmt> &select_stmt() { return select_stmt_; }
 
 private:
   std::string table_name_;
-  std::vector<AttrInfoSqlNode> attr_infos_;
+  std::vector<std::string> alias_;  // TODO(oldcb): 别名
   std::unique_ptr<SelectStmt> select_stmt_;
 };

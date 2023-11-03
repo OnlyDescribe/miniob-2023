@@ -8,7 +8,7 @@ RC CreateViewStmt::create(Db *db, const CreateViewSqlNode &create_view, Stmt *&s
 
   CreateViewStmt *create_view_stmt = new CreateViewStmt();
   create_view_stmt->table_name_ = create_view.relation_name;
-  //   create_view_stmt->attr_infos_ = create_table_select.attr_infos;
+  // create_view_stmt->alias_ = create_view.alias;
 
   Stmt *select_stmt = nullptr;
   rc = SelectStmt::create(db, create_view.select, select_stmt);
