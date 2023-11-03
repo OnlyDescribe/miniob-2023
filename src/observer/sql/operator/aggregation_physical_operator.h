@@ -207,6 +207,14 @@ public:
   RC close() override { return RC::SUCCESS; }
   Tuple *current_tuple() override;
 
+  virtual TupleSchema tuple_schema() const override {
+    TupleSchema schema;
+    for (const auto& expr: aggr_exprs_) {
+      schema.append_cell(expr->name().c_str());
+    }
+    return schema;
+  }
+
 private:
   std::vector<std::unique_ptr<Expression>> aggr_exprs_;  // 聚合表达式
   std::unique_ptr<SimpleAggregationHashTable> ht_;       // 聚合哈希表

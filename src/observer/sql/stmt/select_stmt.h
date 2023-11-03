@@ -60,13 +60,13 @@ public:
   void set_is_aggregation_stmt(bool is_aggregation_stmt) { is_aggregation_stmt_ = is_aggregation_stmt; }
   bool is_aggregation_stmt() const { return is_aggregation_stmt_; }
   const std::vector<Table *> &tables() const { return tables_; }
-  const std::vector<Field> &query_fields() const { return query_fields_; }
   FilterStmt *filter_stmt() const { return filter_stmt_; }
   JoinOnStmt *join_on_stmt() const { return join_on_stmt_; }
   std::vector<OrderByUnit> *orderbys() const { return orderbys_.get(); }
 
+  // not own this, move to physical operator
+  std::vector<std::unique_ptr<Expression>> projects;
 private:
-  std::vector<Field> query_fields_;
   std::vector<Table *> tables_;
   std::unique_ptr<std::vector<OrderByUnit>> orderbys_;
   FilterStmt *filter_stmt_ = nullptr;

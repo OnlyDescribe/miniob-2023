@@ -11,7 +11,10 @@ See the Mulan PSL v2 for more details. */
 //
 // Created by Wangyunlai on 2022/07/05.
 //
-
+#include "common/rc.h"
+#include "common/log/log.h"
+#include "common/lang/string.h"
+#include "storage/db/db.h"
 #include "sql/expr/expression.h"
 #include "sql/expr/tuple.h"
 #include "sql/operator/logical_operator.h"
@@ -21,16 +24,101 @@ See the Mulan PSL v2 for more details. */
 
 using namespace std;
 
+RC Expression::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+    const std::vector<Table *> &tables, Expression *&res_expr, CompOp comp, Db *db) 
+{
+  if (expr->type == PExpType::UNARY) {
+    auto uexpr = expr->uexp;
+    if (uexpr->is_attr) {
+      return FieldExpr::create_expression(expr, table_map, tables, res_expr);
+    } else {
+      return ValueExpr::create_expression(expr, table_map, tables, res_expr);
+    }
+  } else if (expr->type == PExpType::ARITHMETIC) {
+    return ArithmeticExpr::create_expression(expr, table_map, tables, res_expr);
+  } else if (expr->type == PExpType::LIST) {
+    return ListExpr::create_expression(expr, table_map, tables, res_expr);
+  } else if (expr->type == PExpType::SUBQUERY) {
+    return SubQueryExpr::create_expression(expr, table_map, tables, res_expr, comp);
+  } else if (expr->type == PExpType::AGGRFUNC) {
+    return AggretationExpr::create_expression(expr, table_map, tables, res_expr);
+  }
+  return RC::UNIMPLENMENT;
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
 RC FieldExpr::get_value(const Tuple &tuple, Value &value) const
 {
   return tuple.find_cell(TupleCellSpec(table_name(), field_name()), value);
 }
 
+
+RC FieldExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+  const std::vector<Table *> &tables, Expression *&res_expr, CompOp comp, Db *db) {
+  
+  assert(PExpType::UNARY == expr->type);
+  auto uexpr = expr->uexp;
+  assert(uexpr->is_attr);
+  const auto& attr = uexpr->attr;
+  const char *table_name = attr.relation_name.c_str();
+  const char* field_name = attr.attribute_name.c_str();
+
+  if (common::is_blank(table_name)) {
+    if (tables.size() != 1) {
+      LOG_WARN("invalid. I do not know the attr's table. attr=%s", field_name);
+      return RC::SCHEMA_FIELD_MISSING;
+    }
+    Table *table = tables[0];
+    const FieldMeta *field_meta = table->table_meta().field(field_name);
+    if (nullptr == field_meta) {
+      LOG_WARN("no such field. field=%s.%s", table->name(), field_name);
+      return RC::SCHEMA_FIELD_MISSING;
+    }
+    res_expr = new FieldExpr(table, field_meta);
+    return RC::SUCCESS;
+  } else {
+    auto iter = table_map.find(table_name);
+    if (iter == table_map.end()) {
+      LOG_WARN("no such table in from list: %s", table_name);
+      return RC::SCHEMA_FIELD_MISSING;
+    }
+
+    Table *table = iter->second;
+    const FieldMeta *field_meta = table->table_meta().field(field_name);
+    if (nullptr == field_meta) {
+      LOG_WARN("no such field. field=%s.%s", table->name(), field_name);
+      return RC::SCHEMA_FIELD_MISSING;
+    }
+    res_expr = new FieldExpr(table, field_meta);
+    // if (std::string(table_name) != std::string(table->name())) {
+    //   if (tables.size() != 1) {
+    //     res_expr->set_alias(std::string(table_name) + "." + std::string(field_name));
+    //   }
+    // }
+    return RC::SUCCESS;
+  }
+  return RC::SUCCESS;
+
+}
+
+
+/////////////////////////////////////////////////////////////////////////////////
 RC ValueExpr::get_value(const Tuple &tuple, Value &value) const
 {
   value = value_;
   return RC::SUCCESS;
 }
+
+RC ValueExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+  const std::vector<Table *> &tables, Expression *&res_expr, CompOp comp, Db *db) {
+  assert(PExpType::UNARY == expr->type);
+  auto uexpr = expr->uexp;
+  assert(uexpr->is_attr == 0);
+  res_expr = new ValueExpr(uexpr->value);
+  return RC::SUCCESS;
+}
+
 
 /////////////////////////////////////////////////////////////////////////////////
 CastExpr::CastExpr(unique_ptr<Expression> child, AttrType cast_type) : child_(std::move(child)), cast_type_(cast_type)
@@ -519,6 +607,48 @@ RC ArithmeticExpr::try_get_value(Value &value) const
   return calc_value(left_value, right_value, value);
 }
 
+
+RC ArithmeticExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+  const std::vector<Table *> &tables, Expression *&res_expr, CompOp comp, Db *db) 
+{
+  assert(PExpType::ARITHMETIC == expr->type);
+  Expression *left_expr = nullptr;
+  Expression *right_expr = nullptr;
+  RC rc = RC::SUCCESS;
+  if (expr->aexp->left != nullptr) {
+    rc = Expression::create_expression(expr->aexp->left, table_map, tables, left_expr);
+    if (rc != RC::SUCCESS) {
+      LOG_ERROR("BinaryExpression Create Left Expression Failed. RC = %d:%s", rc, strrc(rc));
+      return rc;
+    }
+  }
+  if (expr->aexp->right) {
+    rc = Expression::create_expression(expr->aexp->right, table_map, tables, right_expr);
+    if (rc != RC::SUCCESS) {
+      LOG_ERROR("BinaryExpression Create Right Expression Failed. RC = %d:%s", rc, strrc(rc));
+      delete left_expr;
+      return rc;
+    }
+  }
+  Type type;
+  if (expr->aexp->type == PArithmeticType::ADD) {
+    type = Type::ADD;
+  } else if (expr->aexp->type == PArithmeticType::SUB) {
+    type = Type::SUB;
+  } else if (expr->aexp->type == PArithmeticType::MUL) {
+    type = Type::MUL;
+  } else if (expr->aexp->type == PArithmeticType::DIV) {
+    type = Type::DIV;
+  } else if (expr->aexp->type == PArithmeticType::NEGATIVE) {
+    type = Type::NEGATIVE;
+  } else {
+    assert(0);
+  }
+  auto a_Expr = new ArithmeticExpr(type, left_expr, right_expr);
+  res_expr = a_Expr;
+  return RC::SUCCESS;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 RC AggretationExpr::get_value(const Tuple &tuple, Value &value) const
 {
@@ -539,6 +669,16 @@ RC AggretationExpr::get_value(const Tuple &tuple, Value &value) const
   }
   return rc;
 }
+
+
+RC AggretationExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+  const std::vector<Table *> &tables, Expression *&res_expr, CompOp comp, Db *db) {
+  // TODO: 修改聚合类型
+  AggretationExpr* agexpr = new AggretationExpr();
+  res_expr = agexpr;
+  return RC::SUCCESS;
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -693,6 +833,20 @@ RC SubQueryExpr::get_and_set_one_row_value(const Tuple &tuple, Value &value, Tup
   return rc;
 }
 
+
+RC SubQueryExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+  const std::vector<Table *> &tables, Expression *&res_expr, CompOp comp, Db *db) 
+{
+  Stmt *tmp_stmt = nullptr;
+  RC rc = SelectStmt::create(db, *expr->sexp->sub_select, tmp_stmt);
+  if (rc != RC::SUCCESS) {
+    return rc;
+  }
+  auto subquery_expr = new SubQueryExpr();
+  subquery_expr->subquery_stmt = static_cast<SelectStmt*>(tmp_stmt);
+  res_expr = subquery_expr;
+  return RC::SUCCESS;
+}
 ////////////////////////////////////////////////////////////////////////////////
 RC ListExpr::get_value(const Tuple &tuple, Value &value) const
 {
@@ -700,5 +854,16 @@ RC ListExpr::get_value(const Tuple &tuple, Value &value) const
     return RC::RECORD_EOF;
   }
   value = values_[idx_++];
+  return RC::SUCCESS;
+}
+
+RC ListExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+  const std::vector<Table *> &tables, Expression *&res_expr, CompOp comp, Db *db)
+{
+  assert(expr->lexp != nullptr);
+  PListExpr *p_list_expr = expr->lexp;
+  ListExpr* list_expr = new ListExpr();
+  list_expr->set_values(p_list_expr->value_list);
+  res_expr = list_expr;
   return RC::SUCCESS;
 }

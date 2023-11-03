@@ -236,8 +236,6 @@ RC PlainCommunicator::write_result_internal(SessionEvent *event, bool &need_disc
   rc = RC::SUCCESS;
   Tuple *tuple = nullptr;
 
-  bool is_write_header = false;
-
   while (RC::SUCCESS == (rc = sql_result->next_tuple(tuple))) {
     assert(tuple != nullptr);
     // int cell_num = tuple->cell_num(); // 使用 schema.cell_num()

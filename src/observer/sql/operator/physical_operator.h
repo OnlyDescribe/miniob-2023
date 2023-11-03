@@ -78,6 +78,12 @@ public:
 
   virtual Tuple *current_tuple() = 0;
 
+  // 获取当前tuple的schema
+  virtual TupleSchema tuple_schema() const {
+    TupleSchema empty_schema;
+    return empty_schema;
+  }
+
   void add_child(std::unique_ptr<PhysicalOperator> oper) { children_.emplace_back(std::move(oper)); }
 
   std::vector<std::unique_ptr<PhysicalOperator>> &children() { return children_; }

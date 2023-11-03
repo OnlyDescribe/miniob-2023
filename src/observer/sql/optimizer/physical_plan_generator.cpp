@@ -348,18 +348,12 @@ RC PhysicalPlanGenerator::create_plan(ProjectLogicalOperator &project_oper, uniq
     }
   }
 
-  ProjectPhysicalOperator *project_operator = new ProjectPhysicalOperator;
-  const vector<Field> &project_fields = project_oper.fields();
-  for (const Field &field : project_fields) {
-    project_operator->add_projection(field.table(), field.meta());  // TODO: alias
-  }
+  ProjectPhysicalOperator *project_operator = new ProjectPhysicalOperator(std::move(project_oper.projects));
 
   if (child_phy_oper) {
     project_operator->add_child(std::move(child_phy_oper));
   }
-
   oper = unique_ptr<PhysicalOperator>(project_operator);
-
   LOG_TRACE("create a project physical operator");
   return rc;
 }

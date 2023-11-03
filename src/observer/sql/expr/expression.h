@@ -29,6 +29,7 @@ class SelectStmt;
 class Stmt;
 class LogicalOperator;
 class PhysicalOperator;
+class Db;
 
 const static std::unordered_map<AggrFuncType, std::string> AggretationExprStr = {
     {AggrFuncType::MAX, "MAX"},
@@ -125,6 +126,9 @@ public:
    */
   virtual std::string name() const { return name_; }
   virtual void set_name(std::string name) { name_ = std::move(name); }
+  virtual void set_name(const std::string& name, const std::string& second) { name_ = name + "." + second; }
+  static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+    const std::vector<Table *> &tables, Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
 
 private:
   std::string name_;
@@ -156,6 +160,9 @@ public:
 
   RC get_value(const Tuple &tuple, Value &value) const override;
 
+  static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+    const std::vector<Table *> &tables, Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
+
 private:
   Field field_;
 };
@@ -186,6 +193,9 @@ public:
   void get_value(Value &value) const { value = value_; }
 
   const Value &get_value() const { return value_; }
+
+  static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+    const std::vector<Table *> &tables, Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
 
 private:
   Value value_;
@@ -345,6 +355,9 @@ public:
   std::unique_ptr<Expression> &left() { return left_; }
   std::unique_ptr<Expression> &right() { return right_; }
 
+  static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+    const std::vector<Table *> &tables, Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
+
 private:
   RC calc_value(const Value &left_value, const Value &right_value, Value &value) const;
 
@@ -361,6 +374,7 @@ private:
 class AggretationExpr : public Expression
 {
 public:
+  AggretationExpr() = default;
   AggretationExpr(Field field, AggrFuncType aggr_func_type) : aggr_func_type_(aggr_func_type), field_(field) {}
   RC get_value(const Tuple &tuple, Value &value) const;
 
@@ -393,6 +407,8 @@ public:
     }
     return it->second + "(" + field.field_name() + ")";
   }
+  static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+    const std::vector<Table *> &tables, Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
 
 private:
   AggrFuncType aggr_func_type_;
@@ -425,6 +441,9 @@ public:
 
   virtual AttrType value_type() const { return AttrType::UNDEFINED; }
 
+  static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+    const std::vector<Table *> &tables, Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
+
   // should own this?
   SelectStmt *subquery_stmt{nullptr};
   std::unique_ptr<LogicalOperator> oper;
@@ -455,6 +474,9 @@ public:
 
   // 移动到values里面取
   void set_values(std::vector<Value> &values) { values_.swap(values); }
+
+  static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+    const std::vector<Table *> &tables, Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
 
 private:
   std::vector<Value> values_;
