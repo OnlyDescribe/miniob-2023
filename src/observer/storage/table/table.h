@@ -15,8 +15,10 @@ See the Mulan PSL v2 for more details. */
 #pragma once
 
 #include <functional>
+#include <memory>
 #include <vector>
 #include "storage/table/table_meta.h"
+// #include "sql/operator/physical_operator.h"
 
 struct RID;
 class Record;
@@ -99,6 +101,11 @@ public:
   bool &is_view() { return is_view_; }
   RC sync();
 
+  // void set_physical_operator(std::unique_ptr<PhysicalOperator> &&physical_operator)
+  // {
+  //   physical_operator_ = std::move(physical_operator);
+  // }
+
 private:
   RC insert_entry_of_indexes(const char *record, const RID &rid);
   RC delete_entry_of_indexes(const char *record, const RID &rid, bool error_on_not_exists);
@@ -117,7 +124,9 @@ private:
   RecordFileHandler *record_handler_ = nullptr;  /// 记录操作
   std::vector<Index *> indexes_;
 
+  // 视图
   bool is_view_ = false;
-  bool modifiable = false;
-  bool updatable = false;
+  bool updatable_ = false;
+  bool modifiable_ = false;
+  // std::unique_ptr<PhysicalOperator> physical_operator_;
 };

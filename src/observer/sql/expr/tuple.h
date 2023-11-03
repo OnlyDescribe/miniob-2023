@@ -91,8 +91,8 @@ public:
   virtual RC cell_at(int index, Value &cell) const = 0;
 
   // 根据spec, 找到对应record的位置
-  virtual RC find_record(const TupleCellSpec &spec, RecordPos &record_pos) const = 0;
-  virtual RC record_at(int index, RecordPos &record_pos) const = 0;
+  // virtual RC find_record(const TupleCellSpec &spec, RecordPos &record_pos) const = 0;
+  // virtual RC record_at(int index, RecordPos &record_pos) const = 0;
 
   /**
    * @brief 根据cell的描述，获取cell的值
@@ -229,17 +229,17 @@ public:
     return RC::SUCCESS;
   }
 
-  RC record_at(int index, RecordPos &record_pos) const override
-  {
-    record_pos = RecordPos(table_, record_->rid());
-    return RC::SUCCESS;
-  }
+  // RC record_at(int index, RecordPos &record_pos) const override
+  // {
+  //   record_pos = RecordPos(table_, record_->rid());
+  //   return RC::SUCCESS;
+  // }
 
-  RC find_record(const TupleCellSpec &spec, RecordPos &record_pos) const override
-  {
-    record_pos = RecordPos(table_, record_->rid());
-    return RC::SUCCESS;
-  }
+  // RC find_record(const TupleCellSpec &spec, RecordPos &record_pos) const override
+  // {
+  //   record_pos = RecordPos(table_, record_->rid());
+  //   return RC::SUCCESS;
+  // }
 
   RC find_cell(const TupleCellSpec &spec, Value &cell) const override
   {
@@ -352,23 +352,23 @@ public:
 
   RC find_cell(const TupleCellSpec &spec, Value &cell) const override { return tuple_->find_cell(spec, cell); }
 
-  RC record_at(int index, RecordPos &record_pos) const override
-  {
-    if (index < 0 || index >= static_cast<int>(speces_.size())) {
-      return RC::INTERNAL;
-    }
-    if (tuple_ == nullptr) {
-      return RC::INTERNAL;
-    }
+  // RC record_at(int index, RecordPos &record_pos) const override
+  // {
+  //   if (index < 0 || index >= static_cast<int>(speces_.size())) {
+  //     return RC::INTERNAL;
+  //   }
+  //   if (tuple_ == nullptr) {
+  //     return RC::INTERNAL;
+  //   }
 
-    const TupleCellSpec *spec = speces_[index];
-    return tuple_->find_record(*spec, record_pos);
-  }
+  //   const TupleCellSpec *spec = speces_[index];
+  //   return tuple_->find_record(*spec, record_pos);
+  // }
 
-  RC find_record(const TupleCellSpec &spec, RecordPos &record_pos) const override
-  {
-    return tuple_->find_record(spec, record_pos);
-  }
+  // RC find_record(const TupleCellSpec &spec, RecordPos &record_pos) const override
+  // {
+  //   return tuple_->find_record(spec, record_pos);
+  // }
 
   Tuple *copy_tuple() const override
   {
@@ -435,9 +435,9 @@ public:
     return RC::NOTFOUND;
   }
 
-  RC record_at(int index, RecordPos &record_pos) const override { return RC::NOTFOUND; }
+  // RC record_at(int index, RecordPos &record_pos) const override { return RC::NOTFOUND; }
 
-  RC find_record(const TupleCellSpec &spec, RecordPos &record_pos) const override { return RC::NOTFOUND; }
+  // RC find_record(const TupleCellSpec &spec, RecordPos &record_pos) const override { return RC::NOTFOUND; }
 
   // TODO
   // 不能 Copy 应该, 因为成员对象是引用
@@ -487,9 +487,9 @@ public:
 
   virtual RC find_cell(const TupleCellSpec &spec, Value &cell) const override { return RC::INTERNAL; }
 
-  RC record_at(int index, RecordPos &record_pos) const override { return RC::NOTFOUND; }
+  // RC record_at(int index, RecordPos &record_pos) const override { return RC::NOTFOUND; }
 
-  RC find_record(const TupleCellSpec &spec, RecordPos &record_pos) const override { return RC::NOTFOUND; }
+  // RC find_record(const TupleCellSpec &spec, RecordPos &record_pos) const override { return RC::NOTFOUND; }
 
 private:
   std::vector<Value> cells_;
@@ -541,29 +541,29 @@ public:
     return right_->find_cell(spec, value);
   }
 
-  RC record_at(int index, RecordPos &record_pos) const override
-  {
-    const int left_cell_num = left_->cell_num();
-    if (index > 0 && index < left_cell_num) {
-      return left_->record_at(index, record_pos);
-    }
+  // RC record_at(int index, RecordPos &record_pos) const override
+  // {
+  //   const int left_cell_num = left_->cell_num();
+  //   if (index > 0 && index < left_cell_num) {
+  //     return left_->record_at(index, record_pos);
+  //   }
 
-    if (index >= left_cell_num && index < left_cell_num + right_->cell_num()) {
-      return right_->record_at(index - left_cell_num, record_pos);
-    }
+  //   if (index >= left_cell_num && index < left_cell_num + right_->cell_num()) {
+  //     return right_->record_at(index - left_cell_num, record_pos);
+  //   }
 
-    return RC::NOTFOUND;
-  }
+  //   return RC::NOTFOUND;
+  // }
 
-  RC find_record(const TupleCellSpec &spec, RecordPos &record_pos) const override
-  {
-    RC rc = left_->find_record(spec, record_pos);
-    if (rc == RC::SUCCESS || rc != RC::NOTFOUND) {
-      return rc;
-    }
+  // RC find_record(const TupleCellSpec &spec, RecordPos &record_pos) const override
+  // {
+  //   RC rc = left_->find_record(spec, record_pos);
+  //   if (rc == RC::SUCCESS || rc != RC::NOTFOUND) {
+  //     return rc;
+  //   }
 
-    return right_->find_record(spec, record_pos);
-  }
+  //   return right_->find_record(spec, record_pos);
+  // }
 
   auto &get_left() const { return left_; }
   auto &get_right() const { return right_; }
@@ -624,9 +624,9 @@ public:
     return RC::NOTFOUND;
   }
 
-  RC record_at(int index, RecordPos &record_pos) const override { return RC::NOTFOUND; }
+  // RC record_at(int index, RecordPos &record_pos) const override { return RC::NOTFOUND; }
 
-  RC find_record(const TupleCellSpec &spec, RecordPos &record_pos) const override { return RC::NOTFOUND; }
+  // RC find_record(const TupleCellSpec &spec, RecordPos &record_pos) const override { return RC::NOTFOUND; }
 
   Tuple *copy_tuple() const override
   {

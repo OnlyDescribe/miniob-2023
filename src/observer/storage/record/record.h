@@ -85,10 +85,11 @@ struct RID
 
 /**
  * @brief record在属于哪个表, 以及对应的 rid, 全局可以根据这个能找到对应的record
+ 但目前没有使用到, 本以为视图的实现逻辑要追踪record的表和rid, 实则不是。
  */
 struct RecordPos
 {
-  const Table *table;
+  int32_t table_id;
   RID rid;
 };
 

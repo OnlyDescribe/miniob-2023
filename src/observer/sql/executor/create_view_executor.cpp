@@ -40,6 +40,7 @@ RC CreateViewExecutor::execute(SQLStageEvent *sql_event)
   Trx *trx = sql_session->current_trx();
   trx->start_if_need();
   std::unique_ptr<PhysicalOperator> &physical_operator = sql_result->physical_operator();
+
   RC rc = physical_operator->open(trx);
   if (rc != RC::SUCCESS) {
     physical_operator->close();
@@ -91,20 +92,22 @@ RC CreateViewExecutor::execute(SQLStageEvent *sql_event)
   }
 
   // 3. 将select的数据放入新表
-  Table *new_table = session->get_current_db()->find_table(view_name);
-  assert(new_table != nullptr);
-  new_table->is_view() = true;  // 设置table属性, 为一视图表
+  Table *view = session->get_current_db()->find_table(view_name);
+  // 设置表关于视图的属性
+  assert(view != nullptr);
+  view->is_view() = true;  // 设置table属性, 为一视图表
+  // view->set_physical_operator(std::move(physical_operator));
 
   Record record;
   std::vector<Value> insert_values;
   insert_values.insert(insert_values.end(), values.begin(), values.end());
-  rc = new_table->make_record(attribute_count, insert_values.data(), record);
+  rc = view->make_record(attribute_count, insert_values.data(), record);
   if (rc != RC::SUCCESS) {
     physical_operator->close();
     physical_operator.reset();
     return rc;
   }
-  rc = new_table->insert_record(record);
+  rc = view->insert_record(record);
   if (rc != RC::SUCCESS) {
     physical_operator->close();
     physical_operator.reset();
@@ -123,13 +126,13 @@ RC CreateViewExecutor::execute(SQLStageEvent *sql_event)
       }
       insert_values.push_back(value);
     }
-    new_table->make_record(attribute_count, insert_values.data(), record);
+    view->make_record(attribute_count, insert_values.data(), record);
     if (rc != RC::SUCCESS) {
       physical_operator->close();
       physical_operator.reset();
       return rc;
     }
-    rc = new_table->insert_record(record);
+    rc = view->insert_record(record);
     if (rc != RC::SUCCESS) {
       physical_operator->close();
       physical_operator.reset();
