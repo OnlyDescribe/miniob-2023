@@ -198,7 +198,7 @@ struct PSubQueryExpr
 // 1.2.6 值列表
 struct PListExpr
 {
-  std::vector<Value> value_list;
+  std::vector<PExpr *> expr_list;
 };
 
 // 2. 定义 Select， 即SelectSqlNode
@@ -362,7 +362,7 @@ struct CreateViewSqlNode
 {
   std::string relation_name;  ///< Relation name
   SelectSqlNode select;       ///< select_node
-  // std::vector<AttrInfoSqlNode> attr_infos;  ///< attributes
+  // std::vector<std::string> alias;  ///< alias
 };
 
 /**

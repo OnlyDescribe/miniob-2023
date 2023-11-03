@@ -205,6 +205,7 @@ bool IsAttributesVailid(const std::vector<PExpr *> &select_attr)
 %type <orderby_list>        order_by
 %type <orderby_list>        order_condtions
 %type <pexpr>               pexpr
+%type <pexpr_list>          pexpr_list
 %type <unary_pexpr>         unary_pexpr
 %type <arith_pexpr>         arith_pexpr
 %type <func_pexpr>          func_pexpr
@@ -1615,17 +1616,17 @@ func_pexpr:
     }
     ;
 
+
 list_pexpr:
-    LBRACE value value_list RBRACE
+    LBRACE pexpr pexpr_list RBRACE
     {
       PListExpr *list_pexpr = new PListExpr;
       if($3 != nullptr){
-        list_pexpr->value_list = *$3;
+        list_pexpr->expr_list = *$3;
+        delete $3;
       }
-      list_pexpr->value_list.push_back(*$2);
-      std::reverse(list_pexpr->value_list.begin(), list_pexpr->value_list.end());
-      delete $2;
-      delete $3;
+      list_pexpr->expr_list.push_back($2);
+      std::reverse(list_pexpr->expr_list.begin(), list_pexpr->expr_list.end());
       $$ = list_pexpr;
     }
 
@@ -1665,7 +1666,7 @@ pexpr:
         pexpr->name = token_name(sql_string, &@$);
         $$ = pexpr;
     }
-    | list_pexpr{
+    | list_pexpr {
         PExpr *pexpr = new PExpr;
           pexpr->type = PExpType::LIST;
           pexpr->lexp = $1;
@@ -1673,6 +1674,21 @@ pexpr:
           $$ = pexpr;
     }
     ;
+
+pexpr_list:
+    /* empty */
+    {
+      $$ = nullptr;
+    }
+    | COMMA pexpr pexpr_list
+    {
+      if ($2 != nullptr) {
+        $$ = $2;
+      } else {
+        $$ = new std::vector<PExpr *>;
+      }
+      $$->emplace_back($2);
+    }
 
 opt_semicolon: /*empty*/
     | SEMICOLON
