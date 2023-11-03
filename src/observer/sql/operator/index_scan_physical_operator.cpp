@@ -44,7 +44,9 @@ RC IndexScanPhysicalOperator::open(Trx *trx)
 
     // 计算values的长度
     int total_length =
-        std::accumulate(values.begin(), values.end(), 0, [](int sum, const Value &val) { return sum + val.length(); });
+        std::accumulate(value_metas_.begin(), value_metas_.end(), 0, [](int sum, const FieldMeta &field_meta) {
+          return sum + field_meta.len();
+        });
 
     // 附加上bitmap的长度
     const FieldMeta *null_field = this->table_->table_meta().null_field();
@@ -52,9 +54,9 @@ RC IndexScanPhysicalOperator::open(Trx *trx)
 
     char *key = new char[total_length];
     int offset{0};
-    for (const Value &val : values) {
-      memcpy(key + offset, val.data(), val.length());
-      offset += val.length();
+    for (int i = 0; i < values.size(); ++i) {
+      memcpy(key + offset, values[i].data(), value_metas_[i].len());
+      offset += values[i].length();
     }
     memset(key + offset, 0, null_field->len());
     common::Bitmap bitmap(key + offset, null_field->len());
