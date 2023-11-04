@@ -95,16 +95,59 @@ public:
    * @param agg_exprs the aggregation expressions
    * @param agg_types the types of aggregations
    */
-  SimpleAggregationHashTable(const std::vector<ExpressionRef> *agg_exprs) : agg_exprs_(agg_exprs) {}
+  SimpleAggregationHashTable() {}
 
+  void init(const std::vector<Expression*>& agg_exprs) {
+    agg_exprs_.clear();
+    for (auto& agg_expr: agg_exprs) {
+      agg_exprs_.push_back(agg_expr);
+    }
+  }
+
+  void init(const std::vector<std::unique_ptr<Expression>>& agg_exprs) {
+    agg_exprs_.clear();
+    for (auto& agg_expr: agg_exprs) {
+      agg_exprs_.push_back(agg_expr.get());
+    }
+  }
   /**
-   *
-   * Combines the input into the aggregation result.
-   * @param input The input value
-   */
-  void combine_aggregate_values(const AggregateValue &input)
-  {
-    assert(results_.aggregates_.size() == input.aggregates_.size());
+   * @description: 因为平均数只是和，需要计算最终的结果
+   * @return {*}
+   */  
+  void generate_aggregate_values() {
+    // 更改avg的结果, 统一改成float
+    for (auto it = ht_.begin(); it != ht_.end(); it++) {
+      auto not_null_it = null_not_record_.find(it->first);
+      for (int i = 0; i < it->second.aggregates_.size(); i++) {
+        if (!not_null_it->second.aggregates_[i].is_null() &&
+            static_cast<AggretationExpr *>(agg_exprs_[i])->aggr_type() == AggrFuncType::AVG) {
+          it->second.aggregates_[i] =
+              Value(it->second.aggregates_[i].get_float() / not_null_it->second.aggregates_[i].get_int());
+        }
+      }
+    }
+  }
+
+  void clear() { ht_.clear(); }
+
+  AggregateValue get_aggr_value(const AggregateKey &agg_key) {
+    auto it = ht_.find(agg_key);
+    if (it == ht_.end()) {
+      return generate_initial_aggregateValue();
+    }
+    return it->second;
+  }
+
+  void insert_combine(const AggregateKey &agg_key, const Tuple& tuple) {
+    if (ht_.count(agg_key) == 0) {
+      ht_.insert({agg_key, generate_initial_aggregateValue()});
+      null_not_record_.insert({agg_key, generate_initial_aggregateValue()});
+    }
+    combine_aggregate_values(&ht_[agg_key], &null_not_record_[agg_key], tuple);
+  }
+private:
+  // 将b聚合到a, not_null表示记录a非空的个数(需要计算平均值)
+  void aggregate_value(const Value& b, Value& a, Value& not_null, AggrFuncType type) {
     // 如果需要，先初始化
     auto init_value = [](const Value &intial_value, Value &output) -> bool {
       if (output.attr_type() == AttrType::NULLS) {
@@ -113,80 +156,54 @@ public:
       }
       return false;
     };
-    for (uint32_t i = 0; i < agg_exprs_->size(); i++) {
-      auto aggr_expr = static_cast<AggretationExpr *>((*agg_exprs_)[i].get());
-      switch (aggr_expr->aggr_type()) {
-        case AggrFuncType::COUNT_STAR: results_.aggregates_[i] = Value::add(results_.aggregates_[i], Value(1)); break;
-        case AggrFuncType::COUNT:
-          if (!input.aggregates_[i].is_null()) {
-            results_.aggregates_[i] = Value::add(results_.aggregates_[i], Value(1));
+    Value res;
+    switch (type) {
+      case AggrFuncType::COUNT_STAR: 
+        a = Value::add(a, Value(1)); break;
+      case AggrFuncType::COUNT:
+        if (!b.is_null()) {
+          a = Value::add(a, Value(1));
+        }
+        break;
+      case AggrFuncType::AVG:
+        if (!b.is_null()) {
+          if (a.is_null()) {
+            not_null = Value(1);
+            a = b;
+          } else {
+            a = Value::add(a, b);
+            not_null = Value::add(not_null, Value(1));
           }
-          break;
-        case AggrFuncType::AVG:
-          if (!input.aggregates_[i].is_null()) {
-            if (results_.aggregates_[i].is_null()) {
-              results_.aggregates_[i] = input.aggregates_[i];
-              null_not_record_.aggregates_[i] = Value(1);
-            } else {
-              results_.aggregates_[i] = Value::add(results_.aggregates_[i], input.aggregates_[i]);
-              null_not_record_.aggregates_[i] = Value::add(null_not_record_.aggregates_[i], Value(1));
-            }
+        }
+        break;
+      case AggrFuncType::SUM:
+        if (!b.is_null() && !init_value(b, a)) {
+          a = Value::add(a, b);
+        }
+        break;
+      case AggrFuncType::MIN:
+        if (!b.is_null() && !init_value(b, a)) {
+          if (b.compare(a) < 0) {
+            a = b;
           }
-          break;
-        case AggrFuncType::SUM:
-          if (!input.aggregates_[i].is_null() && !init_value(input.aggregates_[i], results_.aggregates_[i])) {
-            results_.aggregates_[i] = Value::add(results_.aggregates_[i], input.aggregates_[i]);
+        }
+        break;
+      case AggrFuncType::MAX:
+        if (!b.is_null() && !init_value(b, a)) {
+          if (b.compare(a) > 0) {
+            a = b;
           }
-          break;
-        case AggrFuncType::MIN:
-          if (!input.aggregates_[i].is_null() && !init_value(input.aggregates_[i], results_.aggregates_[i])) {
-            if (input.aggregates_[i].compare(results_.aggregates_[i]) < 0) {
-              results_.aggregates_[i] = input.aggregates_[i];
-            }
-          }
-          break;
-        case AggrFuncType::MAX:
-          if (!input.aggregates_[i].is_null() && !init_value(input.aggregates_[i], results_.aggregates_[i])) {
-            if (input.aggregates_[i].compare(results_.aggregates_[i]) > 0) {
-              results_.aggregates_[i] = input.aggregates_[i];
-            }
-          }
-          break;
-        default: LOG_ERROR("aggretion invalid"); break;
-      }
+        }
+        break;
+      default: LOG_ERROR("aggretion invalid"); break;
     }
   }
-
-  void init() {
-    null_not_record_ = generate_initial_aggregateValue();
-    results_ = generate_initial_aggregateValue();
-  }
-  /**
-   * @description: 因为平均数只是和，需要计算最终的结果
-   * @return {*}
-   */  
-  void generate_aggregate_values() {
-    // 更改avg的结果, 统一改成float
-    for (int i = 0; i < results_.aggregates_.size(); i++) {
-      if (!null_not_record_.aggregates_[i].is_null() &&
-          static_cast<AggretationExpr *>((*agg_exprs_)[i].get())->aggr_type() == AggrFuncType::AVG) {
-        results_.aggregates_[i] =
-            Value(results_.aggregates_[i].get_float() / null_not_record_.aggregates_[i].get_int());
-      }
-    }
-  }
-
-  void clear() { ht_.clear(); }
-
-  AggregateValue& aggr_results() {  return results_; }
-
-private:
   /** @return The initial aggregate value for this aggregation executor */
   auto generate_initial_aggregateValue() -> AggregateValue
   {
     std::vector<Value> values{};
-    for (const auto &agg_expr_ptr : *agg_exprs_) {
-      auto aggr_expr = static_cast<AggretationExpr *>(agg_expr_ptr.get());
+    for (const auto &agg_expr_ptr : agg_exprs_) {
+      auto aggr_expr = static_cast<AggretationExpr *>(agg_expr_ptr);
       switch (aggr_expr->aggr_type()) {
         case AggrFuncType::COUNT_STAR:
         case AggrFuncType::COUNT:
@@ -205,11 +222,26 @@ private:
     }
     return {values};
   }
+
+  /**
+   *
+   * Combines the input into the aggregation result.
+   * @param input The input value
+   */
+  void combine_aggregate_values(AggregateValue* results, AggregateValue* null_not_record, const Tuple& tuple)
+  {
+    for (uint32_t i = 0; i < agg_exprs_.size(); i++) {
+      auto aggr_expr = static_cast<AggretationExpr *>(agg_exprs_[i]);
+      Value value;
+      aggr_expr->get_value(tuple, value);
+      aggregate_value(value, results->aggregates_[i], null_not_record->aggregates_[i], aggr_expr->aggr_type());
+    }
+  }
   /** The hash table is just a map from aggregate keys to aggregate values */
   std::unordered_map<AggregateKey, AggregateValue> ht_{};
-  const std::vector<ExpressionRef> *agg_exprs_{nullptr};  // not own this
-  AggregateValue null_not_record_;
-  AggregateValue results_;
+  std::unordered_map<AggregateKey, AggregateValue> null_not_record_{};
+  std::vector<Expression*> agg_exprs_{nullptr};  // not own this
+  // AggregateValue results_;
 };
 
 /**
@@ -221,9 +253,9 @@ class AggregationPhysicalOperator : public PhysicalOperator
 
 public:
   AggregationPhysicalOperator(std::vector<std::unique_ptr<Expression>> &&aggr_exprs)
-      : aggr_exprs_(std::move(aggr_exprs))
+      : projects_(std::move(aggr_exprs))
   {
-    ht_ = std::make_unique<SimpleAggregationHashTable>(&aggr_exprs_);
+    ht_ = std::make_unique<SimpleAggregationHashTable>();
   }
 
   virtual ~AggregationPhysicalOperator() = default;
@@ -237,15 +269,18 @@ public:
 
   virtual TupleSchema tuple_schema() const override {
     TupleSchema schema;
-    for (const auto& expr: aggr_exprs_) {
+    for (const auto& expr: projects_) {
       schema.append_cell(expr->name().c_str());
     }
     return schema;
   }
 
 private:
-  std::vector<std::unique_ptr<Expression>> aggr_exprs_;  // 聚合表达式
+  std::vector<std::unique_ptr<Expression>> projects_;  // 投影
+  std::vector<Expression*> aggr_exprs_;                  // 聚合表达式
   std::unique_ptr<SimpleAggregationHashTable> ht_;       // 聚合哈希表
   std::unique_ptr<AggregationTuple> tuple_;
+
+  ExpressionTuple exprssion_tuple_;   // 表达式
   bool is_execute_{false};
 };

@@ -173,14 +173,33 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
     top_op.swap(orderby_oper);
   }
 
-  // 聚合 logic_op，或者groupby
-  if (select_stmt->whereConditoin == WhereConditoin::AGGREGATION) {
+  std::vector<Expression*> aggr_exprs, field_exprs;
+  for (const auto& project: all_projects) {
+    AggretationExpr::get_aggrfuncexprs(project.get(), aggr_exprs);
+    FieldExpr::get_fieldexprs(project.get(), field_exprs);
+  }
+
+  if (aggr_exprs.size() && field_exprs.size()) {
+    if (select_stmt->groupbys().empty()) {
+      return RC::SQL_SYNTAX;
+    }
+  }
+
+  // 聚合 logic_op，或者groupby, 算数表达式上，只能挂聚合，或者数字
+  if (aggr_exprs.size()) {
     unique_ptr<LogicalOperator> aggr_oper = make_unique<AggregationLogicalOperator>();
     static_cast<AggregationLogicalOperator *>(aggr_oper.get())->set_aggregation_expr(std::move(all_projects));
     aggr_oper->add_child(std::move(top_op));
     top_op.swap(aggr_oper);
-  } else if (select_stmt->whereConditoin == WhereConditoin::GROUPBY) {
-    // 需要聚合聚合表达式，把需要聚合的字段都拿出来
+  } else if (field_exprs.size()) {
+    // 算数表达式上，可以挂fieldExpr，或者ValueExpr
+    unique_ptr<LogicalOperator> project_oper(new ProjectLogicalOperator(std::move(all_projects)));
+    if (top_op) {
+      project_oper->add_child(std::move(top_op));
+    }
+    top_op.swap(project_oper);
+  } else {
+    // TODO: 这里不需要groupby 中的 聚合，不需要和表达式结合
     std::vector<std::unique_ptr<Expression>> groupby_exprs;
     for (const auto &field : select_stmt->groupbys()) {
       groupby_exprs.emplace_back(std::make_unique<FieldExpr>(field));
@@ -189,14 +208,7 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
       select_stmt->having_stmt(), std::move(all_projects));
     aggr_oper->add_child(std::move(top_op));
     top_op.swap(aggr_oper);
-  } else {
-    unique_ptr<LogicalOperator> project_oper(new ProjectLogicalOperator(std::move(all_projects)));
-    if (top_op) {
-      project_oper->add_child(std::move(top_op));
-    }
-    top_op.swap(project_oper);
   }
-
   logical_operator.swap(top_op);
   return RC::SUCCESS;
 }

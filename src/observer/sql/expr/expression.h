@@ -161,6 +161,7 @@ public:
 
   RC get_value(const Tuple &tuple, Value &value) const override;
 
+  static void get_fieldexprs(Expression *expr, std::vector<Expression *> &field_exprs);
   static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
     Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
 
@@ -376,11 +377,11 @@ private:
 class AggretationExpr : public Expression
 {
 public:
-  // AggretationExpr() = default;
+  // AggretationExpr() = default; 注意如果类型为star, 那么expr是空指针
   explicit AggretationExpr(Expression* expr, AggrFuncType aggr_func_type, bool is_star) : 
-      aggr_func_type_(aggr_func_type), is_star_(is_star) { expr_.reset(expr); }
+      aggr_func_type_(aggr_func_type), is_star_(is_star) { field_expr_.reset(expr); value_.set_null(); }
   explicit AggretationExpr(std::unique_ptr<Expression>&&expr, AggrFuncType aggr_func_type, bool is_star) : 
-      aggr_func_type_(aggr_func_type), is_star_(is_star), expr_(std::move(expr)) {}
+      aggr_func_type_(aggr_func_type), is_star_(is_star), field_expr_(std::move(expr)) {value_.set_null();}
   RC get_value(const Tuple &tuple, Value &value) const;
 
   RC try_get_value(Value &value) const { return RC::UNIMPLENMENT; }
@@ -391,21 +392,32 @@ public:
    */
   ExprType type() const { return ExprType::AGGRFUNCTION; }
 
+  void set_value(const Value& value) {
+    has_value = true;
+    value_ = value;
+  }
+
   /**
    * @brief 表达式值的类型
    * @details 一个表达式运算出结果后，只有一个值
    */
-  AttrType value_type() const { return expr_->value_type(); };
+  AttrType value_type() const { return field_expr_->value_type(); };
 
   AggrFuncType aggr_type() { return aggr_func_type_; }
 
+  static void get_aggrfuncexprs(Expression *expr, std::vector<Expression *> &aggrfunc_exprs);
   static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
     Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
 
 private:
   AggrFuncType aggr_func_type_;
   bool is_star_{false};
-  std::unique_ptr<Expression> expr_;
+  // 一般是field表达式
+  std::unique_ptr<Expression> field_expr_;
+
+  // 聚合后的值
+  Value value_;
+  bool has_value{false};
 };
 
 /**
@@ -460,6 +472,10 @@ public:
   virtual RC try_get_value(Value &value) const { return RC::UNIMPLENMENT; }
 
   virtual ExprType type() const { return ExprType::LIST; }
+
+  Expression* expr_at(int i) {
+    return values_[i].get();
+  }
 
   virtual AttrType value_type() const { 
     if (values_.empty()) {

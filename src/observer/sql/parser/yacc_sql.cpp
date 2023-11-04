@@ -694,8 +694,8 @@ static const yytype_int16 yyrline[] =
     1394,  1399,  1404,  1409,  1414,  1419,  1424,  1429,  1434,  1445,
     1456,  1460,  1464,  1468,  1475,  1479,  1483,  1487,  1491,  1497,
     1503,  1510,  1518,  1530,  1544,  1545,  1546,  1547,  1548,  1552,
-    1582,  1585,  1591,  1594,  1599,  1606,  1613,  1620,  1627,  1634,
-    1641,  1652,  1655,  1665,  1666
+    1583,  1586,  1592,  1595,  1600,  1607,  1614,  1621,  1628,  1635,
+    1642,  1653,  1656,  1666,  1667
 };
 #endif
 
@@ -3739,9 +3739,9 @@ yyreduce:
       PAggrExpr * agexpr = new PAggrExpr;
       if((yyvsp[-1].pexpr)->type == PExpType::UNARY) {
         if((yyvsp[-1].pexpr)->uexp->is_attr) {
-          if((yyvsp[-1].pexpr)->uexp->attr.relation_name != "") {
+          if((yyvsp[-1].pexpr)->uexp->attr.relation_name == "*") {
             yyerror(&(yyloc), sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
-          } else if((yyvsp[-1].pexpr)->uexp->attr.relation_name == "*"){
+          } else if((yyvsp[-1].pexpr)->uexp->attr.attribute_name == "*"){
             agexpr->is_star = true;
           } else {
             agexpr->is_star = false;
@@ -3763,44 +3763,45 @@ yyreduce:
         agexpr->type = (yyvsp[-3].aggr_func_type);
       }
       agexpr->expr = (yyvsp[-1].pexpr);
+      (yyval.aggr_pexpr) = agexpr;
     }
-#line 3768 "yacc_sql.cpp"
+#line 3769 "yacc_sql.cpp"
     break;
 
   case 160: /* aggr_pexpr: aggr_func_type LBRACE pexpr COMMA pexpr aggr_pexpr_list RBRACE  */
-#line 1582 "yacc_sql.y"
+#line 1583 "yacc_sql.y"
                                                                      {
       yyerror(&(yyloc), sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
     }
-#line 3776 "yacc_sql.cpp"
+#line 3777 "yacc_sql.cpp"
     break;
 
   case 161: /* aggr_pexpr: aggr_func_type LBRACE RBRACE  */
-#line 1585 "yacc_sql.y"
+#line 1586 "yacc_sql.y"
                                    {
       yyerror(&(yyloc), sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
     }
-#line 3784 "yacc_sql.cpp"
+#line 3785 "yacc_sql.cpp"
     break;
 
   case 162: /* aggr_pexpr_list: %empty  */
-#line 1591 "yacc_sql.y"
+#line 1592 "yacc_sql.y"
     {
       // do_nothing;
     }
-#line 3792 "yacc_sql.cpp"
+#line 3793 "yacc_sql.cpp"
     break;
 
   case 163: /* aggr_pexpr_list: COMMA pexpr aggr_pexpr_list  */
-#line 1594 "yacc_sql.y"
+#line 1595 "yacc_sql.y"
                                   {
       // do_nothing;
     }
-#line 3800 "yacc_sql.cpp"
+#line 3801 "yacc_sql.cpp"
     break;
 
   case 164: /* pexpr: cond_pexpr  */
-#line 1599 "yacc_sql.y"
+#line 1600 "yacc_sql.y"
                {
       PExpr *pexpr = new PExpr;
       pexpr->type = PExpType::COMPARISON;
@@ -3808,11 +3809,11 @@ yyreduce:
       pexpr->name = token_name(sql_string, &(yyloc));
       (yyval.pexpr) = pexpr;
     }
-#line 3812 "yacc_sql.cpp"
+#line 3813 "yacc_sql.cpp"
     break;
 
   case 165: /* pexpr: arith_pexpr  */
-#line 1606 "yacc_sql.y"
+#line 1607 "yacc_sql.y"
                   {      
       PExpr *pexpr = new PExpr;
       pexpr->type = PExpType::ARITHMETIC;
@@ -3820,11 +3821,11 @@ yyreduce:
       pexpr->name = token_name(sql_string, &(yyloc));
       (yyval.pexpr) = pexpr;
     }
-#line 3824 "yacc_sql.cpp"
+#line 3825 "yacc_sql.cpp"
     break;
 
   case 166: /* pexpr: unary_pexpr  */
-#line 1613 "yacc_sql.y"
+#line 1614 "yacc_sql.y"
                   {
       PExpr *pexpr = new PExpr;
       pexpr->type = PExpType::UNARY;
@@ -3832,11 +3833,11 @@ yyreduce:
       pexpr->name = token_name(sql_string, &(yyloc));
       (yyval.pexpr) = pexpr;
     }
-#line 3836 "yacc_sql.cpp"
+#line 3837 "yacc_sql.cpp"
     break;
 
   case 167: /* pexpr: func_pexpr  */
-#line 1620 "yacc_sql.y"
+#line 1621 "yacc_sql.y"
                  {        
         PExpr *pexpr = new PExpr;
         pexpr->type = PExpType::FUNC;
@@ -3844,11 +3845,11 @@ yyreduce:
         pexpr->name = token_name(sql_string, &(yyloc));
         (yyval.pexpr) = pexpr;
     }
-#line 3848 "yacc_sql.cpp"
+#line 3849 "yacc_sql.cpp"
     break;
 
   case 168: /* pexpr: subquery_pexpr  */
-#line 1627 "yacc_sql.y"
+#line 1628 "yacc_sql.y"
                      { 
         PExpr *pexpr = new PExpr;
         pexpr->type = PExpType::SUBQUERY;
@@ -3856,11 +3857,11 @@ yyreduce:
         pexpr->name = token_name(sql_string, &(yyloc));
         (yyval.pexpr) = pexpr;
     }
-#line 3860 "yacc_sql.cpp"
+#line 3861 "yacc_sql.cpp"
     break;
 
   case 169: /* pexpr: list_pexpr  */
-#line 1634 "yacc_sql.y"
+#line 1635 "yacc_sql.y"
                  {
         PExpr *pexpr = new PExpr;
         pexpr->type = PExpType::LIST;
@@ -3868,11 +3869,11 @@ yyreduce:
         pexpr->name = token_name(sql_string, &(yyloc));
         (yyval.pexpr) = pexpr;
     }
-#line 3872 "yacc_sql.cpp"
+#line 3873 "yacc_sql.cpp"
     break;
 
   case 170: /* pexpr: aggr_pexpr  */
-#line 1641 "yacc_sql.y"
+#line 1642 "yacc_sql.y"
                  {
         PExpr *pexpr = new PExpr;
         pexpr->type = PExpType::AGGRFUNC;
@@ -3880,19 +3881,19 @@ yyreduce:
         pexpr->name = token_name(sql_string, &(yyloc));
         (yyval.pexpr) = pexpr;
     }
-#line 3884 "yacc_sql.cpp"
+#line 3885 "yacc_sql.cpp"
     break;
 
   case 171: /* pexpr_list: %empty  */
-#line 1652 "yacc_sql.y"
+#line 1653 "yacc_sql.y"
     {
       (yyval.pexpr_list) = nullptr;
     }
-#line 3892 "yacc_sql.cpp"
+#line 3893 "yacc_sql.cpp"
     break;
 
   case 172: /* pexpr_list: COMMA pexpr pexpr_list  */
-#line 1656 "yacc_sql.y"
+#line 1657 "yacc_sql.y"
     {
       if ((yyvsp[0].pexpr_list) != nullptr) {
         (yyval.pexpr_list) = (yyvsp[0].pexpr_list);
@@ -3901,11 +3902,11 @@ yyreduce:
       }
       (yyval.pexpr_list)->emplace_back((yyvsp[-1].pexpr));
     }
-#line 3905 "yacc_sql.cpp"
+#line 3906 "yacc_sql.cpp"
     break;
 
 
-#line 3909 "yacc_sql.cpp"
+#line 3910 "yacc_sql.cpp"
 
       default: break;
     }
@@ -4134,7 +4135,7 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 1668 "yacc_sql.y"
+#line 1669 "yacc_sql.y"
 
 //_____________________________________________________________________
 extern void scan_string(const char *str, yyscan_t scanner);

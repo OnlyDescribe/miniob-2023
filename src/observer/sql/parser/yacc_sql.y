@@ -1554,9 +1554,9 @@ aggr_pexpr:
       PAggrExpr * agexpr = new PAggrExpr;
       if($3->type == PExpType::UNARY) {
         if($3->uexp->is_attr) {
-          if($3->uexp->attr.relation_name != "") {
+          if($3->uexp->attr.relation_name == "*") {
             yyerror(&@$, sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
-          } else if($3->uexp->attr.relation_name == "*"){
+          } else if($3->uexp->attr.attribute_name == "*"){
             agexpr->is_star = true;
           } else {
             agexpr->is_star = false;
@@ -1578,6 +1578,7 @@ aggr_pexpr:
         agexpr->type = $1;
       }
       agexpr->expr = $3;
+      $$ = agexpr;
     }
     | aggr_func_type LBRACE pexpr COMMA pexpr aggr_pexpr_list RBRACE {
       yyerror(&@$, sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
