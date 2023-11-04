@@ -966,7 +966,6 @@ group_by_list:
       }
       RelAttrSqlNode rel_attr;
       rel_attr.attribute_name = $2;
-      rel_attr.relation_name = $2;
       $$->push_back(rel_attr);
       free($2);
     }

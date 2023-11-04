@@ -108,6 +108,7 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
   }
   int join_on_units_index = 0;
 
+  // join
   for (Table *table : tables) {
     unique_ptr<LogicalOperator> table_get_oper(new TableGetLogicalOperator(table, true /*readonly*/));
     if (table_oper == nullptr) {
@@ -173,6 +174,7 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
     top_op.swap(orderby_oper);
   }
 
+  // 决定最顶层是project, groupby 还是 aggregation算子
   std::vector<Expression *> aggr_exprs, field_exprs;
   for (const auto &project : all_projects) {
     AggretationExpr::get_aggrfuncexprs(project.get(), aggr_exprs);
@@ -183,10 +185,17 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
     if (select_stmt->groupbys().empty()) {
       return RC::SQL_SYNTAX;
     }
-  }
-
-  // 聚合 logic_op，或者groupby, 算数表达式上，只能挂聚合，或者数字
-  if (aggr_exprs.size()) {
+    // groupby 聚合
+    std::vector<std::unique_ptr<Expression>> groupby_exprs;
+    for (const auto &field : select_stmt->groupbys()) {
+      groupby_exprs.emplace_back(std::make_unique<FieldExpr>(field));
+    }
+    unique_ptr<LogicalOperator> aggr_oper = make_unique<GroupbyLogicalOperator>(
+        std::move(groupby_exprs), select_stmt->having_stmt(), std::move(all_projects));
+    aggr_oper->add_child(std::move(top_op));
+    top_op.swap(aggr_oper);
+  } else if (aggr_exprs.size()) {
+    // 聚合 logic_op，或者groupby, 算数表达式上，只能挂聚合，或者数字
     unique_ptr<LogicalOperator> aggr_oper = make_unique<AggregationLogicalOperator>();
     static_cast<AggregationLogicalOperator *>(aggr_oper.get())->set_aggregation_expr(std::move(all_projects));
     aggr_oper->add_child(std::move(top_op));
@@ -199,15 +208,8 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
     }
     top_op.swap(project_oper);
   } else {
-    // TODO: 这里不需要groupby 中的 聚合，不需要和表达式结合
-    std::vector<std::unique_ptr<Expression>> groupby_exprs;
-    for (const auto &field : select_stmt->groupbys()) {
-      groupby_exprs.emplace_back(std::make_unique<FieldExpr>(field));
-    }
-    unique_ptr<LogicalOperator> aggr_oper = make_unique<GroupbyLogicalOperator>(
-        std::move(groupby_exprs), select_stmt->having_stmt(), std::move(all_projects));
-    aggr_oper->add_child(std::move(top_op));
-    top_op.swap(aggr_oper);
+    LOG_WARN("empty, field and agg");
+    return RC::INTERNAL;
   }
   logical_operator.swap(top_op);
   return RC::SUCCESS;
