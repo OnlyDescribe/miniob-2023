@@ -54,7 +54,7 @@ Table::~Table()
     delete index;
   }
   indexes_.clear();
-
+  
   if (logical_operator_ != nullptr) {
     assert(is_view_ == true);
     delete logical_operator_;

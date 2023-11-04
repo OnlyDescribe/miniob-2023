@@ -36,8 +36,15 @@ static void wildcard_fields(Table *table, std::vector<Field> &field_metas)
 {
   const TableMeta &table_meta = table->table_meta();
   const int field_num = table_meta.field_num() - table_meta.extra_field_num();
-  for (int i = table_meta.sys_field_num(); i < field_num; i++) {
-    field_metas.push_back(Field(table, table_meta.field(i)));
+  // 处理视图的字段表对应问题
+  if (table->is_view()) {
+    for (int i = table_meta.sys_field_num(); i < field_num; i++) {
+      field_metas.push_back(Field(table_meta.view_table(i), table_meta.field(i)));
+    }
+  } else {
+    for (int i = table_meta.sys_field_num(); i < field_num; i++) {
+      field_metas.push_back(Field(table, table_meta.field(i)));
+    }
   }
 }
 
@@ -59,7 +66,14 @@ RC SelectStmt::createField(
         LOG_WARN("no such field. field=%s.%s", table->name(), attr_name);
         return RC::SCHEMA_FIELD_MISSING;
       }
-      field = Field(table, field_meta);
+      // 处理视图的字段表对应问题
+      const Table *query_table;
+      if (table->is_view()) {
+        query_table = table->table_meta().view_table(attr_name);
+      } else {
+        query_table = table;
+      }
+      field = Field(query_table, field_meta);
       return RC::SUCCESS;
     }
   }
@@ -178,11 +192,18 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
           wildcard_fields(table, query_fields);
         } else {
           const FieldMeta *field_meta = table->table_meta().field(field_name);
+          // 处理视图的字段表对应问题
+          const Table *query_table;
+          if (table->is_view()) {
+            query_table = table->table_meta().view_table(field_name);
+          } else {
+            query_table = table;
+          }
           if (nullptr == field_meta) {
             LOG_WARN("no such field. field=%s.%s.%s", db->name(), table->name(), field_name);
             return RC::SCHEMA_FIELD_MISSING;
           }
-          query_fields.push_back(Field(table, field_meta));
+          query_fields.push_back(Field(query_table, field_meta));
         }
       }
     } else {
@@ -193,11 +214,18 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
 
       Table *table = tables[0];
       const FieldMeta *field_meta = table->table_meta().field(relation_attr.attribute_name.c_str());
+      // 处理视图的字段表对应问题
+      const Table *query_table;
+      if (table->is_view()) {
+        query_table = table->table_meta().view_table(relation_attr.attribute_name.c_str());
+      } else {
+        query_table = table;
+      }
       if (nullptr == field_meta) {
         LOG_WARN("no such field. field=%s.%s.%s", db->name(), table->name(), relation_attr.attribute_name.c_str());
         return RC::SCHEMA_FIELD_MISSING;
       }
-      query_fields.push_back(Field(table, field_meta));
+      query_fields.push_back(Field(query_table, field_meta));
     }
   }
 

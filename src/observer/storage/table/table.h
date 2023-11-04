@@ -99,7 +99,6 @@ public:
   const TableMeta &table_meta() const;
   DiskBufferPool *data_buffer_pool() { return data_buffer_pool_; }  // 为了让tuple能根据这个从表中拿到溢出页
   const DiskBufferPool *data_buffer_pool() const { return data_buffer_pool_; }
-  bool &is_view() { return is_view_; }
   RC sync();
 
   LogicalOperator *&logical_operator() { return logical_operator_; }
@@ -114,6 +113,13 @@ private:
 public:
   Index *find_index(const char *index_name) const;
   Index *find_index_by_field(const std::vector<std::string> &field_names) const;
+
+  // 用于视图
+public:
+  bool &is_view() { return is_view_; }
+  bool &updatable() { return updatable_; }
+  bool &modifiable() { return modifiable_; }
+  void set_view_tables(const std::vector<const Table *> &view_tables) { table_meta_.view_tables() = view_tables; }
 
 private:
   std::string base_dir_;
