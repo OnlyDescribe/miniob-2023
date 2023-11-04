@@ -35,12 +35,6 @@ struct AggregateKey
   auto operator==(const AggregateKey &other) const -> bool
   {
     for (uint32_t i = 0; i < other.group_bys_.size(); i++) {
-      if (group_bys_[i].is_null() && other.group_bys_[i].is_null()) {
-        return true;
-      }
-      if (group_bys_[i].is_null() || other.group_bys_[i].is_null()) {
-        return false;
-      }
       if (group_bys_[i].compare(other.group_bys_[i]) != 0) {
         return false;
       }
@@ -279,7 +273,7 @@ private:
   std::vector<std::unique_ptr<Expression>> projects_;  // 投影
   std::vector<Expression*> aggr_exprs_;                  // 聚合表达式
   std::unique_ptr<SimpleAggregationHashTable> ht_;       // 聚合哈希表
-  std::unique_ptr<AggregationTuple> tuple_;
+  std::unique_ptr<AggregationTuple> aggregation_tuple_;
 
   ExpressionTuple exprssion_tuple_;   // 表达式
   bool is_execute_{false};

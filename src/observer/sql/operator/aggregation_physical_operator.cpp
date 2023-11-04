@@ -28,15 +28,20 @@ RC AggregationPhysicalOperator::open(Trx *trx)
   for (const auto& project: projects_) {
     AggretationExpr::get_aggrfuncexprs(project.get(), aggr_exprs_);
   }
+  for (int i = 0; i < aggr_exprs_.size(); i++) {
+    auto aggr_expr = static_cast<AggretationExpr*>(aggr_exprs_[i]);
+    // 每个表达式都有值了
+    aggr_expr->clear_value();
+  }
   // TODO: 这里除了聚合表达式，还可以是字段表达式，值表达式
   ht_->init(aggr_exprs_);
   ht_->clear();
   const auto child_op = children_.front().get();
   RC rc = child_op->open(trx);
-  Tuple *tuple;
+  
   AggregateKey key;
   while ((rc = child_op->next()) == RC::SUCCESS) {
-    tuple = child_op->current_tuple();
+    Tuple *tuple = child_op->current_tuple();
     ht_->insert_combine(key, *tuple);
   }
   is_execute_ = false;
@@ -57,16 +62,16 @@ RC AggregationPhysicalOperator::next()
   AggregateKey key;
   const auto& results = ht_->get_aggr_value(key).aggregates_;
   assert(aggr_exprs_.size() == results.size());
-  
+
   for (int i = 0; i < results.size(); i++) {
     auto aggr_expr = static_cast<AggretationExpr*>(aggr_exprs_[i]);
     // 每个表达式都有值了
     aggr_expr->set_value(results[i]);
   }
   
-  tuple_ = std::make_unique<AggregationTuple>(results);
+  aggregation_tuple_ = std::make_unique<AggregationTuple>(results);
   exprssion_tuple_.set_expressions(&projects_);
-  exprssion_tuple_.set_tuple(tuple_.get());
+  exprssion_tuple_.set_tuple(aggregation_tuple_.get());
   is_execute_ = true;
   return RC::SUCCESS;
 }

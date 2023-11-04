@@ -397,6 +397,10 @@ public:
     value_ = value;
   }
 
+  void clear_value() {
+    has_value = false;
+  }
+
   /**
    * @brief 表达式值的类型
    * @details 一个表达式运算出结果后，只有一个值
