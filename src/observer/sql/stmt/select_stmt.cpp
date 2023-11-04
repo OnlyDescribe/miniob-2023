@@ -30,20 +30,38 @@ SelectStmt::~SelectStmt()
   if (join_on_stmt_ != nullptr) {
     delete join_on_stmt_;
   }
+
+  if (having_stmt_ != nullptr) {
+    delete having_stmt_;
+  }
 }
 
-static void wildcard_fields(Table *table, std::vector<Field> &field_metas)
+static void set_expression_name(
+    Expression *expr, const std::string &table_name, const std::string &fieldname, bool with_table_name)
+{
+  std::string name;
+  if (with_table_name) {
+    name = table_name + ".";
+  }
+  expr->set_name(name + fieldname);
+}
+
+static void wildcard_fields(Table *table, std::vector<std::unique_ptr<Expression>> &field_metas, bool with_table_name)
 {
   const TableMeta &table_meta = table->table_meta();
+
   const int field_num = table_meta.field_num() - table_meta.extra_field_num();
   // 处理视图的字段表对应问题
   if (table->is_view()) {
     for (int i = table_meta.sys_field_num(); i < field_num; i++) {
-      field_metas.push_back(Field(table_meta.view_table(i), table_meta.field(i)));
+      field_metas.emplace_back(new FieldExpr(Field(table_meta.view_table(i), table_meta.field(i))));
+      set_expression_name(
+          field_metas.back().get(), table_meta.view_table(i)->name(), table_meta.field(i)->name(), with_table_name);
     }
   } else {
     for (int i = table_meta.sys_field_num(); i < field_num; i++) {
-      field_metas.push_back(Field(table, table_meta.field(i)));
+      field_metas.emplace_back(new FieldExpr(Field(table, table_meta.field(i))));
+      set_expression_name(field_metas.back().get(), table->name(), table_meta.field(i)->name(), with_table_name);
     }
   }
 }
@@ -107,78 +125,61 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
     table_map.insert(std::pair<std::string, Table *>(table_name, table));
   }
 
-  // collect query fields in `select` statement
-  std::vector<Field> query_fields;
+  // 投影表达式
+  std::vector<std::unique_ptr<Expression>> projects;
+
+  bool with_table_name = tables.size() > 1;
 
   // 聚合字段的个数
   int aggr_field_cnt = 0;
   for (int i = static_cast<int>(select_sql.attributes.size()) - 1; i >= 0; i--) {
     // TODO: 考虑表达式或子查询, 这里我默认拿出来的就是一个字段, 即attr_pexp是unary的
     PExpr *attr_pexp = select_sql.attributes[i];
-    if (attr_pexp->type != PExpType::UNARY || !attr_pexp->uexp->is_attr) {
-      LOG_WARN("not implemented");
-    }
-    const RelAttrSqlNode &relation_attr = attr_pexp->uexp->attr;
-    auto aggr_type = relation_attr.aggr_type;
-
-    // 检验聚合的合法性
-    if (aggr_type != AggrFuncType::INVALID) {
+    // 这里处理算数类型的表达式
+    if (attr_pexp->type == PExpType::ARITHMETIC) {
+      Expression *a_expr = nullptr;
+      RC rc = Expression::create_expression(attr_pexp, table_map, a_expr);
+      if (rc != RC::SUCCESS) {
+        return rc;
+      }
+      a_expr->set_name(attr_pexp->name);
+      projects.emplace_back(a_expr);
+      continue;
+    } else if (attr_pexp->type == PExpType::AGGRFUNC) {  // 聚合
+      Expression *ag_expr = nullptr;
+      RC rc = Expression::create_expression(attr_pexp, table_map, ag_expr);
+      if (rc != RC::SUCCESS) {
+        return rc;
+      }
+      ag_expr->set_name(attr_pexp->name);
+      projects.emplace_back(ag_expr);
       aggr_field_cnt++;
-      if (relation_attr.aggregates.size() != 1) {
-        return RC::SQL_SYNTAX;
-      }
-
-      if (tables.empty()) {
-        return RC::SQL_SYNTAX;
-      }
-      if (aggr_type == AggrFuncType::COUNT && relation_attr.aggregates[i] == "*") {
-        aggr_type = AggrFuncType::COUNT_STAR;
-      }
-      // id.id分隔开
-      std::vector<std::string> result;
-      common::split_string(relation_attr.aggregates[0], ".", result);
-      if (result.size() > 2) {
-        return RC::SQL_SYNTAX;
-      }
-
-      if (result.size() == 1) {
-        Table *table = tables[0];
-        const FieldMeta *field_meta = table->table_meta().field(relation_attr.aggregates[0].c_str());
-        if (nullptr == field_meta && aggr_type != AggrFuncType::COUNT_STAR) {
-          LOG_WARN("no such field. field=%s.%s.%s", db->name(), table->name(), relation_attr.aggregates[0].c_str());
-          return RC::SCHEMA_FIELD_MISSING;
-        }
-        query_fields.push_back(Field(table, field_meta, aggr_type));
-      } else {
-        Field field;
-        RC rc = createField(tables, result[0].c_str(), result[1].c_str(), field);
-        if (rc != RC::SUCCESS) {
-          return rc;
-        }
-        field.set_aggr(aggr_type);
-        query_fields.push_back(field);
-      }
-
       continue;
     }
 
-    // 不带聚合select的逻辑
+    // 不带聚合select的逻辑, 这边就是正常的field表达式
+    const RelAttrSqlNode &relation_attr = attr_pexp->uexp->attr;
+    if (attr_pexp->type != PExpType::UNARY || !attr_pexp->uexp->is_attr) {
+      LOG_WARN("not implemented");
+    }
+
+    // select * from;
     if (common::is_blank(relation_attr.relation_name.c_str()) &&
         0 == strcmp(relation_attr.attribute_name.c_str(), "*")) {
       for (Table *table : tables) {
-        wildcard_fields(table, query_fields);
+        wildcard_fields(table, projects, with_table_name);
       }
     } else if (!common::is_blank(relation_attr.relation_name.c_str())) {
       const char *table_name = relation_attr.relation_name.c_str();
       const char *field_name = relation_attr.attribute_name.c_str();
-
+      // select *.* from xxx;
       if (0 == strcmp(table_name, "*")) {
         if (0 != strcmp(field_name, "*")) {
           LOG_WARN("invalid field name while table is *. attr=%s", field_name);
           return RC::SCHEMA_FIELD_MISSING;
         }
         for (Table *table : tables) {
-          wildcard_fields(table, query_fields);
+          wildcard_fields(table, projects, with_table_name);
         }
       } else {
         auto iter = table_map.find(table_name);
@@ -188,9 +189,12 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
         }
 
         Table *table = iter->second;
+        //   select table.* from xxx;
         if (0 == strcmp(field_name, "*")) {
-          wildcard_fields(table, query_fields);
+          wildcard_fields(table, projects, with_table_name);
         } else {
+
+          //  select table.rel from xxx;
           const FieldMeta *field_meta = table->table_meta().field(field_name);
           // 处理视图的字段表对应问题
           const Table *query_table;
@@ -203,10 +207,13 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
             LOG_WARN("no such field. field=%s.%s.%s", db->name(), table->name(), field_name);
             return RC::SCHEMA_FIELD_MISSING;
           }
-          query_fields.push_back(Field(query_table, field_meta));
+          projects.emplace_back(new FieldExpr(Field(query_table, field_meta)));
+          set_expression_name(projects.back().get(), query_table->name(), field_meta->name(), with_table_name);
         }
       }
+
     } else {
+      // id
       if (tables.size() != 1) {
         LOG_WARN("invalid. I do not know the attr's table. attr=%s", relation_attr.attribute_name.c_str());
         return RC::SCHEMA_FIELD_MISSING;
@@ -225,13 +232,15 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
         LOG_WARN("no such field. field=%s.%s.%s", db->name(), table->name(), relation_attr.attribute_name.c_str());
         return RC::SCHEMA_FIELD_MISSING;
       }
-      query_fields.push_back(Field(query_table, field_meta));
+      projects.emplace_back(new FieldExpr(Field(query_table, field_meta)));
+      set_expression_name(projects.back().get(), query_table->name(), field_meta->name(), with_table_name);
     }
   }
 
-  LOG_INFO("got %d tables in from stmt and %d fields in query stmt", tables.size(), query_fields.size());
+  LOG_INFO("got %d tables in from stmt and %d fields in query stmt", tables.size(), projects.size());
 
-  if (aggr_field_cnt != 0 && aggr_field_cnt != static_cast<int>(select_sql.attributes.size())) {
+  if (aggr_field_cnt != 0 && aggr_field_cnt != static_cast<int>(select_sql.attributes.size()) &&
+      select_sql.groupbys.empty()) {
     LOG_WARN("num of aggregation is invalid");
     return RC::INVALID_ARGUMENT;
   }
@@ -269,14 +278,44 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
     orderbys->emplace_back(field, order_by.sort_type);
   }
 
+  // groupbys
+  std::vector<Field> groupbys;
+  for (const auto &groupby_attr : select_sql.groupbys) {
+    Field field;
+    RC rc = createField(tables, groupby_attr.relation_name.c_str(), groupby_attr.attribute_name.c_str(), field);
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("groupby key error");
+      return rc;
+    }
+    groupbys.emplace_back(field);
+  }
+
   // everything alright
   SelectStmt *select_stmt = new SelectStmt();
   select_stmt->tables_.swap(tables);
-  select_stmt->query_fields_.swap(query_fields);
+  select_stmt->projects.swap(projects);
   select_stmt->join_on_stmt_ = join_on_stmt;
   select_stmt->filter_stmt_ = filter_stmt;
   select_stmt->orderbys_ = std::move(orderbys);
-  select_stmt->set_is_aggregation_stmt(aggr_field_cnt > 0);
+  select_stmt->groupbys_.swap(groupbys);
+
+  // groupby or aggregation
+  if (aggr_field_cnt > 0) {
+    if (select_stmt->groupbys_.empty()) {
+      select_stmt->whereConditoin = WhereConditoin::AGGREGATION;
+    } else {
+      // 否则，就可以通过query_field拿到groupby的信息(那些field类型是聚合的)
+      select_stmt->whereConditoin = WhereConditoin::GROUPBY;
+      // create groupby, 这里偷懒，直接用filter_stmt
+      FilterStmt *having_stmt = nullptr;
+      rc = FilterStmt::create(db, default_table, &table_map, select_sql.havings, having_stmt);
+      if (rc != RC::SUCCESS) {
+        LOG_WARN("cannot construct filter stmt");
+        return rc;
+      }
+      select_stmt->having_stmt_ = having_stmt;
+    }
+  }
 
   stmt = select_stmt;
   return RC::SUCCESS;

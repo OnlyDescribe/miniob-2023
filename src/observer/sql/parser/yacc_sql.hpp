@@ -139,7 +139,7 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 141 "yacc_sql.y"
+#line 130 "yacc_sql.y"
 
   ParsedSqlNode *                   sql_node;
   PExpr *                           pexpr;
@@ -149,6 +149,7 @@ union YYSTYPE
   PFuncExpr *                       func_pexpr;
   PSubQueryExpr *                   subquery_pexpr;
   PListExpr *                       list_pexpr;
+  PAggrExpr *                       aggr_pexpr;
   Value *                           value;
   enum  CompOp                      comp;
   enum  AggrFuncType                aggr_func_type;
@@ -163,7 +164,6 @@ union YYSTYPE
   std::vector<char *> *             string_list;
   std::vector<std::string> *        std_string_list;
   std::vector<Expression *> *       expression_list;
-  std::vector<Value> *              value_list;
   std::vector<Relation> *           relation_list;
   std::vector<RelAttrSqlNode> *     rel_attr_list;
   std::vector<AssignmentSqlNode> *  assignment_list;

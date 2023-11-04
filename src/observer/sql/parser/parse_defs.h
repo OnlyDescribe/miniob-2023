@@ -33,6 +33,7 @@ struct ConditionSqlNode;
 struct PFuncExpr;
 struct PSubQueryExpr;
 struct PListExpr;
+struct PAggrExpr;
 
 using PConditionExpr = struct ConditionSqlNode;
 
@@ -56,6 +57,7 @@ struct PExpr
   PFuncExpr *fexp;
   PSubQueryExpr *sexp;
   PListExpr *lexp;
+  PAggrExpr *agexp;
 
   std::string name;
   std::string alias;
@@ -91,6 +93,11 @@ struct PExpr
     type = PExpType::LIST;
     lexp = exp;
   }
+  PExpr(PAggrExpr *exp)
+  {
+    type = PExpType::AGGRFUNC;
+    agexp = exp;
+  }
 };
 
 // 1.2. 定义 ParsedExpression 中对象
@@ -104,16 +111,16 @@ enum class AggrFuncType
   SUM,
   AVG,
   COUNT,
-  COUNT_STAR
+  COUNT_STAR  // 放在了pexpr中
 };
 
 // 字段(column, field)
 struct RelAttrSqlNode
 {
-  std::string relation_name;                       ///< relation name (may be NULL) 表名
-  std::string attribute_name;                      ///< attribute name              属性名
-  AggrFuncType aggr_type = AggrFuncType::INVALID;  // 聚合类型
-  std::vector<std::string> aggregates;             // 聚合字段
+  std::string relation_name;   ///< relation name (may be NULL) 表名
+  std::string attribute_name;  ///< attribute name              属性名
+  // AggrFuncType aggr_type = AggrFuncType::INVALID;  // 聚合类型
+  // std::vector<std::string> aggregates;             // 聚合字段
 };
 
 // 一元表达式
@@ -198,7 +205,15 @@ struct PSubQueryExpr
 // 1.2.6 值列表
 struct PListExpr
 {
-  std::vector<Value> value_list;
+  std::vector<PExpr *> expr_list;
+};
+
+// 1.2.7 聚合表达式
+struct PAggrExpr
+{
+  bool is_star;
+  AggrFuncType type;
+  PExpr *expr;
 };
 
 // 2. 定义 Select， 即SelectSqlNode
@@ -284,8 +299,8 @@ struct CalcSqlNode
  */
 struct InsertSqlNode
 {
-  std::string relation_name;  ///< Relation to insert into
-  std::vector<Value> values;  ///< 要插入的值
+  std::string relation_name;    ///< Relation to insert into
+  std::vector<PExpr *> values;  ///< 要插入的值
 };
 
 /**
@@ -362,7 +377,7 @@ struct CreateViewSqlNode
 {
   std::string relation_name;  ///< Relation name
   SelectSqlNode select;       ///< select_node
-  // std::vector<AttrInfoSqlNode> attr_infos;  ///< attributes
+  // std::vector<std::string> alias;  ///< alias
 };
 
 /**

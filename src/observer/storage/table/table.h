@@ -32,6 +32,7 @@ class IndexScanner;
 class RecordDeleter;
 class Trx;
 class LogicalOperator;
+class PhysicalOperator;
 
 /**
  * @brief 表
@@ -102,6 +103,7 @@ public:
   RC sync();
 
   LogicalOperator *&logical_operator() { return logical_operator_; }
+  PhysicalOperator *&physical_operator() { return physical_operator_; }
 
 private:
   RC insert_entry_of_indexes(const char *record, const RID &rid);
@@ -132,6 +134,8 @@ private:
   bool is_view_ = false;
   bool updatable_ = false;
   bool modifiable_ = false;
-  LogicalOperator *logical_operator_;  // 移动到算子移动在Table类后, 需要管理该资源. 存在循环引用问题,
-                                       // 无法使用智能指针
+  LogicalOperator *logical_operator_;
+  //
+  PhysicalOperator *physical_operator_;  // 移动到算子移动在Table类后, 需要管理该资源. 存在循环引用问题,
+                                         // 无法使用智能指针
 };

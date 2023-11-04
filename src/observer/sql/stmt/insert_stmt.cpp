@@ -13,12 +13,17 @@ See the Mulan PSL v2 for more details. */
 //
 
 #include "sql/stmt/insert_stmt.h"
+#include "sql/expr/expression.h"
 #include "common/log/log.h"
 #include "storage/db/db.h"
 #include "storage/table/table.h"
 
-InsertStmt::InsertStmt(Table *table, const Value *values, int value_amount)
+InsertStmt::InsertStmt(Table *table, Value *values, int value_amount)
     : table_(table), values_(values), value_amount_(value_amount)
+{}
+
+InsertStmt::InsertStmt(Table *table, Value *values, int value_amount, std::vector<Value> *data_ptr)
+    : table_(table), values_(values), value_amount_(value_amount), data_ptr_(data_ptr)
 {}
 
 RC InsertStmt::create(Db *db, InsertSqlNode &inserts, Stmt *&stmt)
@@ -38,8 +43,12 @@ RC InsertStmt::create(Db *db, InsertSqlNode &inserts, Stmt *&stmt)
   }
 
   // check the fields number
-  Value *values = inserts.values.data();
+  // Value *pvalues = inserts.values.data();
+  const auto value_expr = inserts.values;
   const int value_num = static_cast<int>(inserts.values.size());
+  std::vector<Value> *fvalues = new std::vector<Value>;
+  fvalues->reserve(value_num);
+
   const TableMeta &table_meta = table->table_meta();
   const int field_num = table_meta.field_num() - table_meta.sys_field_num() - table_meta.extra_field_num();
   if (field_num != value_num) {
@@ -52,12 +61,38 @@ RC InsertStmt::create(Db *db, InsertSqlNode &inserts, Stmt *&stmt)
   for (int i = 0; i < value_num; i++) {
     const FieldMeta *field_meta = table_meta.field(i + sys_field_num);
     const AttrType field_type = field_meta->type();
-    const AttrType value_type = values[i].attr_type();
+
+    if (value_expr[i]->type != PExpType::UNARY && value_expr[i]->type != PExpType::ARITHMETIC) {
+      LOG_ERROR("insert stmt: %s", strrc(RC::SQL_SYNTAX));
+      return RC::SQL_SYNTAX;
+    }
+    Value value;
+    // 只有负数才会走这个逻辑
+    if (value_expr[i]->type == PExpType::ARITHMETIC) {
+      assert(value_expr[i]->aexp->left != nullptr);
+      assert(value_expr[i]->aexp->left->uexp != nullptr);
+      assert(value_expr[i]->aexp->type == PArithmeticType::NEGATIVE);
+      const auto &v = value_expr[i]->aexp->left->uexp->value;
+      if (v.attr_type() == AttrType::INTS) {
+        value.set_int(-v.get_int());
+      } else if (v.attr_type() == AttrType::FLOATS) {
+        value.set_int(-v.get_float());
+      } else {
+        assert(0);
+      }
+    } else {
+      if (value_expr[i]->uexp->is_attr) {
+        LOG_ERROR("insert stmt: %s", strrc(RC::SQL_SYNTAX));
+        return RC::SQL_SYNTAX;
+      }
+      value = value_expr[i]->uexp->value;
+    }
+    const AttrType value_type = value.attr_type();
     if (field_type != value_type) {
       // 因为插入操作的词法解析无法判断字符串是TEXTS还是CHARS
       // 目前可能会出现值 TEXTS 类型而字段是 CHARS 类型
       if (field_type == AttrType::TEXTS && value_type == AttrType::CHARS) {
-        values[i].set_type(AttrType::TEXTS);
+        value.set_type(AttrType::TEXTS);
       }
       // 如果值为 NULL, 判断该字段是否设置了 NOT NULL
       else if (value_type == AttrType::NULLS) {
@@ -72,9 +107,10 @@ RC InsertStmt::create(Db *db, InsertSqlNode &inserts, Stmt *&stmt)
         return RC::SCHEMA_FIELD_TYPE_MISMATCH;
       }
     }
+    fvalues->emplace_back(value);
   }
 
   // everything alright
-  stmt = new InsertStmt(table, values, value_num);
+  stmt = new InsertStmt(table, fvalues->data(), value_num, fvalues);
   return RC::SUCCESS;
 }

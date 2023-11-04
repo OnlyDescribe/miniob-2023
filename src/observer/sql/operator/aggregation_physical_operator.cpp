@@ -10,39 +10,46 @@ MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
 #include "sql/operator/aggregation_physical_operator.h"
+#include "sql/expr/expression.h"
 #include "storage/table/table.h"
 #include "event/sql_debug.h"
 
 using namespace std;
 
+// 聚合，需要支持表达式
 RC AggregationPhysicalOperator::open(Trx *trx)
 {
   if (children_.empty()) {
     return RC::INTERNAL;
   }
-  aggr_results_ = ht_->generate_initial_aggregateValue();
+  // 投影表达式, 下面除了聚合，可能也有value
+  // 或者纯聚合
+  aggr_exprs_.clear();
+  for (const auto &project : projects_) {
+    AggretationExpr::get_aggrfuncexprs(project.get(), aggr_exprs_);
+  }
+  for (int i = 0; i < aggr_exprs_.size(); i++) {
+    auto aggr_expr = static_cast<AggretationExpr *>(aggr_exprs_[i]);
+    // 每个表达式都有值了
+    aggr_expr->clear_value();
+  }
+  // TODO: 这里除了聚合表达式，还可以是字段表达式，值表达式
+  ht_->init(aggr_exprs_);
   ht_->clear();
-  not_null_record_num_ = ht_->generate_initial_aggregateValue();
   const auto child_op = children_.front().get();
   RC rc = child_op->open(trx);
-  Tuple *tuple;
-  while ((rc = child_op->next()) == RC::SUCCESS) {
-    tuple = child_op->current_tuple();
 
-    // 从列中获取聚合表达式的值
-    AggregateValue aggr_value;
-    aggr_value.aggregates_.reserve(aggr_exprs_.size());
-    for (int i = 0; i < aggr_exprs_.size(); i++) {
-      Value value;
-      aggr_exprs_[i]->get_value(*tuple, value);
-      aggr_value.aggregates_.emplace_back(value);
-    }
-    ht_->combine_aggregate_values(&aggr_results_, aggr_value, not_null_record_num_);
+  AggregateKey key;
+  while ((rc = child_op->next()) == RC::SUCCESS) {
+    Tuple *tuple = child_op->current_tuple();
+    ht_->insert_combine(key, *tuple);
   }
   is_execute_ = false;
+  ht_->generate_aggregate_values();
   if (rc == RC::RECORD_EOF) {
     rc = RC::SUCCESS;
   }
+
   return rc;
 }
 
@@ -52,22 +59,21 @@ RC AggregationPhysicalOperator::next()
   if (is_execute_) {
     return RC::RECORD_EOF;
   }
-  // 拿到所有的fields
-  std::vector<Field> fields;
-  for (const auto &aggr_expr : aggr_exprs_) {
-    fields.push_back(static_cast<AggretationExpr *>(aggr_expr.get())->filed());
+  AggregateKey key;
+  const auto &results = ht_->get_aggr_value(key).aggregates_;
+  assert(aggr_exprs_.size() == results.size());
+
+  for (int i = 0; i < results.size(); i++) {
+    auto aggr_expr = static_cast<AggretationExpr *>(aggr_exprs_[i]);
+    // 每个表达式都有值了
+    aggr_expr->set_value(results[i]);
   }
-  // 更改avg的结果, 统一改成float
-  for (int i = 0; i < aggr_results_.aggregates_.size(); i++) {
-    if (!not_null_record_num_.aggregates_[i].is_null() &&
-        static_cast<AggretationExpr *>(aggr_exprs_[i].get())->aggr_type() == AggrFuncType::AVG) {
-      aggr_results_.aggregates_[i] =
-          Value(aggr_results_.aggregates_[i].get_float() / not_null_record_num_.aggregates_[i].get_int());
-    }
-  }
-  tuple_ = std::make_unique<AggregationTuple>(aggr_results_.aggregates_, fields);
+
+  aggregation_tuple_ = std::make_unique<AggregationTuple>(results);
+  exprssion_tuple_.set_expressions(&projects_);
+  exprssion_tuple_.set_tuple(aggregation_tuple_.get());
   is_execute_ = true;
   return RC::SUCCESS;
 }
 
-Tuple *AggregationPhysicalOperator::current_tuple() { return tuple_.get(); }
+Tuple *AggregationPhysicalOperator::current_tuple() { return &exprssion_tuple_; }

@@ -38,25 +38,43 @@ RC FilterStmt::create(Db *db, Table *default_table, std::unordered_map<std::stri
 
   FilterStmt *tmp_stmt = new FilterStmt();
 
-  // TODO: PConditionExpr 包含了AND OR等表达式
   // 但目前仅默认是 AND, 即除了叶子节点都是些PConditionExpr, CompOp是AND的
   // 因为都只是 exp AND exp AND exp 的情况, 只要递归拿出exp, 创建filter_unit就行了, 瞎写的,
   // 或许还是直接把这棵树转成expression比较好。这里默认 OR AND 优先级最低, 只要找到不是 OR 和 AND 的 Expr 就行
   auto create_stmt = [&](auto self, PExpr *cond) -> RC {
     if (cond->type == PExpType::COMPARISON) {
       RC rc = RC::SUCCESS;
-      if (cond->cexp->comp != CompOp::AND && cond->cexp->comp != CompOp::OR) {
-        FilterUnit *filter_unit = nullptr;
-        rc = create_filter_unit(db, default_table, tables, cond->cexp, filter_unit);
+      auto comp = cond->cexp->comp;
+      // TODO: PConditionExpr 包含了AND OR等表达式
+      if (comp != CompOp::AND && comp != CompOp::OR) {
+        if (comp < CompOp::EQUAL_TO || comp >= CompOp::NO_OP) {
+          LOG_WARN("invalid compare operator : %d", comp);
+          return RC::INVALID_ARGUMENT;
+        }
+        FilterUnit *filter_unit = new FilterUnit;
+        // rc = create_filter_unit(db, default_table, tables, cond->cexp, filter_unit);
+        Expression *left = nullptr;
+        rc = Expression::create_expression(cond->cexp->left, *tables, left, cond->cexp->comp, db);
         if (rc != RC::SUCCESS) {
           delete tmp_stmt;
           LOG_WARN("failed to create filter unit");
           return rc;
         }
+        filter_unit->left.reset(left);
+        Expression *right = nullptr;
+        rc = Expression::create_expression(cond->cexp->right, *tables, right, cond->cexp->comp, db);
+        if (rc != RC::SUCCESS) {
+          delete tmp_stmt;
+          delete left;
+          LOG_WARN("failed to create filter unit");
+          return rc;
+        }
+        filter_unit->right.reset(right);
+        filter_unit->comp = comp;
         tmp_stmt->filter_units_.push_back(filter_unit);
         return RC::SUCCESS;
       } else {
-        tmp_stmt->is_or = cond->cexp->comp == CompOp::OR;
+        tmp_stmt->is_or = comp == CompOp::OR;
       }
       rc = self(self, cond->cexp->left);
       rc = self(self, cond->cexp->right);
@@ -103,81 +121,81 @@ RC get_table_and_field(Db *db, Table *default_table, std::unordered_map<std::str
   return RC::SUCCESS;
 }
 
-RC FilterStmt::create_filter_unit(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,
-    PConditionExpr *condition, FilterUnit *&filter_unit)
-{
-  RC rc = RC::SUCCESS;
+// RC FilterStmt::create_filter_unit(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,
+//     PConditionExpr *condition, FilterUnit *&filter_unit)
+// {
+//   RC rc = RC::SUCCESS;
 
-  CompOp comp = condition->comp;
-  if (comp < CompOp::EQUAL_TO || comp >= CompOp::NO_OP) {
-    LOG_WARN("invalid compare operator : %d", comp);
-    return RC::INVALID_ARGUMENT;
-  }
+//   CompOp comp = condition->comp;
+//   if (comp < CompOp::EQUAL_TO || comp >= CompOp::NO_OP) {
+//     LOG_WARN("invalid compare operator : %d", comp);
+//     return RC::INVALID_ARGUMENT;
+//   }
 
-  // TODO: 我这里默认左右都是UNARY表达式, 后续要把 FilterUnit 改成递归的送到 Expression
-  filter_unit = new FilterUnit;
-  filter_unit->comp = comp;
+//   // TODO: 我这里默认左右都是UNARY表达式, 后续要把 FilterUnit 改成递归的送到 Expression
+//   filter_unit = new FilterUnit;
+//   filter_unit->comp = comp;
 
-  if (condition->left->type == PExpType::UNARY) {
-    PUnaryExpr *left = condition->left->uexp;
-    if (left->is_attr) {
-      Table *table = nullptr;
-      const FieldMeta *field = nullptr;
-      rc = get_table_and_field(db, default_table, tables, left->attr, table, field);
-      if (rc != RC::SUCCESS) {
-        LOG_WARN("cannot find attr");
-        return rc;
-      }
-      filter_unit->left = std::make_unique<FieldExpr>(Field(table, field));
-    } else {
-      filter_unit->left = std::make_unique<ValueExpr>(left->value);
-    }
-  } else if (condition->left->type == PExpType::SUBQUERY) {
-    Stmt *subquery_stmt = nullptr;
-    rc = SelectStmt::create(db, *condition->left->sexp->sub_select, subquery_stmt);
-    if (rc != RC::SUCCESS) {
-      return rc;
-    }
-    auto subquery_expr = std::make_unique<SubQueryExpr>();
-    subquery_expr->subquery_stmt = static_cast<SelectStmt *>(subquery_stmt);
-    filter_unit->left = std::move(subquery_expr);
-  } else {
-    LOG_ERROR("not support expr type");
-    return RC::INVALID_ARGUMENT;
-  }
+//   if (condition->left->type == PExpType::UNARY) {
+//     PUnaryExpr *left = condition->left->uexp;
+//     if (left->is_attr) {
+//       Table *table = nullptr;
+//       const FieldMeta *field = nullptr;
+//       rc = get_table_and_field(db, default_table, tables, left->attr, table, field);
+//       if (rc != RC::SUCCESS) {
+//         LOG_WARN("cannot find attr");
+//         return rc;
+//       }
+//       filter_unit->left = std::make_unique<FieldExpr>(Field(table, field));
+//     } else {
+//       filter_unit->left = std::make_unique<ValueExpr>(left->value);
+//     }
+//   } else if (condition->left->type == PExpType::SUBQUERY) {
+//     Stmt *subquery_stmt = nullptr;
+//     rc = SelectStmt::create(db, *condition->left->sexp->sub_select, subquery_stmt);
+//     if (rc != RC::SUCCESS) {
+//       return rc;
+//     }
+//     auto subquery_expr = std::make_unique<SubQueryExpr>();
+//     subquery_expr->subquery_stmt = static_cast<SelectStmt *>(subquery_stmt);
+//     filter_unit->left = std::move(subquery_expr);
+//   } else {
+//     LOG_ERROR("not support expr type");
+//     return RC::INVALID_ARGUMENT;
+//   }
 
-  if (condition->right->type == PExpType::UNARY) {
-    PUnaryExpr *right = condition->right->uexp;
-    if (right->is_attr) {
-      Table *table = nullptr;
-      const FieldMeta *field = nullptr;
-      rc = get_table_and_field(db, default_table, tables, right->attr, table, field);
-      if (rc != RC::SUCCESS) {
-        LOG_WARN("cannot find attr");
-        return rc;
-      }
-      filter_unit->right = std::make_unique<FieldExpr>(Field(table, field));
-    } else {
-      filter_unit->right = std::make_unique<ValueExpr>(right->value);
-    }
-  } else if (condition->right->type == PExpType::SUBQUERY) {  // 子查询表达式
-    Stmt *subquery_stmt = nullptr;
-    rc = SelectStmt::create(db, *condition->right->sexp->sub_select, subquery_stmt);
-    if (rc != RC::SUCCESS) {
-      return rc;
-    }
-    auto subquery_expr = std::make_unique<SubQueryExpr>();
-    subquery_expr->subquery_stmt = static_cast<SelectStmt *>(subquery_stmt);
-    filter_unit->right = std::move(subquery_expr);
-  } else if (condition->right->type == PExpType::LIST) {
-    PListExpr *right = condition->right->lexp;
-    auto list_expr = std::make_unique<ListExpr>();
-    list_expr->set_values(right->value_list);
-    filter_unit->right = std::move(list_expr);
-  } else {
-    LOG_ERROR("not support expr type");
-    return RC::INVALID_ARGUMENT;
-  }
-  // 检查两个类型是否能够比较
-  return rc;
-}
+//   if (condition->right->type == PExpType::UNARY) {
+//     PUnaryExpr *right = condition->right->uexp;
+//     if (right->is_attr) {
+//       Table *table = nullptr;
+//       const FieldMeta *field = nullptr;
+//       rc = get_table_and_field(db, default_table, tables, right->attr, table, field);
+//       if (rc != RC::SUCCESS) {
+//         LOG_WARN("cannot find attr");
+//         return rc;
+//       }
+//       filter_unit->right = std::make_unique<FieldExpr>(Field(table, field));
+//     } else {
+//       filter_unit->right = std::make_unique<ValueExpr>(right->value);
+//     }
+//   } else if (condition->right->type == PExpType::SUBQUERY) {  // 子查询表达式
+//     Stmt *subquery_stmt = nullptr;
+//     rc = SelectStmt::create(db, *condition->right->sexp->sub_select, subquery_stmt);
+//     if (rc != RC::SUCCESS) {
+//       return rc;
+//     }
+//     auto subquery_expr = std::make_unique<SubQueryExpr>();
+//     subquery_expr->subquery_stmt = static_cast<SelectStmt *>(subquery_stmt);
+//     filter_unit->right = std::move(subquery_expr);
+//   } else if (condition->right->type == PExpType::LIST) {
+//     PListExpr *right = condition->right->lexp;
+//     auto list_expr = std::make_unique<ListExpr>();
+//     list_expr->set_values(right->value_list);
+//     filter_unit->right = std::move(list_expr);
+//   } else {
+//     LOG_ERROR("not support expr type");
+//     return RC::INVALID_ARGUMENT;
+//   }
+//   // 检查两个类型是否能够比较
+//   return rc;
+// }

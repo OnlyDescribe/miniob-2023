@@ -41,17 +41,6 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
   return expr;
 }
 
-bool IsAttributesVailid(const std::vector<PExpr *> &select_attr)
-{
-  int relattr_cnt = 0;
-  for (const PExpr *node : select_attr) {
-    if (node->type == PExpType::UNARY && node->uexp->attr.aggr_type == AggrFuncType::INVALID || node->type != PExpType::UNARY) {
-      relattr_cnt++;
-    }
-  }
-  return relattr_cnt == 0 || (relattr_cnt == static_cast<int>(select_attr.size()));
-}
-
 %}
 
 %define api.pure full
@@ -147,6 +136,7 @@ bool IsAttributesVailid(const std::vector<PExpr *> &select_attr)
   PFuncExpr *                       func_pexpr;
   PSubQueryExpr *                   subquery_pexpr;
   PListExpr *                       list_pexpr;
+  PAggrExpr *                       aggr_pexpr;
   Value *                           value;
   enum  CompOp                      comp;
   enum  AggrFuncType                aggr_func_type;
@@ -161,7 +151,6 @@ bool IsAttributesVailid(const std::vector<PExpr *> &select_attr)
   std::vector<char *> *             string_list;
   std::vector<std::string> *        std_string_list;
   std::vector<Expression *> *       expression_list;
-  std::vector<Value> *              value_list;
   std::vector<Relation> *           relation_list;
   std::vector<RelAttrSqlNode> *     rel_attr_list;
   std::vector<AssignmentSqlNode> *  assignment_list;
@@ -181,15 +170,12 @@ bool IsAttributesVailid(const std::vector<PExpr *> &select_attr)
 /** type 定义了各种解析后的结果输出的是什么类型。类型对应了 union 中的定义的成员变量名称 **/
 %type <number>              type
 %type <value>               value
-%type <string>              field_or_star
-%type <std_string_list>     field_or_star_list
 %type <number>              number
 %type <std_string_list>     id_list
 %type <rel_attr>            rel_attr
 %type <aggr_func_type>      aggr_func_type
 %type <attr_infos>          attr_def_list
 %type <attr_info>           attr_def
-%type <value_list>          value_list
 %type <pexpr_list>          select_attr_list
 %type <expression>          expression
 %type <expression_list>     expression_list
@@ -205,12 +191,14 @@ bool IsAttributesVailid(const std::vector<PExpr *> &select_attr)
 %type <orderby_list>        order_by
 %type <orderby_list>        order_condtions
 %type <pexpr>               pexpr
+%type <pexpr_list>          pexpr_list
 %type <unary_pexpr>         unary_pexpr
 %type <arith_pexpr>         arith_pexpr
 %type <func_pexpr>          func_pexpr
 %type <cond_pexpr>          cond_pexpr
 %type <subquery_pexpr>      subquery_pexpr
 %type <list_pexpr>          list_pexpr
+%type <aggr_pexpr>          aggr_pexpr
 %type <sql_node>            calc_stmt
 %type <sql_node>            select_stmt
 %type <sql_node>            insert_stmt
@@ -454,13 +442,6 @@ create_table_select_stmt:
       free($3);
 
       SelectSqlNode& select = create_table_select.select;
-      if ($6 != nullptr) {
-        select.attributes.swap(*$6);
-        delete $6;
-        if (!IsAttributesVailid(select.attributes)) {
-          yyerror(&@$, sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
-        }
-      }
 
       if($8 != nullptr)
       {
@@ -483,6 +464,11 @@ create_table_select_stmt:
         select.orderbys = *$12;
         delete $12;
       }
+
+      if ($6 != nullptr) {
+        select.attributes.swap(*$6);
+        delete $6;
+      }
     }
     | CREATE TABLE ID LBRACE attr_def attr_def_list RBRACE SELECT select_attr FROM select_from where group_by having order_by
     {
@@ -502,13 +488,6 @@ create_table_select_stmt:
       delete $5;
 
       SelectSqlNode& select = create_table_select.select;
-      if ($9 != nullptr) {
-        select.attributes.swap(*$9);
-        delete $9;
-        if (!IsAttributesVailid(select.attributes)) {
-          yyerror(&@$, sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
-        }
-      }
 
       if($11 != nullptr)
       {
@@ -531,6 +510,11 @@ create_table_select_stmt:
         select.orderbys = *$15;
         delete $15;
       }
+
+      if ($9 != nullptr) {
+        select.attributes.swap(*$9);
+        delete $9;
+      }
     }
     ;
 
@@ -543,13 +527,6 @@ create_view_stmt:
       free($3);
 
       SelectSqlNode& select = create_view.select;
-      if ($6 != nullptr) {
-        select.attributes.swap(*$6);
-        delete $6;
-        if (!IsAttributesVailid(select.attributes)) {
-          yyerror(&@$, sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
-        }
-      }
 
       if($8 != nullptr)
       {
@@ -572,20 +549,25 @@ create_view_stmt:
         select.orderbys = *$12;
         delete $12;
       }
+
+      if ($6 != nullptr) {
+        select.attributes.swap(*$6);
+        delete $6;
+      }
     }
     ;
 
 insert_stmt:        /*insert   语句的语法解析树*/
-    INSERT INTO ID VALUES LBRACE value value_list RBRACE 
+    INSERT INTO ID VALUES LBRACE pexpr pexpr_list RBRACE 
     {
       $$ = new ParsedSqlNode(SCF_INSERT);
       $$->insertion.relation_name = $3;
       if ($7 != nullptr) {
         $$->insertion.values.swap(*$7);
+        delete $7;
       }
-      $$->insertion.values.emplace_back(*$6);
+      $$->insertion.values.emplace_back($6);
       std::reverse($$->insertion.values.begin(), $$->insertion.values.end());
-      delete $6;
       free($3);
     }
     ;
@@ -630,14 +612,6 @@ select_stmt:        /*  select 语句的语法解析树*/
     {
       $$ = new ParsedSqlNode(SCF_SELECT);
 
-      if ($2 != nullptr) {
-        $$->selection.attributes.swap(*$2);
-        delete $2;
-        if (!IsAttributesVailid($$->selection.attributes)) {
-          yyerror(&@$, sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
-        }
-      }
-
       if($4 != nullptr)
       {
         FromSqlNode* from_node = $4;
@@ -658,6 +632,11 @@ select_stmt:        /*  select 语句的语法解析树*/
       if ($8 != nullptr) {
         $$->selection.orderbys = *$8;
         delete $8;
+      }
+
+      if ($2 != nullptr) {
+        $$->selection.attributes.swap(*$2);
+        delete $2;
       }
     }
     ;
@@ -1134,13 +1113,6 @@ subquery_pexpr:        /*  select 语句的语法解析树*/
       $$ = new PSubQueryExpr;
       $$->sub_select = new SelectSqlNode();
       SelectSqlNode * sub_select = $$->sub_select;
-      if ($3 != nullptr) {
-        sub_select->attributes.swap(*$3);
-        delete $3;
-        if (!IsAttributesVailid(sub_select->attributes)) {
-          yyerror(&@$, sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
-        }
-      }
 
       if($5 != nullptr)
       {
@@ -1162,6 +1134,11 @@ subquery_pexpr:        /*  select 语句的语法解析树*/
       if ($9 != nullptr) {
         sub_select->orderbys = *$9;
         delete $9;
+      }
+
+      if ($3 != nullptr) {
+        sub_select->attributes.swap(*$3);
+        delete $3;
       }
     }
     ;
@@ -1310,32 +1287,16 @@ type:
     | DATE_T   { $$=AttrType::DATES; }
     ;
 
-
-value_list:
-    /* empty */
-    {
-      $$ = nullptr;
-    }
-    | COMMA value value_list  { 
-      if ($3 != nullptr) {
-        $$ = $3;
-      } else {
-        $$ = new std::vector<Value>;
-      }
-      $$->emplace_back(*$2);
-      delete $2;
-    }
-    ;
 value:
     NUMBER {
       $$ = new Value((int)$1);
       @$ = @1;
     }
-    |FLOAT {
+    | FLOAT {
       $$ = new Value((float)$1);
       @$ = @1;
     }
-    |SSS {
+    | SSS {
       char *tmp = common::substr($1,1,strlen($1)-2);
       if(strlen(tmp) > 65535){
         yyerror(&@$, sql_string, sql_result, scanner, "invalid text", SCF_INVALID);
@@ -1343,11 +1304,11 @@ value:
       $$ = new Value(tmp);
       free(tmp);
     }
-    |NULL_T {
+    | NULL_T {
       $$ = new Value(AttrType::NULLS);
       @$ = @1;
     }
-    |DATE {
+    | DATE {
       char *tmp = common::substr($1,1,strlen($1)-2);
       $$ = new Value(tmp, DATES);
       free(tmp);
@@ -1357,49 +1318,6 @@ value:
     }
     ;
     
-
-aggr_func_type: 
-    AGGR_MAX { $$ = AggrFuncType::MAX; }
-    | AGGR_MIN { $$ = AggrFuncType::MIN; }
-    | AGGR_SUM { $$ = AggrFuncType::SUM; }
-    | AGGR_AVG { $$ = AggrFuncType::AVG; }
-    | AGGR_COUNT { $$ = AggrFuncType::COUNT; }
-    ;
-field_or_star:
-  '*' {
-    $$ = strdup("*");
-  }
-  | ID {
-    $$ = $1;
-  }
-  | ID DOT ID {
-    std::string res = $1;
-    res += ".";
-    res += $3;
-    $$ = strdup(res.c_str());
-  }
-  ;
-field_or_star_list:
-    {
-      $$ = nullptr;
-    }
-    | field_or_star field_or_star_list {
-      $$ = new std::vector<std::string>;
-      $$->emplace_back($1);
-      if ($2 != nullptr) {
-        $$->insert($$->end(), $2->begin(), $2->end());
-        delete $2;
-      }
-    }
-    | COMMA field_or_star field_or_star_list {
-      if ($3 != nullptr) {
-        $$ = $3;
-      } else {
-        $$ = new std::vector<std::string>;
-      }
-      $$->emplace_back($2);
-    }
-    ;
 
 rel_attr:
     '*' {
@@ -1424,14 +1342,6 @@ rel_attr:
       $$->attribute_name = $3;
       free($1);
       free($3);
-    }
-    | aggr_func_type LBRACE field_or_star_list RBRACE {
-      $$ = new RelAttrSqlNode;
-      $$->aggr_type = $1;
-      if ($3 != nullptr) {
-        $$->aggregates = *$3;
-        delete $3;
-      }
     }
     ;
   
@@ -1639,18 +1549,75 @@ func_pexpr:
     }
     ;
 
+
 list_pexpr:
-    LBRACE value value_list RBRACE
+    LBRACE pexpr pexpr_list RBRACE
     {
       PListExpr *list_pexpr = new PListExpr;
       if($3 != nullptr){
-        list_pexpr->value_list = *$3;
+        list_pexpr->expr_list = *$3;
+        delete $3;
       }
-      list_pexpr->value_list.push_back(*$2);
-      std::reverse(list_pexpr->value_list.begin(), list_pexpr->value_list.end());
-      delete $2;
-      delete $3;
+      list_pexpr->expr_list.push_back($2);
+      std::reverse(list_pexpr->expr_list.begin(), list_pexpr->expr_list.end());
       $$ = list_pexpr;
+    }
+
+
+aggr_func_type: 
+    AGGR_MAX { $$ = AggrFuncType::MAX; }
+    | AGGR_MIN { $$ = AggrFuncType::MIN; }
+    | AGGR_SUM { $$ = AggrFuncType::SUM; }
+    | AGGR_AVG { $$ = AggrFuncType::AVG; }
+    | AGGR_COUNT { $$ = AggrFuncType::COUNT; }
+    ;
+
+aggr_pexpr:
+    aggr_func_type LBRACE pexpr RBRACE {
+      // 注意pexpr当unary的时候可能是 *
+      PAggrExpr * agexpr = new PAggrExpr;
+      if($3->type == PExpType::UNARY) {
+        if($3->uexp->is_attr) {
+          if($3->uexp->attr.relation_name == "*") {
+            yyerror(&@$, sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
+          } else if($3->uexp->attr.attribute_name == "*"){
+            agexpr->is_star = true;
+          } else {
+            agexpr->is_star = false;
+          }
+        }
+      } else {
+        agexpr->is_star = false;
+      }
+
+      // 如果is_star为true, 必须是count, AggrFuncType 则为COUNT_STAR
+      if(agexpr->is_star) {
+        if($1 != AggrFuncType::COUNT) {
+          yyerror(&@$, sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
+        }
+        else {
+          agexpr->type = AggrFuncType::COUNT_STAR;
+        }
+      } else {
+        agexpr->type = $1;
+      }
+      agexpr->expr = $3;
+      $$ = agexpr;
+    }
+    | aggr_func_type LBRACE pexpr COMMA pexpr aggr_pexpr_list RBRACE {
+      yyerror(&@$, sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
+    }
+    | aggr_func_type LBRACE RBRACE {
+      yyerror(&@$, sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
+    }
+    ;
+
+aggr_pexpr_list:
+    {
+      // do_nothing;
+    }
+    | COMMA pexpr aggr_pexpr_list {
+      // do_nothing;
     }
 
 pexpr:
@@ -1689,14 +1656,36 @@ pexpr:
         pexpr->name = token_name(sql_string, &@$);
         $$ = pexpr;
     }
-    | list_pexpr{
+    | list_pexpr {
         PExpr *pexpr = new PExpr;
-          pexpr->type = PExpType::LIST;
-          pexpr->lexp = $1;
-          pexpr->name = token_name(sql_string, &@$);
-          $$ = pexpr;
+        pexpr->type = PExpType::LIST;
+        pexpr->lexp = $1;
+        pexpr->name = token_name(sql_string, &@$);
+        $$ = pexpr;
+    }
+    | aggr_pexpr {
+        PExpr *pexpr = new PExpr;
+        pexpr->type = PExpType::AGGRFUNC;
+        pexpr->agexp = $1;
+        pexpr->name = token_name(sql_string, &@$);
+        $$ = pexpr;
     }
     ;
+
+pexpr_list:
+    /* empty */
+    {
+      $$ = nullptr;
+    }
+    | COMMA pexpr pexpr_list
+    {
+      if ($3 != nullptr) {
+        $$ = $3;
+      } else {
+        $$ = new std::vector<PExpr *>;
+      }
+      $$->emplace_back($2);
+    }
 
 opt_semicolon: /*empty*/
     | SEMICOLON

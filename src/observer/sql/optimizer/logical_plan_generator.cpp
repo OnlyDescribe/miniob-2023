@@ -22,6 +22,7 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/insert_logical_operator.h"
 #include "sql/operator/delete_logical_operator.h"
 #include "sql/operator/join_logical_operator.h"
+#include "sql/operator/groupby_logical_operator.h"
 #include "sql/operator/orderby_logical_operator.h"
 #include "sql/operator/project_logical_operator.h"
 #include "sql/operator/explain_logical_operator.h"
@@ -104,7 +105,8 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
   unique_ptr<LogicalOperator> table_oper(nullptr);
 
   const std::vector<Table *> &tables = select_stmt->tables();
-  const std::vector<Field> &all_fields = select_stmt->query_fields();
+  // move to logical operator
+  auto &all_projects = select_stmt->projects;
   // 连表条件
   const auto &join_on_units = select_stmt->join_on_stmt()->join_units();
 
@@ -114,14 +116,7 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
   int join_on_units_index = 0;
 
   for (Table *table : tables) {
-    std::vector<Field> fields;
-    for (const Field &field : all_fields) {
-      if (0 == strcmp(field.table_name(), table->name())) {
-        fields.push_back(field);
-      }
-    }
-
-    unique_ptr<LogicalOperator> table_get_oper(new TableGetLogicalOperator(table, fields, true /*readonly*/));
+    unique_ptr<LogicalOperator> table_get_oper(new TableGetLogicalOperator(table, true /*readonly*/));
     if (table_oper == nullptr) {
       table_oper = std::move(table_get_oper);
     } else {
@@ -185,26 +180,42 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
     top_op.swap(orderby_oper);
   }
 
-  // 聚合 logic_op，直接使用构造
-  if (select_stmt->is_aggregation_stmt()) {
-    unique_ptr<LogicalOperator> aggr_oper = make_unique<AggregationLogicalOperator>();
-    std::vector<std::unique_ptr<Expression>> expressions;
-    for (const auto &field : all_fields) {
-      if (field.with_aggr()) {
-        expressions.emplace_back(std::make_unique<AggretationExpr>(field, field.get_aggr_type()));
-      }
+  std::vector<Expression *> aggr_exprs, field_exprs;
+  for (const auto &project : all_projects) {
+    AggretationExpr::get_aggrfuncexprs(project.get(), aggr_exprs);
+    FieldExpr::get_fieldexprs(project.get(), field_exprs);
+  }
+
+  if (aggr_exprs.size() && field_exprs.size()) {
+    if (select_stmt->groupbys().empty()) {
+      return RC::SQL_SYNTAX;
     }
-    static_cast<AggregationLogicalOperator *>(aggr_oper.get())->set_aggregation_expr(std::move(expressions));
+  }
+
+  // 聚合 logic_op，或者groupby, 算数表达式上，只能挂聚合，或者数字
+  if (aggr_exprs.size()) {
+    unique_ptr<LogicalOperator> aggr_oper = make_unique<AggregationLogicalOperator>();
+    static_cast<AggregationLogicalOperator *>(aggr_oper.get())->set_aggregation_expr(std::move(all_projects));
     aggr_oper->add_child(std::move(top_op));
     top_op.swap(aggr_oper);
-  } else {
-    unique_ptr<LogicalOperator> project_oper(new ProjectLogicalOperator(all_fields));
+  } else if (field_exprs.size()) {
+    // 算数表达式上，可以挂fieldExpr，或者ValueExpr
+    unique_ptr<LogicalOperator> project_oper(new ProjectLogicalOperator(std::move(all_projects)));
     if (top_op) {
       project_oper->add_child(std::move(top_op));
     }
     top_op.swap(project_oper);
+  } else {
+    // TODO: 这里不需要groupby 中的 聚合，不需要和表达式结合
+    std::vector<std::unique_ptr<Expression>> groupby_exprs;
+    for (const auto &field : select_stmt->groupbys()) {
+      groupby_exprs.emplace_back(std::make_unique<FieldExpr>(field));
+    }
+    unique_ptr<LogicalOperator> aggr_oper = make_unique<GroupbyLogicalOperator>(
+        std::move(groupby_exprs), select_stmt->having_stmt(), std::move(all_projects));
+    aggr_oper->add_child(std::move(top_op));
+    top_op.swap(aggr_oper);
   }
-
   logical_operator.swap(top_op);
   return RC::SUCCESS;
 }
@@ -223,7 +234,7 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
     // 创建filter_unit左右子查询的逻辑算子
     if (filter_unit->left->type() == ExprType::SUBQUERY) {
       auto sub_query_expr = static_cast<SubQueryExpr *>(filter_unit->left.get());
-      if (sub_query_expr->subquery_stmt->query_fields().size() != 1) {
+      if (sub_query_expr->subquery_stmt->projects.size() != 1) {
         return RC::TOO_MANY_COLS;
       }
       rc = create_plan(sub_query_expr->subquery_stmt, sub_query_expr->oper);
@@ -233,7 +244,7 @@ RC LogicalPlanGenerator::create_plan(FilterStmt *filter_stmt, unique_ptr<Logical
     }
     if (filter_unit->right->type() == ExprType::SUBQUERY) {
       auto sub_query_expr = static_cast<SubQueryExpr *>(filter_unit->right.get());
-      if (sub_query_expr->subquery_stmt->query_fields().size() != 1) {
+      if (sub_query_expr->subquery_stmt->projects.size() != 1) {
         return RC::TOO_MANY_COLS;
       }
       rc = create_plan(sub_query_expr->subquery_stmt, sub_query_expr->oper);
@@ -278,7 +289,7 @@ RC LogicalPlanGenerator::create_plan(DeleteStmt *delete_stmt, unique_ptr<Logical
     const FieldMeta *field_meta = table->table_meta().field(i);
     fields.push_back(Field(table, field_meta));
   }
-  unique_ptr<LogicalOperator> table_get_oper(new TableGetLogicalOperator(table, fields, false /*readonly*/));
+  unique_ptr<LogicalOperator> table_get_oper(new TableGetLogicalOperator(table, false /*readonly*/));
 
   unique_ptr<LogicalOperator> predicate_oper;
   RC rc = create_plan(filter_stmt, predicate_oper);
@@ -326,7 +337,7 @@ RC LogicalPlanGenerator::create_plan(UpdateStmt *update_stmt, unique_ptr<Logical
     const FieldMeta *field_meta = table->table_meta().field(i);
     fields.push_back(Field(table, field_meta));
   }
-  unique_ptr<LogicalOperator> table_get_oper(new TableGetLogicalOperator(table, fields, false /*readonly*/));
+  unique_ptr<LogicalOperator> table_get_oper(new TableGetLogicalOperator(table, false /*readonly*/));
 
   unique_ptr<LogicalOperator> predicate_oper;
   RC rc = create_plan(filter_stmt, predicate_oper);

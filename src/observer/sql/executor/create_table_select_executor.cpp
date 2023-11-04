@@ -32,7 +32,7 @@ RC CreateTableSelectExecutor::execute(SQLStageEvent *sql_event)
 
   // 1. 从select获取并设置新表的attr_infos
   std::vector<AttrInfoSqlNode> select_attr_infos;
-  const TupleSchema &schema = sql_result->tuple_schema();
+  const TupleSchema &schema = sql_result->physical_operator()->tuple_schema();
   int attribute_count = schema.cell_num();
   select_attr_infos.resize(attribute_count);
 

@@ -46,6 +46,16 @@ ENDIF()
 SET_TARGET_PROPERTIES(observer_static PROPERTIES OUTPUT_NAME observer)
 TARGET_LINK_LIBRARIES(observer_static ${LIBRARIES})
 
+find_package(TBB QUIET)
+
+if(TBB_FOUND)
+    include_directories(${TBB_INCLUDE_DIRS})
+    target_link_libraries(observer TBB::tbb)
+    target_link_libraries(observer_static TBB::tbb)
+else()
+    message(WARNING "TBB library not found. Some functionality may be limited.")
+endif()
+
 # Target 必须在定义 ADD_EXECUTABLE 之后， programs 不受这个限制
 # TARGETS和PROGRAMS 的默认权限是OWNER_EXECUTE, GROUP_EXECUTE, 和WORLD_EXECUTE，即755权限， programs 都是处理脚本类
 # 类型分为RUNTIME／LIBRARY／ARCHIVE, prog

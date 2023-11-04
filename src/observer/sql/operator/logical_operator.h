@@ -39,6 +39,7 @@ enum class LogicalOperatorType
   PREDICATE,    ///< 过滤，就是谓词
   PROJECTION,   ///< 投影，就是select
   AGGREGATION,  ///< 聚合
+  GROUPBY,      ///< 聚合
   ORDER_BY,     ///< 聚合
   JOIN,         ///< 连接
   INSERT,       ///< 插入
@@ -73,6 +74,7 @@ public:
       case LogicalOperatorType::DELETE: return "DELETE";
       case LogicalOperatorType::UPDATE: return "UPDATE";
       case LogicalOperatorType::EXPLAIN: return "EXPLAIN";
+      case LogicalOperatorType::GROUPBY: return "GROUPBY";
       default: break;
     }
     return "NO_SUPPORT";

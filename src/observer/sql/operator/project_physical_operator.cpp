@@ -17,6 +17,23 @@ See the Mulan PSL v2 for more details. */
 #include "storage/record/record.h"
 #include "storage/table/table.h"
 
+ProjectPhysicalOperator::ProjectPhysicalOperator(std::vector<std::unique_ptr<Expression>> &&exprs)
+    : exprs_(std::move(exprs))
+{
+  // for (const auto& expr: exprs_) {
+  //   if (expr->type() == ExprType::FIELD) {
+  //     auto field_expr = static_cast<FieldExpr*>(expr.get());
+  //     auto table = field_expr->field().table();
+  //     auto field_meta = field_expr->field().meta();
+  //     TupleCellSpec *spec = new TupleCellSpec(table->name(), field_meta->name(), field_meta->name());
+  //     tuple_.add_cell_spec(spec);
+  //   } else if (expr->type() == ExprType::ARITHMETIC) {
+  //     // tuple_.ad
+  //   }
+  // }
+  tuple_.set_expressions(&exprs_);
+}
+
 RC ProjectPhysicalOperator::open(Trx *trx)
 {
   if (children_.empty()) {
@@ -52,12 +69,4 @@ Tuple *ProjectPhysicalOperator::current_tuple()
 {
   tuple_.set_tuple(children_[0]->current_tuple());
   return &tuple_;
-}
-
-void ProjectPhysicalOperator::add_projection(const Table *table, const FieldMeta *field_meta)
-{
-  // 对单表来说，展示的(alias) 字段总是字段名称，
-  // 对多表查询来说，展示的alias 需要带表名字
-  TupleCellSpec *spec = new TupleCellSpec(table->name(), field_meta->name(), field_meta->name());
-  tuple_.add_cell_spec(spec);
 }

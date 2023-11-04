@@ -33,6 +33,13 @@ public:
   RC close() override;
   Tuple *current_tuple() override;
 
+  virtual TupleSchema tuple_schema() const override
+  {
+    TupleSchema schema;
+    schema.append_cell("Query Plan");
+    return schema;
+  }
+
 private:
   void to_string(std::ostream &os, PhysicalOperator *oper, int level, bool last_child, std::vector<bool> &ends);
 
