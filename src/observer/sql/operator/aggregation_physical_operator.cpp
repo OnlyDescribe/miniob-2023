@@ -53,11 +53,11 @@ RC AggregationPhysicalOperator::next()
     return RC::RECORD_EOF;
   }
   // 拿到所有的fields
-  std::vector<Field> fields;
-  for (const auto &aggr_expr : aggr_exprs_) {
-    fields.push_back(static_cast<AggretationExpr *>(aggr_expr.get())->filed());
-  }
-  tuple_ = std::make_unique<AggregationTuple>(ht_->aggr_results().aggregates_, fields);
+  // std::vector<Field> fields;
+  // for (const auto &aggr_expr : aggr_exprs_) {
+  //   fields.push_back(static_cast<AggretationExpr *>(aggr_expr.get())->filed());
+  // }
+  tuple_ = std::make_unique<AggregationTuple>(ht_->aggr_results().aggregates_);
   is_execute_ = true;
   return RC::SUCCESS;
 }

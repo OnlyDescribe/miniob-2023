@@ -176,20 +176,7 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
   // 聚合 logic_op，或者groupby
   if (select_stmt->whereConditoin == WhereConditoin::AGGREGATION) {
     unique_ptr<LogicalOperator> aggr_oper = make_unique<AggregationLogicalOperator>();
-    std::vector<std::unique_ptr<Expression>> expressions;
-    // TODO: 改为聚合函数表达式
-    for (const auto &project : all_projects) {
-      if (project->type() != ExprType::FIELD) {
-        LOG_WARN("应该是Field表达式");
-        return RC::INTERNAL;
-      }
-      auto field_expr = static_cast<FieldExpr*>(project.get());
-      if (field_expr->field().with_aggr()) {
-        expressions.emplace_back(std::make_unique<AggretationExpr>(field_expr->field(), field_expr->field().get_aggr_type()));
-        expressions.back()->set_name(field_expr->name());
-      }
-    }
-    static_cast<AggregationLogicalOperator *>(aggr_oper.get())->set_aggregation_expr(std::move(expressions));
+    static_cast<AggregationLogicalOperator *>(aggr_oper.get())->set_aggregation_expr(std::move(all_projects));
     aggr_oper->add_child(std::move(top_op));
     top_op.swap(aggr_oper);
   } else if (select_stmt->whereConditoin == WhereConditoin::GROUPBY) {
@@ -199,15 +186,7 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
       groupby_exprs.emplace_back(std::make_unique<FieldExpr>(field));
     }
     unique_ptr<LogicalOperator> aggr_oper = make_unique<GroupbyLogicalOperator>(std::move(groupby_exprs), 
-      select_stmt->having_stmt(), all_fields);
-    // 需要聚合的字段
-    std::vector<std::unique_ptr<Expression>> expressions;
-    for (const auto &field : all_fields) {
-      if (field.with_aggr()) {
-        expressions.emplace_back(std::make_unique<AggretationExpr>(field, field.get_aggr_type()));
-      }
-    }
-    static_cast<GroupbyLogicalOperator *>(aggr_oper.get())->set_aggregation_expr(std::move(expressions));
+      select_stmt->having_stmt(), std::move(all_projects));
     aggr_oper->add_child(std::move(top_op));
     top_op.swap(aggr_oper);
   } else {

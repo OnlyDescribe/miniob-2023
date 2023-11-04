@@ -29,12 +29,11 @@ class GroupbyPhysicalOperator : public PhysicalOperator
 {
 
 public:
-  GroupbyPhysicalOperator(std::vector<std::unique_ptr<Expression>> &&aggr_exprs, FilterStmt* having, 
-    std::vector<std::unique_ptr<Expression>> &&groupbys, const std::vector<Field>& query_fields)
-      : aggr_exprs_(std::move(aggr_exprs)),
+  GroupbyPhysicalOperator(std::vector<std::unique_ptr<Expression>> &&projcets, FilterStmt* having, 
+    std::vector<std::unique_ptr<Expression>> &&groupbys)
+      : projcets_(std::move(projcets)),
         having_(having),
-        groupbys_(std::move(groupbys)),
-        query_fields_(query_fields) {}
+        groupbys_(std::move(groupbys)){}
 
   // TODO: having_expr_会内存泄漏，但是如果加上delete后，这里有一个core
   virtual ~GroupbyPhysicalOperator() {
@@ -54,10 +53,9 @@ private:
   RC create_having_expression();          // 将having语句处理成conjunction expression
 
 private:
-  std::vector<std::unique_ptr<Expression>> aggr_exprs_;  // 聚合表达式
+  std::vector<std::unique_ptr<Expression>> projcets_;  // 聚合表达式
   std::vector<std::unique_ptr<Expression>> groupbys_;    // groupby 子句, 应该是FieldExpr
-  FilterStmt* having_;                                   // having
-  std::vector<Field> query_fields_;                      // 聚合表达式的cell之外，还有groupby的cell
+  FilterStmt* having_;                                   // having, not own this;
   std::unordered_map<AggregateKey, SimpleAggregationHashTable> ht_;    // grouby + 聚合哈希表
   std::unordered_map<AggregateKey, SimpleAggregationHashTable>::iterator it_;
   AggregateValue aggr_results_;
@@ -66,5 +64,5 @@ private:
   std::vector<int> relations_;                // 字段映射
 
   // std::shared_ptr<ConjunctionExpr> having_expr_;
-  ConjunctionExpr* having_expr_{nullptr}; // 用于having的过滤
+  ConjunctionExpr* having_expr_{nullptr};   // 用于having的过滤
 };

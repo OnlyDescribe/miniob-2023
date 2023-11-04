@@ -295,10 +295,9 @@ RC PhysicalPlanGenerator::create_plan(GroupbyLogicalOperator &groupby_oper, uniq
 
   unique_ptr<PhysicalOperator> groupby_phyoper(
     new GroupbyPhysicalOperator(
-      std::move(groupby_oper.expressions()), 
+      std::move(groupby_oper.projects), 
       groupby_oper.having, 
-      std::move(groupby_oper.groupbys), 
-      groupby_oper.query_fields));
+      std::move(groupby_oper.groupbys)));
   groupby_phyoper->add_child(std::move(child_phy_oper));
 
   oper.swap(groupby_phyoper);

@@ -138,6 +138,7 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
       }
       ag_expr->set_name(attr_pexp->name);
       projects.emplace_back(ag_expr);
+      aggr_field_cnt++;
       continue;
     }
 

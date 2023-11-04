@@ -41,17 +41,6 @@ ArithmeticExpr *create_arithmetic_expression(ArithmeticExpr::Type type,
   return expr;
 }
 
-bool IsAttributesVailid(const std::vector<PExpr *> &select_attr)
-{
-  int relattr_cnt = 0;
-  for (const PExpr *node : select_attr) {
-    if (node->type == PExpType::UNARY && node->uexp->attr.aggr_type == AggrFuncType::INVALID || node->type != PExpType::UNARY) {
-      relattr_cnt++;
-    }
-  }
-  return relattr_cnt == 0 || (relattr_cnt == static_cast<int>(select_attr.size()));
-}
-
 %}
 
 %define api.pure full
@@ -453,13 +442,6 @@ create_table_select_stmt:
       free($3);
 
       SelectSqlNode& select = create_table_select.select;
-      if ($6 != nullptr) {
-        select.attributes.swap(*$6);
-        delete $6;
-        if (!IsAttributesVailid(select.attributes)) {
-          yyerror(&@$, sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
-        }
-      }
 
       if($8 != nullptr)
       {
@@ -482,14 +464,11 @@ create_table_select_stmt:
         select.orderbys = *$12;
         delete $12;
       }
-<<<<<<< HEAD
-=======
 
       if ($6 != nullptr) {
         select.attributes.swap(*$6);
         delete $6;
       }
->>>>>>> 5739d9c (add: 聚合的语法解析)
     }
     | CREATE TABLE ID LBRACE attr_def attr_def_list RBRACE SELECT select_attr FROM select_from where group_by having order_by
     {
@@ -509,13 +488,6 @@ create_table_select_stmt:
       delete $5;
 
       SelectSqlNode& select = create_table_select.select;
-      if ($9 != nullptr) {
-        select.attributes.swap(*$9);
-        delete $9;
-        if (!IsAttributesVailid(select.attributes)) {
-          yyerror(&@$, sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
-        }
-      }
 
       if($11 != nullptr)
       {
@@ -538,15 +510,11 @@ create_table_select_stmt:
         select.orderbys = *$15;
         delete $15;
       }
-<<<<<<< HEAD
-=======
 
       if ($9 != nullptr) {
         select.attributes.swap(*$9);
         delete $9;
       }
-
->>>>>>> 5739d9c (add: 聚合的语法解析)
     }
     ;
 
@@ -559,13 +527,6 @@ create_view_stmt:
       free($3);
 
       SelectSqlNode& select = create_view.select;
-      if ($6 != nullptr) {
-        select.attributes.swap(*$6);
-        delete $6;
-        if (!IsAttributesVailid(select.attributes)) {
-          yyerror(&@$, sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
-        }
-      }
 
       if($8 != nullptr)
       {
@@ -588,14 +549,11 @@ create_view_stmt:
         select.orderbys = *$12;
         delete $12;
       }
-<<<<<<< HEAD
-=======
 
       if ($6 != nullptr) {
         select.attributes.swap(*$6);
         delete $6;
       }
->>>>>>> 5739d9c (add: 聚合的语法解析)
     }
     ;
 
@@ -654,14 +612,6 @@ select_stmt:        /*  select 语句的语法解析树*/
     {
       $$ = new ParsedSqlNode(SCF_SELECT);
 
-      if ($2 != nullptr) {
-        $$->selection.attributes.swap(*$2);
-        delete $2;
-        if (!IsAttributesVailid($$->selection.attributes)) {
-          yyerror(&@$, sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
-        }
-      }
-
       if($4 != nullptr)
       {
         FromSqlNode* from_node = $4;
@@ -683,14 +633,11 @@ select_stmt:        /*  select 语句的语法解析树*/
         $$->selection.orderbys = *$8;
         delete $8;
       }
-<<<<<<< HEAD
-=======
 
       if ($2 != nullptr) {
         $$->selection.attributes.swap(*$2);
         delete $2;
       }
->>>>>>> 5739d9c (add: 聚合的语法解析)
     }
     ;
 
@@ -1142,13 +1089,6 @@ subquery_pexpr:        /*  select 语句的语法解析树*/
       $$ = new PSubQueryExpr;
       $$->sub_select = new SelectSqlNode();
       SelectSqlNode * sub_select = $$->sub_select;
-      if ($3 != nullptr) {
-        sub_select->attributes.swap(*$3);
-        delete $3;
-        if (!IsAttributesVailid(sub_select->attributes)) {
-          yyerror(&@$, sql_string, sql_result, scanner, "invalid aggr func", SCF_INVALID);
-        }
-      }
 
       if($5 != nullptr)
       {
@@ -1171,14 +1111,11 @@ subquery_pexpr:        /*  select 语句的语法解析树*/
         sub_select->orderbys = *$9;
         delete $9;
       }
-<<<<<<< HEAD
-=======
 
       if ($3 != nullptr) {
         sub_select->attributes.swap(*$3);
         delete $3;
       }
->>>>>>> 5739d9c (add: 聚合的语法解析)
     }
     ;
 
