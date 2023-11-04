@@ -61,7 +61,8 @@ enum class ExprType
   CONJUNCTION,   ///< 多个表达式使用同一种关系(AND或OR)来联结
   ARITHMETIC,    ///< 算术运算
   SUBQUERY,      ///< 子查询
-  LIST           ///< 列表达式
+  LIST,           ///< 列表达式
+  HavingField    // 取得havingField的值
 };
 
 /**
@@ -478,4 +479,37 @@ public:
 private:
   std::vector<std::unique_ptr<Expression>> values_;
   mutable int idx_{0};
+};
+
+
+/**
+ * @brief having表达式，用于从聚合的完整列中，取值
+ * 比如 having a > 1 and b < 1;
+ * get_value() 能返回a的值
+ */
+class HavingFieldExpr : public Expression
+{
+public:
+  explicit HavingFieldExpr(int pos): pos_(pos) {}
+
+  virtual ~HavingFieldExpr() = default;
+
+  virtual RC get_value(const Tuple &tuple, Value &value) const;
+
+  RC try_get_value(Value &value) const { return RC::UNIMPLENMENT; }
+  /**
+   * @brief 表达式的类型
+   * 可以根据表达式类型来转换为具体的子类
+   */
+  ExprType type() const { return ExprType::HavingField; }
+
+  /**
+   * @brief 表达式值的类型
+   * @details 一个表达式运算出结果后，只有一个值
+   */
+  AttrType value_type() const { return AttrType::UNDEFINED; };
+
+
+private:
+  int pos_;
 };

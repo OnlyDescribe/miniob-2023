@@ -13,19 +13,29 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/logical_operator.h"
 #include "sql/expr/expression.h"
 #include "storage/field/field.h"
+#include "sql/stmt/filter_stmt.h"
 
 /**
  * @brief 表示聚合操作的算子，需要聚合表达式，以及多个字段的聚合。
- * @ingroup AggregationLogicalOperator
+ * @ingroup GroupbyLogicalOperator
  */
-class AggregationLogicalOperator : public LogicalOperator
+class GroupbyLogicalOperator : public LogicalOperator
 {
 public:
-  AggregationLogicalOperator() {}
-  virtual ~AggregationLogicalOperator() = default;
+  // 使用聚合的field，以及分组的key
+  GroupbyLogicalOperator(std::vector<std::unique_ptr<Expression>> &&o_groupbys, FilterStmt* o_having, const std::vector<Field> &o_query_fields):
+    query_fields(o_query_fields),
+    groupbys(std::move(o_groupbys)),
+    having(o_having) {}
+  virtual ~GroupbyLogicalOperator() = default;
 
-  LogicalOperatorType type() const override { return LogicalOperatorType::AGGREGATION; }
+  LogicalOperatorType type() const override { return LogicalOperatorType::GROUPBY; }
 
   void set_aggregation_expr(std::vector<std::unique_ptr<Expression>> &&exprs) { expressions_ = std::move(exprs); }
   const std::vector<std::unique_ptr<Expression>> &aggregation_expr() const { return expressions_; }
+
+  std::vector<Field> query_fields;
+  std::vector<std::unique_ptr<Expression>> groupbys;      // groupby Exprs;
+
+  FilterStmt* having{nullptr};      // not own this
 };

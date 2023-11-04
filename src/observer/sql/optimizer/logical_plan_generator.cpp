@@ -22,6 +22,7 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/insert_logical_operator.h"
 #include "sql/operator/delete_logical_operator.h"
 #include "sql/operator/join_logical_operator.h"
+#include "sql/operator/groupby_logical_operator.h"
 #include "sql/operator/orderby_logical_operator.h"
 #include "sql/operator/project_logical_operator.h"
 #include "sql/operator/explain_logical_operator.h"
@@ -172,8 +173,8 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
     top_op.swap(orderby_oper);
   }
 
-  // 聚合 logic_op，直接使用构造
-  if (select_stmt->is_aggregation_stmt()) {
+  // 聚合 logic_op，或者groupby
+  if (select_stmt->whereConditoin == WhereConditoin::AGGREGATION) {
     unique_ptr<LogicalOperator> aggr_oper = make_unique<AggregationLogicalOperator>();
     std::vector<std::unique_ptr<Expression>> expressions;
     // TODO: 改为聚合函数表达式
@@ -189,6 +190,24 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
       }
     }
     static_cast<AggregationLogicalOperator *>(aggr_oper.get())->set_aggregation_expr(std::move(expressions));
+    aggr_oper->add_child(std::move(top_op));
+    top_op.swap(aggr_oper);
+  } else if (select_stmt->whereConditoin == WhereConditoin::GROUPBY) {
+    // 需要聚合聚合表达式，把需要聚合的字段都拿出来
+    std::vector<std::unique_ptr<Expression>> groupby_exprs;
+    for (const auto &field : select_stmt->groupbys()) {
+      groupby_exprs.emplace_back(std::make_unique<FieldExpr>(field));
+    }
+    unique_ptr<LogicalOperator> aggr_oper = make_unique<GroupbyLogicalOperator>(std::move(groupby_exprs), 
+      select_stmt->having_stmt(), all_fields);
+    // 需要聚合的字段
+    std::vector<std::unique_ptr<Expression>> expressions;
+    for (const auto &field : all_fields) {
+      if (field.with_aggr()) {
+        expressions.emplace_back(std::make_unique<AggretationExpr>(field, field.get_aggr_type()));
+      }
+    }
+    static_cast<GroupbyLogicalOperator *>(aggr_oper.get())->set_aggregation_expr(std::move(expressions));
     aggr_oper->add_child(std::move(top_op));
     top_op.swap(aggr_oper);
   } else {

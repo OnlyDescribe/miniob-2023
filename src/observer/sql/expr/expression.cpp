@@ -910,3 +910,10 @@ RC ListExpr::create_expression(const PExpr *expr, const std::unordered_map<std::
   res_expr = list_expr;
   return RC::SUCCESS;
 }
+////////////////////////////////////////////////////////////////////////////////
+RC HavingFieldExpr::get_value(const Tuple &tuple, Value &value) const {
+  if (pos_ < 0 && pos_ >= tuple.cell_num()) {
+    return RC::INTERNAL;
+  }
+  return tuple.cell_at(pos_, value);
+}

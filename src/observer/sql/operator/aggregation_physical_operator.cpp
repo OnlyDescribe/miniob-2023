@@ -20,9 +20,8 @@ RC AggregationPhysicalOperator::open(Trx *trx)
   if (children_.empty()) {
     return RC::INTERNAL;
   }
-  aggr_results_ = ht_->generate_initial_aggregateValue();
   ht_->clear();
-  not_null_record_num_ = ht_->generate_initial_aggregateValue();
+  ht_->init();
   const auto child_op = children_.front().get();
   RC rc = child_op->open(trx);
   Tuple *tuple;
@@ -37,9 +36,10 @@ RC AggregationPhysicalOperator::open(Trx *trx)
       aggr_exprs_[i]->get_value(*tuple, value);
       aggr_value.aggregates_.emplace_back(value);
     }
-    ht_->combine_aggregate_values(&aggr_results_, aggr_value, not_null_record_num_);
+    ht_->combine_aggregate_values(aggr_value);
   }
   is_execute_ = false;
+  ht_->generate_aggregate_values();
   if (rc == RC::RECORD_EOF) {
     rc = RC::SUCCESS;
   }
@@ -57,15 +57,7 @@ RC AggregationPhysicalOperator::next()
   for (const auto &aggr_expr : aggr_exprs_) {
     fields.push_back(static_cast<AggretationExpr *>(aggr_expr.get())->filed());
   }
-  // 更改avg的结果, 统一改成float
-  for (int i = 0; i < aggr_results_.aggregates_.size(); i++) {
-    if (!not_null_record_num_.aggregates_[i].is_null() &&
-        static_cast<AggretationExpr *>(aggr_exprs_[i].get())->aggr_type() == AggrFuncType::AVG) {
-      aggr_results_.aggregates_[i] =
-          Value(aggr_results_.aggregates_[i].get_float() / not_null_record_num_.aggregates_[i].get_int());
-    }
-  }
-  tuple_ = std::make_unique<AggregationTuple>(aggr_results_.aggregates_, fields);
+  tuple_ = std::make_unique<AggregationTuple>(ht_->aggr_results().aggregates_, fields);
   is_execute_ = true;
   return RC::SUCCESS;
 }

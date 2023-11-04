@@ -31,6 +31,9 @@ SelectStmt::~SelectStmt()
     delete join_on_stmt_;
   }
 
+  if (having_stmt_ != nullptr) {
+    delete having_stmt_;
+  }
 }
 
 
@@ -206,7 +209,8 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
 
   LOG_INFO("got %d tables in from stmt and %d fields in query stmt", tables.size(), projects.size());
 
-  if (aggr_field_cnt != 0 && aggr_field_cnt != static_cast<int>(select_sql.attributes.size())) {
+  if (aggr_field_cnt != 0 && aggr_field_cnt != static_cast<int>(select_sql.attributes.size()) &&
+    select_sql.groupbys.empty()) {
     LOG_WARN("num of aggregation is invalid");
     return RC::INVALID_ARGUMENT;
   }
@@ -244,6 +248,18 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
     orderbys->emplace_back(field, order_by.sort_type);
   }
 
+  // groupbys
+  std::vector<Field> groupbys;
+  for (const auto& groupby_attr: select_sql.groupbys) {
+    Field field;
+    RC rc = createField(tables, groupby_attr.relation_name.c_str(), groupby_attr.attribute_name.c_str(), field);
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("groupby key error");
+      return rc;
+    }
+    groupbys.emplace_back(field);
+  }
+  
   // everything alright
   SelectStmt *select_stmt = new SelectStmt();
   select_stmt->tables_.swap(tables);
@@ -251,8 +267,26 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
   select_stmt->join_on_stmt_ = join_on_stmt;
   select_stmt->filter_stmt_ = filter_stmt;
   select_stmt->orderbys_ = std::move(orderbys);
-  select_stmt->set_is_aggregation_stmt(aggr_field_cnt > 0);
+  select_stmt->groupbys_.swap(groupbys);
 
+  // groupby or aggregation
+  if (aggr_field_cnt > 0) {
+    if (select_stmt->groupbys_.empty()) {
+      select_stmt->whereConditoin = WhereConditoin::AGGREGATION;
+    } else {
+      // 否则，就可以通过query_field拿到groupby的信息(那些field类型是聚合的)
+      select_stmt->whereConditoin = WhereConditoin::GROUPBY;
+      // create groupby, 这里偷懒，直接用filter_stmt
+      FilterStmt *having_stmt = nullptr;
+      rc = FilterStmt::create(db, default_table, &table_map, select_sql.havings, having_stmt);
+      if (rc != RC::SUCCESS) {
+        LOG_WARN("cannot construct filter stmt");
+        return rc;
+      }
+      select_stmt->having_stmt_ = having_stmt;
+    }
+  }
+ 
   stmt = select_stmt;
   return RC::SUCCESS;
 }

@@ -27,6 +27,8 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/predicate_physical_operator.h"
 #include "sql/operator/aggregation_logical_operator.h"
 #include "sql/operator/aggregation_physical_operator.h"
+#include "sql/operator/groupby_logical_operator.h"
+#include "sql/operator/groupby_physical_operator.h"
 #include "sql/operator/orderby_logical_operator.h"
 #include "sql/operator/orderby_physical_operator.h"
 #include "sql/operator/project_logical_operator.h"
@@ -94,6 +96,10 @@ RC PhysicalPlanGenerator::create(LogicalOperator &logical_operator, unique_ptr<P
 
     case LogicalOperatorType::AGGREGATION: {
       return create_plan(static_cast<AggregationLogicalOperator &>(logical_operator), oper);
+    } break;
+
+    case LogicalOperatorType::GROUPBY: {
+      return create_plan(static_cast<GroupbyLogicalOperator &>(logical_operator), oper);
     } break;
 
     default: {
@@ -266,6 +272,36 @@ RC PhysicalPlanGenerator::create_plan(AggregationLogicalOperator &aggr_oper, uni
   aggregation_oper->add_child(std::move(table_scan_phy_oper));
 
   oper.swap(aggregation_oper);
+  return rc;
+}
+
+// groupby 算子，应该在predict、全表扫描上面、或者join上面
+RC PhysicalPlanGenerator::create_plan(GroupbyLogicalOperator &groupby_oper, unique_ptr<PhysicalOperator> &oper)
+{
+
+  vector<unique_ptr<LogicalOperator>> &child_opers = groupby_oper.children();
+  assert(child_opers.size() == 1);
+
+  RC rc = RC::SUCCESS;
+  unique_ptr<PhysicalOperator> child_phy_oper;
+  if (!child_opers.empty()) {
+    LogicalOperator *child_oper = child_opers.front().get();
+    rc = create(*child_oper, child_phy_oper);
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("failed to create project logical operator's child physical operator. rc=%s", strrc(rc));
+      return rc;
+    }
+  }
+
+  unique_ptr<PhysicalOperator> groupby_phyoper(
+    new GroupbyPhysicalOperator(
+      std::move(groupby_oper.expressions()), 
+      groupby_oper.having, 
+      std::move(groupby_oper.groupbys), 
+      groupby_oper.query_fields));
+  groupby_phyoper->add_child(std::move(child_phy_oper));
+
+  oper.swap(groupby_phyoper);
   return rc;
 }
 

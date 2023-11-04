@@ -31,6 +31,7 @@ class JoinLogicalOperator;
 class CalcLogicalOperator;
 class AggregationLogicalOperator;
 class OrderByLogicalOperator;
+class GroupbyLogicalOperator;
 // class Order
 
 /**
@@ -59,4 +60,5 @@ private:
   RC create_plan(JoinLogicalOperator &logical_oper, std::unique_ptr<PhysicalOperator> &oper);
   RC create_plan(CalcLogicalOperator &logical_oper, std::unique_ptr<PhysicalOperator> &oper);
   RC create_plan(AggregationLogicalOperator &logical_oper, std::unique_ptr<PhysicalOperator> &oper);
+  RC create_plan(GroupbyLogicalOperator &logical_oper, std::unique_ptr<PhysicalOperator> &oper);
 };

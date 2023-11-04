@@ -537,6 +537,12 @@ private:
 class AggregationTuple : public Tuple
 {
 public:
+  /**
+   * @description: 
+   * @param {vector<Value>} &aggregations  表示聚合后的值
+   * @param {vector<Field>} &fields 这个字段没啥用
+   * @return {*}
+   */  
   AggregationTuple(const std::vector<Value> &aggregations, const std::vector<Field> &fields)
       : aggregations_(aggregations), fields_(fields)
   {}
@@ -575,6 +581,12 @@ public:
     AggregationTuple *tuple = new AggregationTuple(aggregations_, fields_);
     tuple->is_copy_ = true;  // do nothing here
     return tuple;
+  }
+
+  // aggregations 表示groupby返回一行的内容，为分组名+聚合的值
+  void set_aggregations(const std::vector<Value>& aggregations) {
+    aggregations_.clear();
+    aggregations_ = aggregations;
   }
 
 private:
