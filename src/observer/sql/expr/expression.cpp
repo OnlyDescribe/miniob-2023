@@ -686,9 +686,9 @@ RC AggretationExpr::get_value(const Tuple &tuple, Value &value) const
     case AggrFuncType::MIN:
     case AggrFuncType::MAX:
     case AggrFuncType::SUM:
-    case AggrFuncType::AVG: rc = tuple.find_cell(TupleCellSpec(field_.table_name(), field_.field_name()), value); break;
+    case AggrFuncType::AVG: rc = expr_->get_value(tuple, value); break;
     case AggrFuncType::COUNT:
-      rc = tuple.find_cell(TupleCellSpec(field_.table_name(), field_.field_name()), value);
+      rc = expr_->get_value(tuple, value);
       if (!value.is_null()) {
         value = Value(1);
       }
@@ -702,10 +702,15 @@ RC AggretationExpr::get_value(const Tuple &tuple, Value &value) const
 
 RC AggretationExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
   Expression *&res_expr, CompOp comp, Db *db) {
-  // TODO: 修改聚合类型
-  AggretationExpr* agexpr = new AggretationExpr();
+  assert(expr->agexp->expr);
+  Expression* sub_expr = nullptr;
+  RC rc = Expression::create_expression(expr->agexp->expr, table_map, sub_expr, comp, db);
+  if (rc != RC::SUCCESS) {
+    return rc;
+  }
+  AggretationExpr* agexpr = new AggretationExpr(sub_expr,expr->agexp->type, expr->agexp->is_star);
   res_expr = agexpr;
-  return RC::SUCCESS;
+  return rc;
 }
 
 

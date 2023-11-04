@@ -369,13 +369,17 @@ private:
 
 /**
  * @brief 聚合表达式
- * 表达对某个字段的聚合操作, max(id) 由聚合函数和字段两部分组成
+ * 表达对某个字段的聚合操作, 由Field和聚合类型两部分组成
+ * 表示对每一个tuple进行聚合操作后的结果
  */
 class AggretationExpr : public Expression
 {
 public:
-  AggretationExpr() = default;
-  AggretationExpr(Field field, AggrFuncType aggr_func_type) : aggr_func_type_(aggr_func_type), field_(field) {}
+  // AggretationExpr() = default;
+  explicit AggretationExpr(Expression* expr, AggrFuncType aggr_func_type, bool is_star) : 
+      aggr_func_type_(aggr_func_type), is_star_(is_star) { expr_.reset(expr); }
+  explicit AggretationExpr(std::unique_ptr<Expression>&&expr, AggrFuncType aggr_func_type, bool is_star) : 
+      aggr_func_type_(aggr_func_type), is_star_(is_star), expr_(std::move(expr)) {}
   RC get_value(const Tuple &tuple, Value &value) const;
 
   RC try_get_value(Value &value) const { return RC::UNIMPLENMENT; }
@@ -390,29 +394,17 @@ public:
    * @brief 表达式值的类型
    * @details 一个表达式运算出结果后，只有一个值
    */
-  AttrType value_type() const { return field_.attr_type(); };
+  AttrType value_type() const { return expr_->value_type(); };
 
   AggrFuncType aggr_type() { return aggr_func_type_; }
 
-  Field filed() const { return field_; }
-
-  static std::string to_string(const Field &field, AggrFuncType aggr_func_type)
-  {
-    auto it = AggretationExprStr.find(aggr_func_type);
-    if (it == AggretationExprStr.end()) {
-      return "";
-    }
-    if (aggr_func_type == AggrFuncType::COUNT_STAR) {
-      return it->second + "(*)";
-    }
-    return it->second + "(" + field.field_name() + ")";
-  }
   static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
     Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
 
 private:
   AggrFuncType aggr_func_type_;
-  Field field_;
+  bool is_star_{false};
+  std::unique_ptr<Expression> expr_;
 };
 
 /**
@@ -468,7 +460,12 @@ public:
 
   virtual ExprType type() const { return ExprType::LIST; }
 
-  virtual AttrType value_type() const { return AttrType::UNDEFINED; }
+  virtual AttrType value_type() const { 
+    if (values_.empty()) {
+      return AttrType::NULLS; 
+    }
+    return values_[0]->value_type();
+  }
 
   void reset() { idx_ = 0; }
 
