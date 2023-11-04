@@ -16,7 +16,8 @@ See the Mulan PSL v2 for more details. */
 
 using namespace std;
 
-RC GroupbyPhysicalOperator::create_having_expression() {
+RC GroupbyPhysicalOperator::create_having_expression()
+{
   // std::vector<unique_ptr<Expression>> cmp_exprs;
   // for (auto& having_unit: having_->filter_units()) {
   //   std::unique_ptr<Expression> left, right;
@@ -47,7 +48,7 @@ RC GroupbyPhysicalOperator::create_having_expression() {
   //     }
   //   } else if (having_unit->left->type() == ExprType::VALUE){
   //     left = std::move(having_unit->left);
-  //   } 
+  //   }
 
   //   if (having_unit->right->type() == ExprType::FIELD) {
   //     // 没调整顺序前的位置
@@ -77,7 +78,7 @@ RC GroupbyPhysicalOperator::create_having_expression() {
   //   } else if (having_unit->right->type() == ExprType::VALUE){
   //     right = std::move(having_unit->right);
   //   }
-    
+
   //   if (left == nullptr || right == nullptr) {
   //     LOG_WARN("left or right: having 不支持的字段类型 ");
   //     return RC::INTERNAL;
@@ -91,8 +92,9 @@ RC GroupbyPhysicalOperator::create_having_expression() {
   // }
 
   // if (!cmp_exprs.empty()) {
-  //   // having_expr_ = std::make_shared<ConjunctionExpr>(having_->is_or ? ConjunctionExpr::Type::OR : ConjunctionExpr::Type::AND, cmp_exprs);
-  //   having_expr_ = new ConjunctionExpr(having_->is_or ? ConjunctionExpr::Type::OR : ConjunctionExpr::Type::AND, cmp_exprs);
+  //   // having_expr_ = std::make_shared<ConjunctionExpr>(having_->is_or ? ConjunctionExpr::Type::OR :
+  //   ConjunctionExpr::Type::AND, cmp_exprs); having_expr_ = new ConjunctionExpr(having_->is_or ?
+  //   ConjunctionExpr::Type::OR : ConjunctionExpr::Type::AND, cmp_exprs);
   // }
 
   return RC::SUCCESS;
@@ -110,7 +112,7 @@ RC GroupbyPhysicalOperator::open(Trx *trx)
   // ht_.clear();
   // while ((rc = child_op->next()) == RC::SUCCESS) {
   //   tuple = child_op->current_tuple();
-    
+
   //   AggregateKey key;         // 获得grouby聚合的key
   //   key.group_bys_.reserve(groupbys_.size());
   //   for (int i = 0; i < groupbys_.size(); i++) {
@@ -157,7 +159,7 @@ RC GroupbyPhysicalOperator::open(Trx *trx)
   //   if (!query_fields_[i].with_aggr()) {
   //     for (int j = 0; j < groupbys_.size(); j++) {
   //       auto field_expr = static_cast<FieldExpr*>(groupbys_[j].get());
-  //       if (!strcmp(field_expr->field_name(), query_fields_[i].field_name()) 
+  //       if (!strcmp(field_expr->field_name(), query_fields_[i].field_name())
   //         && !strcmp(field_expr->table_name(), query_fields_[i].table_name())) {
   //           relations_.push_back(j);
   //           break;
@@ -178,7 +180,8 @@ RC GroupbyPhysicalOperator::open(Trx *trx)
   // return rc;
 }
 
-RC GroupbyPhysicalOperator::predicate(const Tuple& tuple, bool& res) {
+RC GroupbyPhysicalOperator::predicate(const Tuple &tuple, bool &res)
+{
   // res = true;
   // if (having_expr_ != nullptr) {
   //   Value value;
@@ -202,11 +205,9 @@ RC GroupbyPhysicalOperator::next()
   //   // 这里会根据having，和query_fields对结果进行一次 重新排序
   //   it_->second.generate_aggregate_values();
   //   values.insert(values.end(), it_->first.group_bys_.begin(), it_->first.group_bys_.end());
-  //   values.insert(values.end(), it_->second.aggr_results().aggregates_.begin(), it_->second.aggr_results().aggregates_.end());
-  //   tuple_->set_aggregations(values);
-  //   bool res;
-  //   rc = predicate(*tuple_, res);
-  //   if (rc != RC::SUCCESS) {
+  //   values.insert(values.end(), it_->second.aggr_results().aggregates_.begin(),
+  //   it_->second.aggr_results().aggregates_.end()); tuple_->set_aggregations(values); bool res; rc =
+  //   predicate(*tuple_, res); if (rc != RC::SUCCESS) {
   //     return rc;
   //   }
   //   if (res) {
@@ -229,8 +230,8 @@ RC GroupbyPhysicalOperator::next()
 
 Tuple *GroupbyPhysicalOperator::current_tuple() { return tuple_.get(); }
 
-
-RC GroupbyPhysicalOperator::close() {
+RC GroupbyPhysicalOperator::close()
+{
   // ht_.clear();
   return RC::SUCCESS;
 }

@@ -20,8 +20,7 @@ See the Mulan PSL v2 for more details. */
 class CalcPhysicalOperator : public PhysicalOperator
 {
 public:
-  CalcPhysicalOperator(std::vector<std::unique_ptr<Expression>> &&expressions)
-      : expressions_(std::move(expressions))
+  CalcPhysicalOperator(std::vector<std::unique_ptr<Expression>> &&expressions) : expressions_(std::move(expressions))
   {
     tuple_.set_expressions(&expressions_);
   }
@@ -61,7 +60,8 @@ public:
 
   const std::vector<std::unique_ptr<Expression>> &expressions() const { return expressions_; }
 
-  virtual TupleSchema tuple_schema() const override {
+  virtual TupleSchema tuple_schema() const override
+  {
     TupleSchema schema;
     for (const unique_ptr<Expression> &expr : expressions_) {
       schema.append_cell(expr->name().c_str());

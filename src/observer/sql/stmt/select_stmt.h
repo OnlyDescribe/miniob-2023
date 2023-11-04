@@ -40,7 +40,8 @@ struct OrderByUnit
 };
 
 // 为了区分聚合是在groupby里面的还是 单独的
-enum class WhereConditoin {
+enum class WhereConditoin
+{
   NONE,
   AGGREGATION,
   GROUPBY,
@@ -75,6 +76,7 @@ public:
 
   // not own this, move to physical operator
   std::vector<std::unique_ptr<Expression>> projects;
+
 private:
   std::vector<Table *> tables_;
   std::unique_ptr<std::vector<OrderByUnit>> orderbys_;

@@ -80,7 +80,8 @@ public:
   virtual Tuple *current_tuple() = 0;
 
   // 获取当前tuple的schema
-  virtual TupleSchema tuple_schema() const {
+  virtual TupleSchema tuple_schema() const
+  {
     TupleSchema empty_schema;
     return empty_schema;
   }

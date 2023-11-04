@@ -48,7 +48,7 @@ RC OrderbyPhysicalOperator::open(Trx *trx)
     item.data = tuple->copy_tuple();
     items_.push_back(item);
   }
-  // vector<Tuple*> 
+  // vector<Tuple*>
   // 内存排序模型
   std::sort(items_.begin(), items_.end(), [&](const SortItem &a, const SortItem &b) -> bool {
     assert(a.key->size() == b.key->size());

@@ -29,14 +29,14 @@ class GroupbyPhysicalOperator : public PhysicalOperator
 {
 
 public:
-  GroupbyPhysicalOperator(std::vector<std::unique_ptr<Expression>> &&projcets, FilterStmt* having, 
-    std::vector<std::unique_ptr<Expression>> &&groupbys)
-      : projcets_(std::move(projcets)),
-        having_(having),
-        groupbys_(std::move(groupbys)){}
+  GroupbyPhysicalOperator(std::vector<std::unique_ptr<Expression>> &&projcets, FilterStmt *having,
+      std::vector<std::unique_ptr<Expression>> &&groupbys)
+      : projcets_(std::move(projcets)), having_(having), groupbys_(std::move(groupbys))
+  {}
 
   // TODO: having_expr_会内存泄漏，但是如果加上delete后，这里有一个core
-  virtual ~GroupbyPhysicalOperator() {
+  virtual ~GroupbyPhysicalOperator()
+  {
     // if (having_expr_ != nullptr) {
     //   delete having_expr_;
     // }
@@ -48,21 +48,22 @@ public:
   RC next() override;
   RC close() override;
   Tuple *current_tuple() override;
-private:
-  RC predicate(const Tuple& tuple, bool& res);
-  RC create_having_expression();          // 将having语句处理成conjunction expression
 
 private:
-  std::vector<std::unique_ptr<Expression>> projcets_;  // 聚合表达式
-  std::vector<std::unique_ptr<Expression>> groupbys_;    // groupby 子句, 应该是FieldExpr
-  FilterStmt* having_;                                   // having, not own this;
-  std::unordered_map<AggregateKey, SimpleAggregationHashTable> ht_;    // grouby + 聚合哈希表
+  RC predicate(const Tuple &tuple, bool &res);
+  RC create_having_expression();  // 将having语句处理成conjunction expression
+
+private:
+  std::vector<std::unique_ptr<Expression>> projcets_;                // 聚合表达式
+  std::vector<std::unique_ptr<Expression>> groupbys_;                // groupby 子句, 应该是FieldExpr
+  FilterStmt *having_;                                               // having, not own this;
+  std::unordered_map<AggregateKey, SimpleAggregationHashTable> ht_;  // grouby + 聚合哈希表
   std::unordered_map<AggregateKey, SimpleAggregationHashTable>::iterator it_;
   AggregateValue aggr_results_;
   AggregateValue not_null_record_num_;
   std::unique_ptr<AggregationTuple> tuple_;
-  std::vector<int> relations_;                // 字段映射
+  std::vector<int> relations_;  // 字段映射
 
   // std::shared_ptr<ConjunctionExpr> having_expr_;
-  ConjunctionExpr* having_expr_{nullptr};   // 用于having的过滤
+  ConjunctionExpr *having_expr_{nullptr};  // 用于having的过滤
 };

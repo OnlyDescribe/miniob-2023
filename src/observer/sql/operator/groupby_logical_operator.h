@@ -23,17 +23,16 @@ class GroupbyLogicalOperator : public LogicalOperator
 {
 public:
   // 使用聚合的field，以及分组的key
-  GroupbyLogicalOperator(std::vector<std::unique_ptr<Expression>> &&o_groupbys, FilterStmt* o_having, 
-    std::vector<std::unique_ptr<Expression>> &&o_projects):
-    projects(std::move(o_projects)),
-    groupbys(std::move(o_groupbys)),
-    having(o_having) {}
+  GroupbyLogicalOperator(std::vector<std::unique_ptr<Expression>> &&o_groupbys, FilterStmt *o_having,
+      std::vector<std::unique_ptr<Expression>> &&o_projects)
+      : projects(std::move(o_projects)), groupbys(std::move(o_groupbys)), having(o_having)
+  {}
   virtual ~GroupbyLogicalOperator() = default;
 
   LogicalOperatorType type() const override { return LogicalOperatorType::GROUPBY; }
 
-  std::vector<std::unique_ptr<Expression>> projects;      // projects;
-  std::vector<std::unique_ptr<Expression>> groupbys;      // groupby Exprs;
+  std::vector<std::unique_ptr<Expression>> projects;  // projects;
+  std::vector<std::unique_ptr<Expression>> groupbys;  // groupby Exprs;
 
-  FilterStmt* having{nullptr};      // not own this
+  FilterStmt *having{nullptr};                        // not own this
 };

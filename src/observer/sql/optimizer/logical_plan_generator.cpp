@@ -173,8 +173,8 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
     top_op.swap(orderby_oper);
   }
 
-  std::vector<Expression*> aggr_exprs, field_exprs;
-  for (const auto& project: all_projects) {
+  std::vector<Expression *> aggr_exprs, field_exprs;
+  for (const auto &project : all_projects) {
     AggretationExpr::get_aggrfuncexprs(project.get(), aggr_exprs);
     FieldExpr::get_fieldexprs(project.get(), field_exprs);
   }
@@ -204,8 +204,8 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
     for (const auto &field : select_stmt->groupbys()) {
       groupby_exprs.emplace_back(std::make_unique<FieldExpr>(field));
     }
-    unique_ptr<LogicalOperator> aggr_oper = make_unique<GroupbyLogicalOperator>(std::move(groupby_exprs), 
-      select_stmt->having_stmt(), std::move(all_projects));
+    unique_ptr<LogicalOperator> aggr_oper = make_unique<GroupbyLogicalOperator>(
+        std::move(groupby_exprs), select_stmt->having_stmt(), std::move(all_projects));
     aggr_oper->add_child(std::move(top_op));
     top_op.swap(aggr_oper);
   }

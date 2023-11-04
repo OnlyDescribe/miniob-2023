@@ -59,9 +59,9 @@ struct hash<AggregateKey>
       switch (value.attr_type()) {
         case AttrType::INTS: valueHash = std::hash<int>{}(value.get_int()); break;
         case AttrType::FLOATS: valueHash = std::hash<float>{}(value.get_float()); break;
-        case AttrType::BOOLEANS: valueHash = std::hash<bool>{}(value.get_boolean());  break;
+        case AttrType::BOOLEANS: valueHash = std::hash<bool>{}(value.get_boolean()); break;
         case AttrType::CHARS: valueHash = std::hash<std::string>{}(value.get_string()); break;
-        case AttrType::NULLS: valueHash = std::hash<int>{}(-182301); break;      // null就随缘大法
+        case AttrType::NULLS: valueHash = std::hash<int>{}(-182301); break;  // null就随缘大法
         default: LOG_WARN("Unsupported field type"); break;
       }
       // 组合哈希值
@@ -91,24 +91,27 @@ public:
    */
   SimpleAggregationHashTable() {}
 
-  void init(const std::vector<Expression*>& agg_exprs) {
+  void init(const std::vector<Expression *> &agg_exprs)
+  {
     agg_exprs_.clear();
-    for (auto& agg_expr: agg_exprs) {
+    for (auto &agg_expr : agg_exprs) {
       agg_exprs_.push_back(agg_expr);
     }
   }
 
-  void init(const std::vector<std::unique_ptr<Expression>>& agg_exprs) {
+  void init(const std::vector<std::unique_ptr<Expression>> &agg_exprs)
+  {
     agg_exprs_.clear();
-    for (auto& agg_expr: agg_exprs) {
+    for (auto &agg_expr : agg_exprs) {
       agg_exprs_.push_back(agg_expr.get());
     }
   }
   /**
    * @description: 因为平均数只是和，需要计算最终的结果
    * @return {*}
-   */  
-  void generate_aggregate_values() {
+   */
+  void generate_aggregate_values()
+  {
     // 更改avg的结果, 统一改成float
     for (auto it = ht_.begin(); it != ht_.end(); it++) {
       auto not_null_it = null_not_record_.find(it->first);
@@ -124,7 +127,8 @@ public:
 
   void clear() { ht_.clear(); }
 
-  AggregateValue get_aggr_value(const AggregateKey &agg_key) {
+  AggregateValue get_aggr_value(const AggregateKey &agg_key)
+  {
     auto it = ht_.find(agg_key);
     if (it == ht_.end()) {
       return generate_initial_aggregateValue();
@@ -132,16 +136,19 @@ public:
     return it->second;
   }
 
-  void insert_combine(const AggregateKey &agg_key, const Tuple& tuple) {
+  void insert_combine(const AggregateKey &agg_key, const Tuple &tuple)
+  {
     if (ht_.count(agg_key) == 0) {
       ht_.insert({agg_key, generate_initial_aggregateValue()});
       null_not_record_.insert({agg_key, generate_initial_aggregateValue()});
     }
     combine_aggregate_values(&ht_[agg_key], &null_not_record_[agg_key], tuple);
   }
+
 private:
   // 将b聚合到a, not_null表示记录a非空的个数(需要计算平均值)
-  void aggregate_value(const Value& b, Value& a, Value& not_null, AggrFuncType type) {
+  void aggregate_value(const Value &b, Value &a, Value &not_null, AggrFuncType type)
+  {
     // 如果需要，先初始化
     auto init_value = [](const Value &intial_value, Value &output) -> bool {
       if (output.attr_type() == AttrType::NULLS) {
@@ -152,8 +159,7 @@ private:
     };
     Value res;
     switch (type) {
-      case AggrFuncType::COUNT_STAR: 
-        a = Value::add(a, Value(1)); break;
+      case AggrFuncType::COUNT_STAR: a = Value::add(a, Value(1)); break;
       case AggrFuncType::COUNT:
         if (!b.is_null()) {
           a = Value::add(a, Value(1));
@@ -222,7 +228,7 @@ private:
    * Combines the input into the aggregation result.
    * @param input The input value
    */
-  void combine_aggregate_values(AggregateValue* results, AggregateValue* null_not_record, const Tuple& tuple)
+  void combine_aggregate_values(AggregateValue *results, AggregateValue *null_not_record, const Tuple &tuple)
   {
     for (uint32_t i = 0; i < agg_exprs_.size(); i++) {
       auto aggr_expr = static_cast<AggretationExpr *>(agg_exprs_[i]);
@@ -234,7 +240,7 @@ private:
   /** The hash table is just a map from aggregate keys to aggregate values */
   std::unordered_map<AggregateKey, AggregateValue> ht_{};
   std::unordered_map<AggregateKey, AggregateValue> null_not_record_{};
-  std::vector<Expression*> agg_exprs_{nullptr};  // not own this
+  std::vector<Expression *> agg_exprs_{nullptr};  // not own this
   // AggregateValue results_;
 };
 
@@ -246,8 +252,7 @@ class AggregationPhysicalOperator : public PhysicalOperator
 {
 
 public:
-  AggregationPhysicalOperator(std::vector<std::unique_ptr<Expression>> &&aggr_exprs)
-      : projects_(std::move(aggr_exprs))
+  AggregationPhysicalOperator(std::vector<std::unique_ptr<Expression>> &&aggr_exprs) : projects_(std::move(aggr_exprs))
   {
     ht_ = std::make_unique<SimpleAggregationHashTable>();
   }
@@ -261,9 +266,10 @@ public:
   RC close() override { return RC::SUCCESS; }
   Tuple *current_tuple() override;
 
-  virtual TupleSchema tuple_schema() const override {
+  virtual TupleSchema tuple_schema() const override
+  {
     TupleSchema schema;
-    for (const auto& expr: projects_) {
+    for (const auto &expr : projects_) {
       schema.append_cell(expr->name().c_str());
     }
     return schema;
@@ -271,10 +277,10 @@ public:
 
 private:
   std::vector<std::unique_ptr<Expression>> projects_;  // 投影
-  std::vector<Expression*> aggr_exprs_;                  // 聚合表达式
-  std::unique_ptr<SimpleAggregationHashTable> ht_;       // 聚合哈希表
+  std::vector<Expression *> aggr_exprs_;               // 聚合表达式
+  std::unique_ptr<SimpleAggregationHashTable> ht_;     // 聚合哈希表
   std::unique_ptr<AggregationTuple> aggregation_tuple_;
 
-  ExpressionTuple exprssion_tuple_;   // 表达式
+  ExpressionTuple exprssion_tuple_;  // 表达式
   bool is_execute_{false};
 };

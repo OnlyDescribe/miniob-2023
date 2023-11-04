@@ -26,8 +26,7 @@ class Field
 {
 public:
   Field() = default;
-  Field(const Table *table, const FieldMeta *field)
-      : table_(table), field_(field){}
+  Field(const Table *table, const FieldMeta *field) : table_(table), field_(field) {}
   Field(const Field &) = default;
 
   const Table *table() const { return table_; }

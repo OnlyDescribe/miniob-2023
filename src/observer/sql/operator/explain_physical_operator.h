@@ -32,8 +32,9 @@ public:
   RC next() override;
   RC close() override;
   Tuple *current_tuple() override;
-  
-  virtual TupleSchema tuple_schema() const override {
+
+  virtual TupleSchema tuple_schema() const override
+  {
     TupleSchema schema;
     schema.append_cell("Query Plan");
     return schema;

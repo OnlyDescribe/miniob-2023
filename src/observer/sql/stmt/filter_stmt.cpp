@@ -37,7 +37,7 @@ RC FilterStmt::create(Db *db, Table *default_table, std::unordered_map<std::stri
   stmt = nullptr;
 
   FilterStmt *tmp_stmt = new FilterStmt();
-  
+
   // 但目前仅默认是 AND, 即除了叶子节点都是些PConditionExpr, CompOp是AND的
   // 因为都只是 exp AND exp AND exp 的情况, 只要递归拿出exp, 创建filter_unit就行了, 瞎写的,
   // 或许还是直接把这棵树转成expression比较好。这里默认 OR AND 优先级最低, 只要找到不是 OR 和 AND 的 Expr 就行
@@ -53,7 +53,7 @@ RC FilterStmt::create(Db *db, Table *default_table, std::unordered_map<std::stri
         }
         FilterUnit *filter_unit = new FilterUnit;
         // rc = create_filter_unit(db, default_table, tables, cond->cexp, filter_unit);
-        Expression* left = nullptr;
+        Expression *left = nullptr;
         rc = Expression::create_expression(cond->cexp->left, *tables, left, cond->cexp->comp, db);
         if (rc != RC::SUCCESS) {
           delete tmp_stmt;
@@ -61,7 +61,7 @@ RC FilterStmt::create(Db *db, Table *default_table, std::unordered_map<std::stri
           return rc;
         }
         filter_unit->left.reset(left);
-        Expression* right = nullptr;
+        Expression *right = nullptr;
         rc = Expression::create_expression(cond->cexp->right, *tables, right, cond->cexp->comp, db);
         if (rc != RC::SUCCESS) {
           delete tmp_stmt;

@@ -22,7 +22,7 @@ InsertStmt::InsertStmt(Table *table, Value *values, int value_amount)
     : table_(table), values_(values), value_amount_(value_amount)
 {}
 
-InsertStmt::InsertStmt(Table *table, Value *values, int value_amount, std::vector<Value>* data_ptr)
+InsertStmt::InsertStmt(Table *table, Value *values, int value_amount, std::vector<Value> *data_ptr)
     : table_(table), values_(values), value_amount_(value_amount), data_ptr_(data_ptr)
 {}
 
@@ -46,7 +46,7 @@ RC InsertStmt::create(Db *db, InsertSqlNode &inserts, Stmt *&stmt)
   // Value *pvalues = inserts.values.data();
   const auto value_expr = inserts.values;
   const int value_num = static_cast<int>(inserts.values.size());
-  std::vector<Value>* fvalues = new std::vector<Value>;
+  std::vector<Value> *fvalues = new std::vector<Value>;
   fvalues->reserve(value_num);
 
   const TableMeta &table_meta = table->table_meta();
@@ -72,7 +72,7 @@ RC InsertStmt::create(Db *db, InsertSqlNode &inserts, Stmt *&stmt)
       assert(value_expr[i]->aexp->left != nullptr);
       assert(value_expr[i]->aexp->left->uexp != nullptr);
       assert(value_expr[i]->aexp->type == PArithmeticType::NEGATIVE);
-      const auto& v = value_expr[i]->aexp->left->uexp->value;
+      const auto &v = value_expr[i]->aexp->left->uexp->value;
       if (v.attr_type() == AttrType::INTS) {
         value.set_int(-v.get_int());
       } else if (v.attr_type() == AttrType::FLOATS) {

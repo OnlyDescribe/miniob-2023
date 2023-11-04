@@ -384,17 +384,12 @@ public:
 
   int cell_num() const override { return expressions_->size(); }
 
-  void set_expressions(std::vector<std::unique_ptr<Expression>> *expressions) {
-    expressions_ = expressions;
-  }
-  void set_tuple(Tuple* tuple) {
-    tuple_ = tuple;
-  }
+  void set_expressions(std::vector<std::unique_ptr<Expression>> *expressions) { expressions_ = expressions; }
+  void set_tuple(Tuple *tuple) { tuple_ = tuple; }
 
   RC cell_at(int index, Value &cell) const override
   {
-    if (!expressions_ || !tuple_ || 
-      index < 0 || index >= static_cast<int>(expressions_->size())) {
+    if (!expressions_ || !tuple_ || index < 0 || index >= static_cast<int>(expressions_->size())) {
       return RC::INTERNAL;
     }
     Expression *expr = (*expressions_)[index].get();
@@ -421,8 +416,8 @@ public:
   }
 
 private:
-  std::vector<std::unique_ptr<Expression>> *expressions_;     // not own this;
-  Tuple* tuple_;                                              // not own this;
+  std::vector<std::unique_ptr<Expression>> *expressions_;  // not own this;
+  Tuple *tuple_;                                           // not own this;
 };
 
 /**
@@ -538,14 +533,12 @@ class AggregationTuple : public Tuple
 {
 public:
   /**
-   * @description: 
+   * @description:
    * @param {vector<Value>} &aggregations  表示聚合后的值
    * @param {vector<Field>} &fields 这个字段没啥用
    * @return {*}
-   */  
-  AggregationTuple(const std::vector<Value> &aggregations)
-      : aggregations_(aggregations)
-  {}
+   */
+  AggregationTuple(const std::vector<Value> &aggregations) : aggregations_(aggregations) {}
   virtual ~AggregationTuple() = default;
 
   int cell_num() const override { return static_cast<int>(aggregations_.size()); }
@@ -584,7 +577,8 @@ public:
   }
 
   // aggregations 表示groupby返回一行的内容，为分组名+聚合的值
-  void set_aggregations(const std::vector<Value>& aggregations) {
+  void set_aggregations(const std::vector<Value> &aggregations)
+  {
     aggregations_.clear();
     aggregations_ = aggregations;
   }

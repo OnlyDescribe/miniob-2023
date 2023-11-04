@@ -17,10 +17,8 @@ See the Mulan PSL v2 for more details. */
 #include "storage/record/record.h"
 #include "storage/table/table.h"
 
-
-
-ProjectPhysicalOperator::ProjectPhysicalOperator(std::vector<std::unique_ptr<Expression>>&& exprs): 
-  exprs_(std::move(exprs)) 
+ProjectPhysicalOperator::ProjectPhysicalOperator(std::vector<std::unique_ptr<Expression>> &&exprs)
+    : exprs_(std::move(exprs))
 {
   // for (const auto& expr: exprs_) {
   //   if (expr->type() == ExprType::FIELD) {
@@ -72,4 +70,3 @@ Tuple *ProjectPhysicalOperator::current_tuple()
   tuple_.set_tuple(children_[0]->current_tuple());
   return &tuple_;
 }
-

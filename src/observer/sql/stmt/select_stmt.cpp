@@ -36,9 +36,8 @@ SelectStmt::~SelectStmt()
   }
 }
 
-
-static void set_expression_name(Expression* expr, const std::string& table_name, 
-  const std::string& fieldname, bool with_table_name) 
+static void set_expression_name(
+    Expression *expr, const std::string &table_name, const std::string &fieldname, bool with_table_name)
 {
   std::string name;
   if (with_table_name) {
@@ -50,11 +49,11 @@ static void set_expression_name(Expression* expr, const std::string& table_name,
 static void wildcard_fields(Table *table, std::vector<std::unique_ptr<Expression>> &field_metas, bool with_table_name)
 {
   const TableMeta &table_meta = table->table_meta();
-  
+
   const int field_num = table_meta.field_num() - table_meta.extra_field_num();
   for (int i = table_meta.sys_field_num(); i < field_num; i++) {
     field_metas.emplace_back(new FieldExpr(Field(table, table_meta.field(i))));
-    set_expression_name(field_metas.back().get(), table->name(), table_meta.field(i)->name(), with_table_name); 
+    set_expression_name(field_metas.back().get(), table->name(), table_meta.field(i)->name(), with_table_name);
   }
 }
 
@@ -122,7 +121,7 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
     PExpr *attr_pexp = select_sql.attributes[i];
     // 这里处理算数类型的表达式
     if (attr_pexp->type == PExpType::ARITHMETIC) {
-      Expression* a_expr = nullptr;
+      Expression *a_expr = nullptr;
       RC rc = Expression::create_expression(attr_pexp, table_map, a_expr);
       if (rc != RC::SUCCESS) {
         return rc;
@@ -130,8 +129,8 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
       a_expr->set_name(attr_pexp->name);
       projects.emplace_back(a_expr);
       continue;
-    } else if (attr_pexp->type == PExpType::AGGRFUNC) {   // 聚合
-      Expression* ag_expr = nullptr;
+    } else if (attr_pexp->type == PExpType::AGGRFUNC) {  // 聚合
+      Expression *ag_expr = nullptr;
       RC rc = Expression::create_expression(attr_pexp, table_map, ag_expr);
       if (rc != RC::SUCCESS) {
         return rc;
@@ -147,17 +146,17 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
     if (attr_pexp->type != PExpType::UNARY || !attr_pexp->uexp->is_attr) {
       LOG_WARN("not implemented");
     }
-    
+
     // select * from;
     if (common::is_blank(relation_attr.relation_name.c_str()) &&
-        0 == strcmp(relation_attr.attribute_name.c_str(), "*")) { 
+        0 == strcmp(relation_attr.attribute_name.c_str(), "*")) {
       for (Table *table : tables) {
         wildcard_fields(table, projects, with_table_name);
       }
     } else if (!common::is_blank(relation_attr.relation_name.c_str())) {
       const char *table_name = relation_attr.relation_name.c_str();
       const char *field_name = relation_attr.attribute_name.c_str();
-      //select *.* from xxx;
+      // select *.* from xxx;
       if (0 == strcmp(table_name, "*")) {
         if (0 != strcmp(field_name, "*")) {
           LOG_WARN("invalid field name while table is *. attr=%s", field_name);
@@ -211,7 +210,7 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
   LOG_INFO("got %d tables in from stmt and %d fields in query stmt", tables.size(), projects.size());
 
   if (aggr_field_cnt != 0 && aggr_field_cnt != static_cast<int>(select_sql.attributes.size()) &&
-    select_sql.groupbys.empty()) {
+      select_sql.groupbys.empty()) {
     LOG_WARN("num of aggregation is invalid");
     return RC::INVALID_ARGUMENT;
   }
@@ -251,7 +250,7 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
 
   // groupbys
   std::vector<Field> groupbys;
-  for (const auto& groupby_attr: select_sql.groupbys) {
+  for (const auto &groupby_attr : select_sql.groupbys) {
     Field field;
     RC rc = createField(tables, groupby_attr.relation_name.c_str(), groupby_attr.attribute_name.c_str(), field);
     if (rc != RC::SUCCESS) {
@@ -260,7 +259,7 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
     }
     groupbys.emplace_back(field);
   }
-  
+
   // everything alright
   SelectStmt *select_stmt = new SelectStmt();
   select_stmt->tables_.swap(tables);
@@ -287,7 +286,7 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
       select_stmt->having_stmt_ = having_stmt;
     }
   }
- 
+
   stmt = select_stmt;
   return RC::SUCCESS;
 }

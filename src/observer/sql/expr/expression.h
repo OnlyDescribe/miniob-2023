@@ -61,7 +61,7 @@ enum class ExprType
   CONJUNCTION,   ///< 多个表达式使用同一种关系(AND或OR)来联结
   ARITHMETIC,    ///< 算术运算
   SUBQUERY,      ///< 子查询
-  LIST,           ///< 列表达式
+  LIST,          ///< 列表达式
   HavingField    // 取得havingField的值
 };
 
@@ -127,9 +127,9 @@ public:
    */
   virtual std::string name() const { return name_; }
   virtual void set_name(std::string name) { name_ = std::move(name); }
-  virtual void set_name(const std::string& name, const std::string& second) { name_ = name + "." + second; }
+  virtual void set_name(const std::string &name, const std::string &second) { name_ = name + "." + second; }
   static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
-    Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
+      Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
 
 private:
   std::string name_;
@@ -163,7 +163,7 @@ public:
 
   static void get_fieldexprs(Expression *expr, std::vector<Expression *> &field_exprs);
   static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
-    Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
+      Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
 
 private:
   Field field_;
@@ -197,7 +197,7 @@ public:
   const Value &get_value() const { return value_; }
 
   static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
-    Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
+      Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
 
 private:
   Value value_;
@@ -358,7 +358,7 @@ public:
   std::unique_ptr<Expression> &right() { return right_; }
 
   static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
-    Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
+      Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
 
 private:
   RC calc_value(const Value &left_value, const Value &right_value, Value &value) const;
@@ -378,10 +378,17 @@ class AggretationExpr : public Expression
 {
 public:
   // AggretationExpr() = default; 注意如果类型为star, 那么expr是空指针
-  explicit AggretationExpr(Expression* expr, AggrFuncType aggr_func_type, bool is_star) : 
-      aggr_func_type_(aggr_func_type), is_star_(is_star) { field_expr_.reset(expr); value_.set_null(); }
-  explicit AggretationExpr(std::unique_ptr<Expression>&&expr, AggrFuncType aggr_func_type, bool is_star) : 
-      aggr_func_type_(aggr_func_type), is_star_(is_star), field_expr_(std::move(expr)) {value_.set_null();}
+  explicit AggretationExpr(Expression *expr, AggrFuncType aggr_func_type, bool is_star)
+      : aggr_func_type_(aggr_func_type), is_star_(is_star)
+  {
+    field_expr_.reset(expr);
+    value_.set_null();
+  }
+  explicit AggretationExpr(std::unique_ptr<Expression> &&expr, AggrFuncType aggr_func_type, bool is_star)
+      : aggr_func_type_(aggr_func_type), is_star_(is_star), field_expr_(std::move(expr))
+  {
+    value_.set_null();
+  }
   RC get_value(const Tuple &tuple, Value &value) const;
 
   RC try_get_value(Value &value) const { return RC::UNIMPLENMENT; }
@@ -392,14 +399,13 @@ public:
    */
   ExprType type() const { return ExprType::AGGRFUNCTION; }
 
-  void set_value(const Value& value) {
+  void set_value(const Value &value)
+  {
     has_value = true;
     value_ = value;
   }
 
-  void clear_value() {
-    has_value = false;
-  }
+  void clear_value() { has_value = false; }
 
   /**
    * @brief 表达式值的类型
@@ -411,7 +417,7 @@ public:
 
   static void get_aggrfuncexprs(Expression *expr, std::vector<Expression *> &aggrfunc_exprs);
   static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
-    Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
+      Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
 
 private:
   AggrFuncType aggr_func_type_;
@@ -451,7 +457,7 @@ public:
   virtual AttrType value_type() const { return AttrType::UNDEFINED; }
 
   static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
-    Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
+      Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
 
   // should own this?
   SelectStmt *subquery_stmt{nullptr};
@@ -477,13 +483,12 @@ public:
 
   virtual ExprType type() const { return ExprType::LIST; }
 
-  Expression* expr_at(int i) {
-    return values_[i].get();
-  }
+  Expression *expr_at(int i) { return values_[i].get(); }
 
-  virtual AttrType value_type() const { 
+  virtual AttrType value_type() const
+  {
     if (values_.empty()) {
-      return AttrType::NULLS; 
+      return AttrType::NULLS;
     }
     return values_[0]->value_type();
   }
@@ -494,13 +499,12 @@ public:
   void set_values(std::vector<std::unique_ptr<Expression>> &&values) { values_ = std::move(values); }
 
   static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
-    Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
+      Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
 
 private:
   std::vector<std::unique_ptr<Expression>> values_;
   mutable int idx_{0};
 };
-
 
 /**
  * @brief having表达式，用于从聚合的完整列中，取值
@@ -510,7 +514,7 @@ private:
 class HavingFieldExpr : public Expression
 {
 public:
-  explicit HavingFieldExpr(int pos): pos_(pos) {}
+  explicit HavingFieldExpr(int pos) : pos_(pos) {}
 
   virtual ~HavingFieldExpr() = default;
 
@@ -528,7 +532,6 @@ public:
    * @details 一个表达式运算出结果后，只有一个值
    */
   AttrType value_type() const { return AttrType::UNDEFINED; };
-
 
 private:
   int pos_;

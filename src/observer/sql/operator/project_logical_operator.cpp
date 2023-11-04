@@ -14,5 +14,6 @@ See the Mulan PSL v2 for more details. */
 
 #include "sql/operator/project_logical_operator.h"
 
-ProjectLogicalOperator::ProjectLogicalOperator(std::vector<std::unique_ptr<Expression>> &&O_projects) 
-    : projects(std::move(O_projects)) {}
+ProjectLogicalOperator::ProjectLogicalOperator(std::vector<std::unique_ptr<Expression>> &&O_projects)
+    : projects(std::move(O_projects))
+{}
