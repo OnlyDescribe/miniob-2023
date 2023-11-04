@@ -119,7 +119,7 @@ public:
   bool &is_view() { return is_view_; }
   bool &updatable() { return updatable_; }
   bool &modifiable() { return modifiable_; }
-  void set_view_tables(const std::vector<const Table *> &view_tables) { table_meta_.view_tables() = view_tables; }
+  void set_view_tables(const std::vector<const Table *> &view_tables) { table_meta_.view_tables_ = view_tables; }
 
 private:
   std::string base_dir_;

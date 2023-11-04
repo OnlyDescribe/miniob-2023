@@ -53,7 +53,7 @@ public:
   const std::vector<FieldMeta> *field_metas() const { return &fields_; }
 
   // 仅用于视图
-  std::vector<const Table *> &view_tables() { return view_tables_; }
+  const std::vector<const Table *> &view_tables() const { return view_tables_; }
   const Table *view_table(int index) const;
   const Table *view_table(const char *name) const;
 
@@ -83,7 +83,10 @@ protected:
   std::vector<FieldMeta> fields_;  // 最前面包含sys_fields, 最后面包含了null field
   std::vector<IndexMeta> indexes_;
 
-  std::vector<const Table *> view_tables_;  // 对于视图来说, 要确定每个字段都来自哪张表. 因为视图是放在内存中的, 不需要持久化.
+  std::vector<const Table *> view_tables_;  // 对于视图来说, 要确定每个字段都来自哪张表. 因为视图是放在内存中的,
+                                            // 不需要持久化.
 
   int record_size_ = 0;
+
+  friend Table;
 };
