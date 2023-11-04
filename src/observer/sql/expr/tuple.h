@@ -537,8 +537,14 @@ private:
 class AggregationTuple : public Tuple
 {
 public:
-  AggregationTuple(const std::vector<Value> &aggregations, const std::vector<Field> &fields)
-      : aggregations_(aggregations), fields_(fields)
+  /**
+   * @description: 
+   * @param {vector<Value>} &aggregations  表示聚合后的值
+   * @param {vector<Field>} &fields 这个字段没啥用
+   * @return {*}
+   */  
+  AggregationTuple(const std::vector<Value> &aggregations)
+      : aggregations_(aggregations)
   {}
   virtual ~AggregationTuple() = default;
 
@@ -550,36 +556,42 @@ public:
       value = aggregations_[index];
       return RC::SUCCESS;
     }
-
     return RC::NOTFOUND;
   }
 
   RC find_cell(const TupleCellSpec &spec, Value &value) const override
   {
-    assert(aggregations_.size() == fields_.size());
-    for (int i = 0; i < fields_.size(); i++) {
-      // if (field.equal(spec.)
-      const auto &field = fields_[i];
-      if (!strcmp(spec.table_name(), field.table_name())) {
-        if (!strcmp(spec.field_name(), field.field_name())) {
-          value = aggregations_[i];
-          return RC::SUCCESS;
-        }
-      }
-    }
-    return RC::NOTFOUND;
+    LOG_WARN("aggr find_cell: %s", strrc(RC::NOT_IMPLEMENT));
+    return RC::NOT_IMPLEMENT;
+    // assert(aggregations_.size() == fields_.size());
+    // for (int i = 0; i < fields_.size(); i++) {
+    //   // if (field.equal(spec.)
+    //   const auto &field = fields_[i];
+    //   if (!strcmp(spec.table_name(), field.table_name())) {
+    //     if (!strcmp(spec.field_name(), field.field_name())) {
+    //       value = aggregations_[i];
+    //       return RC::SUCCESS;
+    //     }
+    //   }
+    // }
   }
 
   Tuple *copy_tuple() const override
   {
-    AggregationTuple *tuple = new AggregationTuple(aggregations_, fields_);
+    AggregationTuple *tuple = new AggregationTuple(aggregations_);
     tuple->is_copy_ = true;  // do nothing here
     return tuple;
+  }
+
+  // aggregations 表示groupby返回一行的内容，为分组名+聚合的值
+  void set_aggregations(const std::vector<Value>& aggregations) {
+    aggregations_.clear();
+    aggregations_ = aggregations;
   }
 
 private:
   std::vector<Value> aggregations_;
   // 聚合的字段
-  std::vector<Field> fields_;
+  // std::vector<Field> fields_;
   // std::vector<std::unique_ptr<Expression>> aggr_exprs_;
 };

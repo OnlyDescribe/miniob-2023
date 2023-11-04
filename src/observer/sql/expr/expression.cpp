@@ -53,6 +53,33 @@ RC FieldExpr::get_value(const Tuple &tuple, Value &value) const
   return tuple.find_cell(TupleCellSpec(table_name(), field_name()), value);
 }
 
+void FieldExpr::get_fieldexprs(Expression *expr, std::vector<Expression *> &field_exprs)
+{
+  if (expr == nullptr) {
+    return;
+  }
+  switch (expr->type()) {
+    case ExprType::FIELD: {
+      field_exprs.emplace_back(expr);
+      break;
+    }
+    case ExprType::LIST: {    // 处理(max(col) + 1)的情况
+      auto lexp = static_cast<ListExpr*>(expr);
+      get_fieldexprs(lexp->expr_at(0), field_exprs);
+      break;
+    }
+    case ExprType::ARITHMETIC: {
+      auto aexp = static_cast<ArithmeticExpr*>(expr);
+      get_fieldexprs(aexp->left().get(), field_exprs);
+      get_fieldexprs(aexp->left().get(), field_exprs);
+      break;
+    }
+    default:
+      break;
+  }
+  return;
+}
+
 
 RC FieldExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
   Expression *&res_expr, CompOp comp, Db *db) {
@@ -681,14 +708,18 @@ RC ArithmeticExpr::create_expression(const PExpr *expr, const std::unordered_map
 ////////////////////////////////////////////////////////////////////////////////
 RC AggretationExpr::get_value(const Tuple &tuple, Value &value) const
 {
+  if (has_value) {
+    value = value_;
+    return RC::SUCCESS;
+  }
   RC rc = RC::SUCCESS;
   switch (aggr_func_type_) {
     case AggrFuncType::MIN:
     case AggrFuncType::MAX:
     case AggrFuncType::SUM:
-    case AggrFuncType::AVG: rc = tuple.find_cell(TupleCellSpec(field_.table_name(), field_.field_name()), value); break;
+    case AggrFuncType::AVG: rc = field_expr_->get_value(tuple, value); break;
     case AggrFuncType::COUNT:
-      rc = tuple.find_cell(TupleCellSpec(field_.table_name(), field_.field_name()), value);
+      rc = field_expr_->get_value(tuple, value);
       if (!value.is_null()) {
         value = Value(1);
       }
@@ -699,13 +730,50 @@ RC AggretationExpr::get_value(const Tuple &tuple, Value &value) const
   return rc;
 }
 
+void AggretationExpr::get_aggrfuncexprs(Expression *expr, std::vector<Expression*> &aggrfunc_exprs)
+{
+  if (expr == nullptr) {
+    return;
+  }
+  switch (expr->type()) {
+    case ExprType::AGGRFUNCTION: {
+      aggrfunc_exprs.emplace_back(expr);
+      break;
+    }
+    case ExprType::LIST: {    // 处理(max(col) + 1)的情况
+      auto lexp = static_cast<ListExpr*>(expr);
+      get_aggrfuncexprs(lexp->expr_at(0), aggrfunc_exprs);
+      break;
+    }
+    case ExprType::ARITHMETIC: {
+      auto bexp = static_cast<ArithmeticExpr*>(expr);
+      get_aggrfuncexprs(bexp->left().get(), aggrfunc_exprs);
+      get_aggrfuncexprs(bexp->right().get(), aggrfunc_exprs);
+      break;
+    }
+    default:
+      break;
+  }
+}
+
 
 RC AggretationExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
   Expression *&res_expr, CompOp comp, Db *db) {
-  // TODO: 修改聚合类型
-  AggretationExpr* agexpr = new AggretationExpr();
-  res_expr = agexpr;
-  return RC::SUCCESS;
+  assert(expr->agexp->expr);
+  if (expr->agexp->is_star) {
+    AggretationExpr* agexpr = new AggretationExpr(nullptr, expr->agexp->type, expr->agexp->is_star);
+    res_expr = agexpr;
+    return RC::SUCCESS;
+  } else {
+    Expression* sub_expr = nullptr;
+    RC rc = Expression::create_expression(expr->agexp->expr, table_map, sub_expr, comp, db);
+    if (rc != RC::SUCCESS) {
+      return rc;
+    }
+    AggretationExpr* agexpr = new AggretationExpr(sub_expr, expr->agexp->type, expr->agexp->is_star);
+    res_expr = agexpr;
+    return rc;
+  }
 }
 
 
@@ -904,4 +972,11 @@ RC ListExpr::create_expression(const PExpr *expr, const std::unordered_map<std::
   list_expr->set_values(std::move(vec));
   res_expr = list_expr;
   return RC::SUCCESS;
+}
+////////////////////////////////////////////////////////////////////////////////
+RC HavingFieldExpr::get_value(const Tuple &tuple, Value &value) const {
+  if (pos_ < 0 && pos_ >= tuple.cell_num()) {
+    return RC::INTERNAL;
+  }
+  return tuple.cell_at(pos_, value);
 }

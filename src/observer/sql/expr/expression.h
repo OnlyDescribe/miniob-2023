@@ -61,7 +61,8 @@ enum class ExprType
   CONJUNCTION,   ///< 多个表达式使用同一种关系(AND或OR)来联结
   ARITHMETIC,    ///< 算术运算
   SUBQUERY,      ///< 子查询
-  LIST           ///< 列表达式
+  LIST,           ///< 列表达式
+  HavingField    // 取得havingField的值
 };
 
 /**
@@ -160,6 +161,7 @@ public:
 
   RC get_value(const Tuple &tuple, Value &value) const override;
 
+  static void get_fieldexprs(Expression *expr, std::vector<Expression *> &field_exprs);
   static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
     Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
 
@@ -369,13 +371,17 @@ private:
 
 /**
  * @brief 聚合表达式
- * 表达对某个字段的聚合操作, max(id) 由聚合函数和字段两部分组成
+ * 表达对某个字段的聚合操作, 由Field和聚合类型两部分组成
+ * 表示对每一个tuple进行聚合操作后的结果
  */
 class AggretationExpr : public Expression
 {
 public:
-  AggretationExpr() = default;
-  AggretationExpr(Field field, AggrFuncType aggr_func_type) : aggr_func_type_(aggr_func_type), field_(field) {}
+  // AggretationExpr() = default; 注意如果类型为star, 那么expr是空指针
+  explicit AggretationExpr(Expression* expr, AggrFuncType aggr_func_type, bool is_star) : 
+      aggr_func_type_(aggr_func_type), is_star_(is_star) { field_expr_.reset(expr); value_.set_null(); }
+  explicit AggretationExpr(std::unique_ptr<Expression>&&expr, AggrFuncType aggr_func_type, bool is_star) : 
+      aggr_func_type_(aggr_func_type), is_star_(is_star), field_expr_(std::move(expr)) {value_.set_null();}
   RC get_value(const Tuple &tuple, Value &value) const;
 
   RC try_get_value(Value &value) const { return RC::UNIMPLENMENT; }
@@ -386,33 +392,36 @@ public:
    */
   ExprType type() const { return ExprType::AGGRFUNCTION; }
 
+  void set_value(const Value& value) {
+    has_value = true;
+    value_ = value;
+  }
+
+  void clear_value() {
+    has_value = false;
+  }
+
   /**
    * @brief 表达式值的类型
    * @details 一个表达式运算出结果后，只有一个值
    */
-  AttrType value_type() const { return field_.attr_type(); };
+  AttrType value_type() const { return field_expr_->value_type(); };
 
   AggrFuncType aggr_type() { return aggr_func_type_; }
 
-  Field filed() const { return field_; }
-
-  static std::string to_string(const Field &field, AggrFuncType aggr_func_type)
-  {
-    auto it = AggretationExprStr.find(aggr_func_type);
-    if (it == AggretationExprStr.end()) {
-      return "";
-    }
-    if (aggr_func_type == AggrFuncType::COUNT_STAR) {
-      return it->second + "(*)";
-    }
-    return it->second + "(" + field.field_name() + ")";
-  }
+  static void get_aggrfuncexprs(Expression *expr, std::vector<Expression *> &aggrfunc_exprs);
   static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
     Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
 
 private:
   AggrFuncType aggr_func_type_;
-  Field field_;
+  bool is_star_{false};
+  // 一般是field表达式
+  std::unique_ptr<Expression> field_expr_;
+
+  // 聚合后的值
+  Value value_;
+  bool has_value{false};
 };
 
 /**
@@ -468,7 +477,16 @@ public:
 
   virtual ExprType type() const { return ExprType::LIST; }
 
-  virtual AttrType value_type() const { return AttrType::UNDEFINED; }
+  Expression* expr_at(int i) {
+    return values_[i].get();
+  }
+
+  virtual AttrType value_type() const { 
+    if (values_.empty()) {
+      return AttrType::NULLS; 
+    }
+    return values_[0]->value_type();
+  }
 
   void reset() { idx_ = 0; }
 
@@ -481,4 +499,37 @@ public:
 private:
   std::vector<std::unique_ptr<Expression>> values_;
   mutable int idx_{0};
+};
+
+
+/**
+ * @brief having表达式，用于从聚合的完整列中，取值
+ * 比如 having a > 1 and b < 1;
+ * get_value() 能返回a的值
+ */
+class HavingFieldExpr : public Expression
+{
+public:
+  explicit HavingFieldExpr(int pos): pos_(pos) {}
+
+  virtual ~HavingFieldExpr() = default;
+
+  virtual RC get_value(const Tuple &tuple, Value &value) const;
+
+  RC try_get_value(Value &value) const { return RC::UNIMPLENMENT; }
+  /**
+   * @brief 表达式的类型
+   * 可以根据表达式类型来转换为具体的子类
+   */
+  ExprType type() const { return ExprType::HavingField; }
+
+  /**
+   * @brief 表达式值的类型
+   * @details 一个表达式运算出结果后，只有一个值
+   */
+  AttrType value_type() const { return AttrType::UNDEFINED; };
+
+
+private:
+  int pos_;
 };

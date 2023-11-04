@@ -139,7 +139,7 @@ extern int yydebug;
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 union YYSTYPE
 {
-#line 141 "yacc_sql.y"
+#line 130 "yacc_sql.y"
 
   ParsedSqlNode *                   sql_node;
   PExpr *                           pexpr;
@@ -149,6 +149,7 @@ union YYSTYPE
   PFuncExpr *                       func_pexpr;
   PSubQueryExpr *                   subquery_pexpr;
   PListExpr *                       list_pexpr;
+  PAggrExpr *                       aggr_pexpr;
   Value *                           value;
   enum  CompOp                      comp;
   enum  AggrFuncType                aggr_func_type;
@@ -171,7 +172,7 @@ union YYSTYPE
   int                               number;
   float                             floats;
 
-#line 175 "yacc_sql.hpp"
+#line 176 "yacc_sql.hpp"
 
 };
 typedef union YYSTYPE YYSTYPE;

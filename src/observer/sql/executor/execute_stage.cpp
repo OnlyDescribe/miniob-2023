@@ -66,7 +66,6 @@ RC ExecuteStage::handle_request_with_physical_operator(SQLStageEvent *sql_event)
   unique_ptr<PhysicalOperator> &physical_operator = sql_event->physical_operator();
   ASSERT(physical_operator != nullptr, "physical operator should not be null");
 
-
   SqlResult *sql_result = sql_event->session_event()->sql_result();
   sql_result->set_tuple_schema(physical_operator->tuple_schema());
   sql_result->set_operator(std::move(physical_operator));

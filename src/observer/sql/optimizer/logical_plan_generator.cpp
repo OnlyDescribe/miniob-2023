@@ -22,6 +22,7 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/insert_logical_operator.h"
 #include "sql/operator/delete_logical_operator.h"
 #include "sql/operator/join_logical_operator.h"
+#include "sql/operator/groupby_logical_operator.h"
 #include "sql/operator/orderby_logical_operator.h"
 #include "sql/operator/project_logical_operator.h"
 #include "sql/operator/explain_logical_operator.h"
@@ -172,33 +173,42 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
     top_op.swap(orderby_oper);
   }
 
-  // 聚合 logic_op，直接使用构造
-  if (select_stmt->is_aggregation_stmt()) {
-    unique_ptr<LogicalOperator> aggr_oper = make_unique<AggregationLogicalOperator>();
-    std::vector<std::unique_ptr<Expression>> expressions;
-    // TODO: 改为聚合函数表达式
-    for (const auto &project : all_projects) {
-      if (project->type() != ExprType::FIELD) {
-        LOG_WARN("应该是Field表达式");
-        return RC::INTERNAL;
-      }
-      auto field_expr = static_cast<FieldExpr*>(project.get());
-      if (field_expr->field().with_aggr()) {
-        expressions.emplace_back(std::make_unique<AggretationExpr>(field_expr->field(), field_expr->field().get_aggr_type()));
-        expressions.back()->set_name(field_expr->name());
-      }
+  std::vector<Expression*> aggr_exprs, field_exprs;
+  for (const auto& project: all_projects) {
+    AggretationExpr::get_aggrfuncexprs(project.get(), aggr_exprs);
+    FieldExpr::get_fieldexprs(project.get(), field_exprs);
+  }
+
+  if (aggr_exprs.size() && field_exprs.size()) {
+    if (select_stmt->groupbys().empty()) {
+      return RC::SQL_SYNTAX;
     }
-    static_cast<AggregationLogicalOperator *>(aggr_oper.get())->set_aggregation_expr(std::move(expressions));
+  }
+
+  // 聚合 logic_op，或者groupby, 算数表达式上，只能挂聚合，或者数字
+  if (aggr_exprs.size()) {
+    unique_ptr<LogicalOperator> aggr_oper = make_unique<AggregationLogicalOperator>();
+    static_cast<AggregationLogicalOperator *>(aggr_oper.get())->set_aggregation_expr(std::move(all_projects));
     aggr_oper->add_child(std::move(top_op));
     top_op.swap(aggr_oper);
-  } else {
+  } else if (field_exprs.size()) {
+    // 算数表达式上，可以挂fieldExpr，或者ValueExpr
     unique_ptr<LogicalOperator> project_oper(new ProjectLogicalOperator(std::move(all_projects)));
     if (top_op) {
       project_oper->add_child(std::move(top_op));
     }
     top_op.swap(project_oper);
+  } else {
+    // TODO: 这里不需要groupby 中的 聚合，不需要和表达式结合
+    std::vector<std::unique_ptr<Expression>> groupby_exprs;
+    for (const auto &field : select_stmt->groupbys()) {
+      groupby_exprs.emplace_back(std::make_unique<FieldExpr>(field));
+    }
+    unique_ptr<LogicalOperator> aggr_oper = make_unique<GroupbyLogicalOperator>(std::move(groupby_exprs), 
+      select_stmt->having_stmt(), std::move(all_projects));
+    aggr_oper->add_child(std::move(top_op));
+    top_op.swap(aggr_oper);
   }
-
   logical_operator.swap(top_op);
   return RC::SUCCESS;
 }
