@@ -25,24 +25,24 @@ See the Mulan PSL v2 for more details. */
 using namespace std;
 
 RC Expression::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
-    const std::vector<Table *> &tables, Expression *&res_expr, CompOp comp, Db *db) 
+    Expression *&res_expr, CompOp comp, Db *db) 
 {
   if (expr->type == PExpType::UNARY) {
     auto uexpr = expr->uexp;
     if (uexpr->is_attr) {
-      return FieldExpr::create_expression(expr, table_map, tables, res_expr);
+      return FieldExpr::create_expression(expr, table_map, res_expr, comp, db);
     } else {
-      return ValueExpr::create_expression(expr, table_map, tables, res_expr);
+      return ValueExpr::create_expression(expr, table_map, res_expr, comp, db);
     }
   } else if (expr->type == PExpType::ARITHMETIC) {
-    return ArithmeticExpr::create_expression(expr, table_map, tables, res_expr);
+    return ArithmeticExpr::create_expression(expr, table_map, res_expr, comp, db);
   } else if (expr->type == PExpType::LIST) {
-    return ListExpr::create_expression(expr, table_map, tables, res_expr);
+    return ListExpr::create_expression(expr, table_map, res_expr, comp, db);
   } else if (expr->type == PExpType::SUBQUERY) {
-    return SubQueryExpr::create_expression(expr, table_map, tables, res_expr, comp);
+    return SubQueryExpr::create_expression(expr, table_map, res_expr, comp, db);
   } else if (expr->type == PExpType::AGGRFUNC) {
-    return AggretationExpr::create_expression(expr, table_map, tables, res_expr);
-  }
+    return AggretationExpr::create_expression(expr, table_map, res_expr, comp, db);
+  } 
   return RC::UNIMPLENMENT;
 }
 
@@ -55,7 +55,7 @@ RC FieldExpr::get_value(const Tuple &tuple, Value &value) const
 
 
 RC FieldExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
-  const std::vector<Table *> &tables, Expression *&res_expr, CompOp comp, Db *db) {
+  Expression *&res_expr, CompOp comp, Db *db) {
   
   assert(PExpType::UNARY == expr->type);
   auto uexpr = expr->uexp;
@@ -64,42 +64,40 @@ RC FieldExpr::create_expression(const PExpr *expr, const std::unordered_map<std:
   const char *table_name = attr.relation_name.c_str();
   const char* field_name = attr.attribute_name.c_str();
 
+  if (table_map.empty()) {
+    LOG_WARN("invalid. empty, table");
+    return RC::SCHEMA_FIELD_MISSING;
+  }
+
+  Table* table = nullptr;
   if (common::is_blank(table_name)) {
-    if (tables.size() != 1) {
+    if (table_map.size() != 1) {
       LOG_WARN("invalid. I do not know the attr's table. attr=%s", field_name);
       return RC::SCHEMA_FIELD_MISSING;
     }
-    Table *table = tables[0];
-    const FieldMeta *field_meta = table->table_meta().field(field_name);
-    if (nullptr == field_meta) {
-      LOG_WARN("no such field. field=%s.%s", table->name(), field_name);
-      return RC::SCHEMA_FIELD_MISSING;
-    }
-    res_expr = new FieldExpr(table, field_meta);
-    return RC::SUCCESS;
-  } else {
+    table = table_map.begin()->second;
+  } 
+  if (nullptr == table) {
     auto iter = table_map.find(table_name);
-    if (iter == table_map.end()) {
-      LOG_WARN("no such table in from list: %s", table_name);
-      return RC::SCHEMA_FIELD_MISSING;
+    if (iter != table_map.end()) {
+      table = iter->second;
     }
-
-    Table *table = iter->second;
-    const FieldMeta *field_meta = table->table_meta().field(field_name);
-    if (nullptr == field_meta) {
-      LOG_WARN("no such field. field=%s.%s", table->name(), field_name);
-      return RC::SCHEMA_FIELD_MISSING;
-    }
-    res_expr = new FieldExpr(table, field_meta);
-    // if (std::string(table_name) != std::string(table->name())) {
-    //   if (tables.size() != 1) {
-    //     res_expr->set_alias(std::string(table_name) + "." + std::string(field_name));
-    //   }
-    // }
-    return RC::SUCCESS;
   }
+  if (table == nullptr) {
+    table = db->find_table(table_name);
+  }
+  if (nullptr == table) {
+    LOG_WARN("No such table: attr.relation_name: %s", attr.relation_name.c_str());
+    return RC::SCHEMA_TABLE_NOT_EXIST;
+  }
+  const FieldMeta* field_meta = table->table_meta().field(attr.attribute_name.c_str());
+  if (nullptr == field_meta) {
+    LOG_WARN("no such field in table: table %s, field %s", table->name(), attr.attribute_name.c_str());
+    table = nullptr;
+    return RC::SCHEMA_FIELD_NOT_EXIST;
+  }
+  res_expr = new FieldExpr(table, field_meta);
   return RC::SUCCESS;
-
 }
 
 
@@ -111,7 +109,7 @@ RC ValueExpr::get_value(const Tuple &tuple, Value &value) const
 }
 
 RC ValueExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
-  const std::vector<Table *> &tables, Expression *&res_expr, CompOp comp, Db *db) {
+  Expression *&res_expr, CompOp comp, Db *db) {
   assert(PExpType::UNARY == expr->type);
   auto uexpr = expr->uexp;
   assert(uexpr->is_attr == 0);
@@ -500,6 +498,11 @@ RC ArithmeticExpr::calc_value(const Value &left_value, const Value &right_value,
 {
   RC rc = RC::SUCCESS;
 
+  if (left_value.is_null() || right_value.is_null()) {
+    value.set_null();
+    return rc;
+  }
+
   const AttrType target_type = value_type();
 
   switch (arithmetic_type_) {
@@ -532,7 +535,8 @@ RC ArithmeticExpr::calc_value(const Value &left_value, const Value &right_value,
         if (right_value.get_int() == 0) {
           // NOTE:
           // 设置为整数最大值是不正确的。通常的做法是设置为NULL，但是当前的miniob没有NULL概念，所以这里设置为整数最大值。
-          value.set_int(numeric_limits<int>::max());
+          // value.set_int(numeric_limits<int>::max());
+          value.set_null();
         } else {
           value.set_int(left_value.get_int() / right_value.get_int());
         }
@@ -540,7 +544,8 @@ RC ArithmeticExpr::calc_value(const Value &left_value, const Value &right_value,
         if (right_value.get_float() > -EPSILON && right_value.get_float() < EPSILON) {
           // NOTE:
           // 设置为浮点数最大值是不正确的。通常的做法是设置为NULL，但是当前的miniob没有NULL概念，所以这里设置为浮点数最大值。
-          value.set_float(numeric_limits<float>::max());
+          // value.set_int(numeric_limits<int>::max());
+          value.set_null();
         } else {
           value.set_float(left_value.get_float() / right_value.get_float());
         }
@@ -571,16 +576,40 @@ RC ArithmeticExpr::get_value(const Tuple &tuple, Value &value) const
   Value right_value;
 
   rc = left_->get_value(tuple, left_value);
+  if (left_->type() == ExprType::LIST) {
+    auto list_expr = static_cast<ListExpr*>(left_.get());
+    list_expr->reset();
+  }
   if (rc != RC::SUCCESS) {
     LOG_WARN("failed to get value of left expression. rc=%s", strrc(rc));
     return rc;
   }
-  rc = right_->get_value(tuple, right_value);
-  if (rc != RC::SUCCESS) {
-    LOG_WARN("failed to get value of right expression. rc=%s", strrc(rc));
-    return rc;
+
+  if (right_) {
+    rc = right_->get_value(tuple, right_value);
+    if (rc != RC::SUCCESS) {
+      LOG_WARN("failed to get value of right expression. rc=%s", strrc(rc));
+      return rc;
+    }
+    if (right_->type() == ExprType::LIST) {
+      auto list_expr = static_cast<ListExpr*>(right_.get());
+      list_expr->reset();
+    }
+    return calc_value(left_value, right_value, value);
+  } else {
+    // 只有负数是这种情况
+    if (left_value.attr_type() == AttrType::INTS) {
+      value.set_int(-left_value.get_int());
+    } else if (left_value.attr_type() == AttrType::FLOATS) {
+      value.set_float(-left_value.get_float());
+    } else if (left_value.attr_type() == AttrType::NULLS) {
+      value.set_null();
+    } else {
+      LOG_ERROR("calc error: %s", strrc(RC::NOT_IMPLEMENT));
+      return RC::NOT_IMPLEMENT;
+    }
   }
-  return calc_value(left_value, right_value, value);
+  return rc;
 }
 
 RC ArithmeticExpr::try_get_value(Value &value) const
@@ -609,23 +638,23 @@ RC ArithmeticExpr::try_get_value(Value &value) const
 
 
 RC ArithmeticExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
-  const std::vector<Table *> &tables, Expression *&res_expr, CompOp comp, Db *db) 
+  Expression *&res_expr, CompOp comp, Db *db) 
 {
   assert(PExpType::ARITHMETIC == expr->type);
   Expression *left_expr = nullptr;
   Expression *right_expr = nullptr;
   RC rc = RC::SUCCESS;
   if (expr->aexp->left != nullptr) {
-    rc = Expression::create_expression(expr->aexp->left, table_map, tables, left_expr);
+    rc = Expression::create_expression(expr->aexp->left, table_map, left_expr);
     if (rc != RC::SUCCESS) {
-      LOG_ERROR("BinaryExpression Create Left Expression Failed. RC = %d:%s", rc, strrc(rc));
+      LOG_ERROR("ArithmeticExpr Create Left Expression Failed. RC = %d:%s", rc, strrc(rc));
       return rc;
     }
   }
   if (expr->aexp->right) {
-    rc = Expression::create_expression(expr->aexp->right, table_map, tables, right_expr);
+    rc = Expression::create_expression(expr->aexp->right, table_map, right_expr);
     if (rc != RC::SUCCESS) {
-      LOG_ERROR("BinaryExpression Create Right Expression Failed. RC = %d:%s", rc, strrc(rc));
+      LOG_ERROR("ArithmeticExpr Create Right Expression Failed. RC = %d:%s", rc, strrc(rc));
       delete left_expr;
       return rc;
     }
@@ -672,7 +701,7 @@ RC AggretationExpr::get_value(const Tuple &tuple, Value &value) const
 
 
 RC AggretationExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
-  const std::vector<Table *> &tables, Expression *&res_expr, CompOp comp, Db *db) {
+  Expression *&res_expr, CompOp comp, Db *db) {
   // TODO: 修改聚合类型
   AggretationExpr* agexpr = new AggretationExpr();
   res_expr = agexpr;
@@ -835,7 +864,7 @@ RC SubQueryExpr::get_and_set_one_row_value(const Tuple &tuple, Value &value, Tup
 
 
 RC SubQueryExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
-  const std::vector<Table *> &tables, Expression *&res_expr, CompOp comp, Db *db) 
+  Expression *&res_expr, CompOp comp, Db *db) 
 {
   Stmt *tmp_stmt = nullptr;
   RC rc = SelectStmt::create(db, *expr->sexp->sub_select, tmp_stmt);
@@ -853,17 +882,26 @@ RC ListExpr::get_value(const Tuple &tuple, Value &value) const
   if (idx_ >= values_.size()) {
     return RC::RECORD_EOF;
   }
-  value = values_[idx_++];
-  return RC::SUCCESS;
+  RC rc = values_[idx_++]->get_value(tuple, value);
+  return rc;
 }
 
 RC ListExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
-  const std::vector<Table *> &tables, Expression *&res_expr, CompOp comp, Db *db)
+  Expression *&res_expr, CompOp comp, Db *db)
 {
   assert(expr->lexp != nullptr);
   PListExpr *p_list_expr = expr->lexp;
   ListExpr* list_expr = new ListExpr();
-  list_expr->set_values(p_list_expr->value_list);
+  std::vector<std::unique_ptr<Expression>> vec;
+  for (const auto& expr: p_list_expr->expr_list) {
+    Expression* tmp;
+    RC rc = Expression::create_expression(expr, table_map, tmp, comp, db);
+    if (rc != RC::SUCCESS) {
+      return rc;
+    }
+    vec.emplace_back(tmp);
+  }
+  list_expr->set_values(std::move(vec));
   res_expr = list_expr;
   return RC::SUCCESS;
 }

@@ -121,7 +121,7 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
     // 这里处理算数类型的表达式
     if (attr_pexp->type == PExpType::ARITHMETIC) {
       Expression* a_expr = nullptr;
-      RC rc = Expression::create_expression(attr_pexp, table_map, tables, a_expr);
+      RC rc = Expression::create_expression(attr_pexp, table_map, a_expr);
       if (rc != RC::SUCCESS) {
         return rc;
       }

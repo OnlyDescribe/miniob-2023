@@ -161,7 +161,6 @@ bool IsAttributesVailid(const std::vector<PExpr *> &select_attr)
   std::vector<char *> *             string_list;
   std::vector<std::string> *        std_string_list;
   std::vector<Expression *> *       expression_list;
-  std::vector<Value> *              value_list;
   std::vector<Relation> *           relation_list;
   std::vector<RelAttrSqlNode> *     rel_attr_list;
   std::vector<AssignmentSqlNode> *  assignment_list;
@@ -189,7 +188,6 @@ bool IsAttributesVailid(const std::vector<PExpr *> &select_attr)
 %type <aggr_func_type>      aggr_func_type
 %type <attr_infos>          attr_def_list
 %type <attr_info>           attr_def
-%type <value_list>          value_list
 %type <pexpr_list>          select_attr_list
 %type <expression>          expression
 %type <expression_list>     expression_list
@@ -577,16 +575,16 @@ create_view_stmt:
     ;
 
 insert_stmt:        /*insert   语句的语法解析树*/
-    INSERT INTO ID VALUES LBRACE value value_list RBRACE 
+    INSERT INTO ID VALUES LBRACE pexpr pexpr_list RBRACE 
     {
       $$ = new ParsedSqlNode(SCF_INSERT);
       $$->insertion.relation_name = $3;
       if ($7 != nullptr) {
         $$->insertion.values.swap(*$7);
+        delete $7;
       }
-      $$->insertion.values.emplace_back(*$6);
+      $$->insertion.values.emplace_back($6);
       std::reverse($$->insertion.values.begin(), $$->insertion.values.end());
-      delete $6;
       free($3);
     }
     ;
@@ -1287,22 +1285,6 @@ type:
     | DATE_T   { $$=AttrType::DATES; }
     ;
 
-
-value_list:
-    /* empty */
-    {
-      $$ = nullptr;
-    }
-    | COMMA value value_list  { 
-      if ($3 != nullptr) {
-        $$ = $3;
-      } else {
-        $$ = new std::vector<Value>;
-      }
-      $$->emplace_back(*$2);
-      delete $2;
-    }
-    ;
 value:
     NUMBER {
       $$ = new Value((int)$1);
@@ -1682,8 +1664,8 @@ pexpr_list:
     }
     | COMMA pexpr pexpr_list
     {
-      if ($2 != nullptr) {
-        $$ = $2;
+      if ($3 != nullptr) {
+        $$ = $3;
       } else {
         $$ = new std::vector<PExpr *>;
       }

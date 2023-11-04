@@ -371,28 +371,40 @@ private:
   Tuple *tuple_ = nullptr;
 };
 
+/**
+ * @description: 新定义的一个tuple, 支持一些别的操作
+ * @return {*}
+ */
 class ExpressionTuple : public Tuple
 {
 public:
-  ExpressionTuple(std::vector<std::unique_ptr<Expression>> &expressions) : expressions_(expressions) {}
+  ExpressionTuple() {}
 
   virtual ~ExpressionTuple() {}
 
-  int cell_num() const override { return expressions_.size(); }
+  int cell_num() const override { return expressions_->size(); }
+
+  void set_expressions(std::vector<std::unique_ptr<Expression>> *expressions) {
+    expressions_ = expressions;
+  }
+  void set_tuple(Tuple* tuple) {
+    tuple_ = tuple;
+  }
 
   RC cell_at(int index, Value &cell) const override
   {
-    if (index < 0 || index >= static_cast<int>(expressions_.size())) {
+    if (!expressions_ || !tuple_ || 
+      index < 0 || index >= static_cast<int>(expressions_->size())) {
       return RC::INTERNAL;
     }
-
-    const Expression *expr = expressions_[index].get();
-    return expr->try_get_value(cell);
+    Expression *expr = (*expressions_)[index].get();
+    RC rc = expr->get_value(*tuple_, cell);
+    return rc;
   }
 
   RC find_cell(const TupleCellSpec &spec, Value &cell) const override
   {
-    for (const std::unique_ptr<Expression> &expr : expressions_) {
+    for (const std::unique_ptr<Expression> &expr : *expressions_) {
       if (0 == strcmp(spec.alias(), expr->name().c_str())) {
         return expr->try_get_value(cell);
       }
@@ -409,7 +421,8 @@ public:
   }
 
 private:
-  const std::vector<std::unique_ptr<Expression>> &expressions_;
+  std::vector<std::unique_ptr<Expression>> *expressions_;     // not own this;
+  Tuple* tuple_;                                              // not own this;
 };
 
 /**

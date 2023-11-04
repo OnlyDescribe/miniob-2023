@@ -285,7 +285,7 @@ struct CalcSqlNode
 struct InsertSqlNode
 {
   std::string relation_name;  ///< Relation to insert into
-  std::vector<Value> values;  ///< 要插入的值
+  std::vector<PExpr*> values;  ///< 要插入的值
 };
 
 /**

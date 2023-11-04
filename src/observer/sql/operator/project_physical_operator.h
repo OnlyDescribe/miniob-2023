@@ -27,8 +27,6 @@ public:
 
   virtual ~ProjectPhysicalOperator() = default;
 
-  void add_projection(const Table *table, const FieldMeta *field);
-
   PhysicalOperatorType type() const override { return PhysicalOperatorType::PROJECT; }
 
   RC open(Trx *trx) override;
@@ -49,5 +47,8 @@ public:
 
 private:
   std::vector<std::unique_ptr<Expression>> exprs_;
-  ProjectTuple tuple_;
+  ExpressionTuple tuple_;
+  // ProjectTuple tuple_;
+
+  // ExpressionTuple* tuple2_;
 };
