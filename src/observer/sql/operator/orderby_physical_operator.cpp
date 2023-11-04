@@ -8,6 +8,7 @@ EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
 MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
+#include <execution>
 #include "sql/operator/orderby_physical_operator.h"
 
 OrderbyPhysicalOperator::OrderbyPhysicalOperator(
@@ -33,24 +34,27 @@ RC OrderbyPhysicalOperator::open(Trx *trx)
     return RC::NOT_MATCH;
   }
   RC rc = children_[0]->open(trx);
+  items_.reserve(2048);
+
   while ((rc = children_[0]->next()) == RC::SUCCESS) {
     Tuple *tuple = children_[0]->current_tuple();
     SortItem item;
     item.key = new std::vector<Value>;
+    item.key->reserve(expressions_.size());
     for (int i = 0; i < expressions_.size(); i++) {
       Value value;
       rc = expressions_[i]->get_value(*tuple, value);
       if (rc != RC::SUCCESS) {
         return rc;
       }
-      item.key->emplace_back(value);
+      item.key->push_back(std::move(value));
     }
     item.data = tuple->copy_tuple();
     items_.push_back(item);
   }
   // vector<Tuple*>
   // 内存排序模型
-  std::sort(items_.begin(), items_.end(), [&](const SortItem &a, const SortItem &b) -> bool {
+  std::sort(std::execution::par, items_.begin(), items_.end(), [&](const SortItem &a, const SortItem &b) -> bool {
     assert(a.key->size() == b.key->size());
     assert(a.key->size() == sort_types_.size());
     for (int i = 0; i < a.key->size(); i++) {
