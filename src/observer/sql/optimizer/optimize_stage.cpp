@@ -37,6 +37,16 @@ using namespace common;
 RC OptimizeStage::handle_request(SQLStageEvent *sql_event)
 {
   unique_ptr<LogicalOperator> logical_operator;
+
+  // 如果是创建视图, 再创建一份逻辑算子保存在sql_event中, 执行阶段会放进视图Table中
+  if (sql_event->sql_node()->flag == SCF_CREATE_VIEW) {
+    unique_ptr<LogicalOperator> view_logical_operator;
+    Stmt *view_stmt = sql_event->view_stmt();
+    logical_plan_generator_.create(view_stmt, view_logical_operator);
+    sql_event->set_logical_operator(std::move(view_logical_operator));
+    delete view_stmt;
+  }
+
   RC rc = create_logical_plan(sql_event, logical_operator);
   if (rc != RC::SUCCESS) {
     if (rc != RC::UNIMPLENMENT) {
@@ -65,11 +75,6 @@ RC OptimizeStage::handle_request(SQLStageEvent *sql_event)
   }
 
   sql_event->set_operator(std::move(physical_operator));
-
-  // 如果是创建视图, 将逻辑算子保存在sql_event中, 执行阶段会放进视图Table中
-  if (sql_event->sql_node()->flag == SCF_CREATE_VIEW) {
-    sql_event->set_logical_operator(std::move(logical_operator));
-  }
 
   return rc;
 }

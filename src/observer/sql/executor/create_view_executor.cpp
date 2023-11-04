@@ -99,14 +99,15 @@ RC CreateViewExecutor::execute(SQLStageEvent *sql_event)
   // 3.1 设置table属性, 为一视图表
   view->is_view() = true;
 
-  // // 3.2 设置视图中子计划的逻辑算子
-  // view->physical_operator() = sql_event->physical_operator().release();
+  // 3.2 设置视图中子计划的逻辑算子
+  view->logical_operator() = sql_event->logical_operator().release();
 
-  // std::unique_ptr<SelectStmt> &select_stmt = create_view_stmt->select_stmt();
-  // // TODO(oldcb)
+  std::unique_ptr<SelectStmt> &select_stmt = create_view_stmt->select_stmt();
+  // TODO(oldcb)
+  // 找到每个字段对应的表, 如果是表达式且涉及到多表的结构, 则不支持增删改
   // const std::vector<Field> &query_fields = select_stmt->query_fields();
-  // // 3.3.1 如果Select字段表达式涉及到的表大于1, 则不支持增删操作
-  // view->modifiable() = true;
+  // 3.3.1 如果Select字段表达式涉及到的表大于1, 则不支持删操作
+  view->modifiable() = true;
   // for (int i = 1, j = 0; i < query_fields.size(); ++i, ++j) {
   //   if (query_fields[i].table_name() != nullptr && query_fields[j].table_name() != nullptr) {
   //     if (strcmp(query_fields[i].table_name(), query_fields[j].table_name()) != 0) {
@@ -114,8 +115,8 @@ RC CreateViewExecutor::execute(SQLStageEvent *sql_event)
   //     }
   //   }
   // }
-  // // TODO(oldcb): // 3.3.2 如果涉及到聚合或是GroupBy, 则不支持修改操作
-  // view->updatable() = true;
+  // TODO(oldcb): // 3.3.2 如果涉及到聚合或是GroupBy, 则不支持修改操作
+  view->updatable() = true;
 
   // // 3.4 在 Table 的元信息中设置每个字段对应的原表指针
   // std::vector<const Table *> view_tables;

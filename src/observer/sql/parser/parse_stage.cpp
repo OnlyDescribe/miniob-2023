@@ -67,5 +67,15 @@ RC ParseStage::handle_request(SQLStageEvent *sql_event)
 
   sql_event->set_sql_node(std::move(sql_node));
 
+  // 如果是创建视图, 再创建一份保存在sql_event中, 为了拿到自己资源的逻辑算子
+  if (sql_event->sql_node()->flag == SCF_CREATE_VIEW) {
+    ParsedSqlResult parsed_sql_result;
+
+    parse(sql.c_str(), &parsed_sql_result);
+    unique_ptr<LogicalOperator> view_logical_operator;
+    std::unique_ptr<ParsedSqlNode> sql_node = std::move(parsed_sql_result.sql_nodes().front());
+    sql_event->set_view_sql_node(std::move(sql_node));
+  }
+
   return RC::SUCCESS;
 }
