@@ -75,9 +75,14 @@ RC CreateTableSelectExecutor::execute(SQLStageEvent *sql_event)
   // 设置表列名
   for (int i = 0; i < attribute_count; i++) {
     const TupleCellSpec &spec = schema.cell_at(i);
-    const char *alias = spec.alias();
-    if (nullptr != alias || alias[0] != 0) {
-      select_attr_infos[i].name = alias;
+    std::string alias = spec.alias();
+    if (!alias.empty()) {
+      size_t dotPos = alias.find('.');
+      if (dotPos != std::string::npos) {
+        select_attr_infos[i].name = alias.substr(dotPos + 1);
+      } else {
+        select_attr_infos[i].name = alias;
+      }
     }
   }
 
