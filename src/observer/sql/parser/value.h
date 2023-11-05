@@ -110,7 +110,6 @@ public:
   }
 
   std::string to_string() const;
-  int to_date() const;
 
   int compare(const Value &other) const;
 

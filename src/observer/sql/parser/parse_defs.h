@@ -51,13 +51,13 @@ enum class PExpType
 struct PExpr
 {
   PExpType type;
-  PUnaryExpr *uexp;
-  PArithmeticExpr *aexp;
-  PConditionExpr *cexp;
-  PFuncExpr *fexp;
-  PSubQueryExpr *sexp;
-  PListExpr *lexp;
-  PAggrExpr *agexp;
+  PUnaryExpr *uexp{nullptr};
+  PArithmeticExpr *aexp{nullptr};
+  PConditionExpr *cexp{nullptr};
+  PFuncExpr *fexp{nullptr};
+  PSubQueryExpr *sexp{nullptr};
+  PListExpr *lexp{nullptr};
+  PAggrExpr *agexp{nullptr};
 
   std::string name;
   std::string alias;
@@ -234,11 +234,11 @@ struct SelectSqlNode
   std::vector<PConditionExpr *> join_conds;  ///< 连接条件
                                              ///< Expr得是指针, 否则在解析阶段会delete, 难通过析构来管理内存
   // in where clause
-  PConditionExpr *conditions;
+  PConditionExpr *conditions{nullptr};
 
   // in groupby clause
   std::vector<RelAttrSqlNode> groupbys;
-  PConditionExpr *havings;
+  PConditionExpr *havings{nullptr};
 
   // in orderby clause
   std::vector<OrderBy> orderbys;

@@ -209,7 +209,6 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
     top_op.swap(project_oper);
   } else {
     LOG_WARN("empty, field and agg");
-    return RC::INTERNAL;
   }
   logical_operator.swap(top_op);
   return RC::SUCCESS;

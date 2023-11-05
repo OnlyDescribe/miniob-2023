@@ -639,6 +639,14 @@ select_stmt:        /*  select 语句的语法解析树*/
         delete $2;
       }
     }
+    | SELECT select_attr {
+      $$ = new ParsedSqlNode(SCF_CALC);
+      if ($2 != nullptr) {
+        $$->selection.attributes.swap(*$2);
+        std::reverse($$->selection.attributes.begin(), $$->selection.attributes.end());
+        delete $2;
+      }
+    }
     ;
 
 calc_stmt:

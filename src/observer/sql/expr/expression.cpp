@@ -11,6 +11,11 @@ See the Mulan PSL v2 for more details. */
 //
 // Created by Wangyunlai on 2022/07/05.
 //
+
+#include <sstream>
+#include <string>
+
+#include "sql/parser/value.h"
 #include "common/rc.h"
 #include "common/log/log.h"
 #include "common/lang/string.h"
@@ -43,6 +48,8 @@ RC Expression::create_expression(const PExpr *expr, const std::unordered_map<std
     return SubQueryExpr::create_expression(expr, parent_table_map, cur_table_map, res_expr, comp, db);
   } else if (expr->type == PExpType::AGGRFUNC) {
     return AggretationExpr::create_expression(expr, parent_table_map, cur_table_map, res_expr, comp, db);
+  } else if (expr->type == PExpType::FUNC) {
+    return FunctionExpr::create_expression(expr, parent_table_map, cur_table_map, res_expr, comp, db);
   }
   return RC::UNIMPLENMENT;
 }
@@ -989,4 +996,275 @@ RC HavingFieldExpr::get_value(const Tuple &tuple, Value &value) const
     return RC::INTERNAL;
   }
   return tuple.cell_at(pos_, value);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+RC FunctionExpr::date_format(const Tuple &tuple, Value &value) const {
+
+  Expression *date_expr = param1_;
+  Expression *format_expr = param2_;
+  Value date;
+  Value format;
+  date_expr->get_value(tuple, date);
+  format_expr->get_value(tuple, format);
+  if (date.attr_type() != DATES) {
+    return RC::INTERNAL;
+  }
+  if (format.attr_type() != CHARS) {
+    return RC::INTERNAL;
+  }
+  int cell_date = *(int *)(date.data());
+  char *cell_format_chars = (char *)(format.data());
+  std::string result_date_str;
+  int year = cell_date / 10000;
+  int month = (cell_date / 100) % 100;
+  int day = cell_date % 100;
+  for (size_t i = 0; i < strlen(cell_format_chars); i++) {
+    if (65 <= cell_format_chars[i] && cell_format_chars[i] <= 122) {
+      switch (cell_format_chars[i]) {
+        case 'Y': {
+          char tmp[5];
+          sprintf(tmp, "%d", year);
+          result_date_str += tmp;
+          break;
+        }
+        case 'y': {
+          char tmp[5];
+          sprintf(tmp, "%d", year % 100);
+          if (0 <= (year % 100) && (year % 100) <= 9) {
+            result_date_str += "0";
+          }
+          result_date_str += tmp;
+          break;
+        }
+        case 'M': {
+          switch (month) {
+            case 1: {
+              result_date_str += "January";
+              break;
+            }
+            case 2: {
+              result_date_str += "February";
+              break;
+            }
+            case 3: {
+              result_date_str += "March";
+              break;
+            }
+            case 4: {
+              result_date_str += "April";
+              break;
+            }
+            case 5: {
+              result_date_str += "May";
+              break;
+            }
+            case 6: {
+              result_date_str += "June";
+              break;
+            }
+            case 7: {
+              result_date_str += "July";
+              break;
+            }
+            case 8: {
+              result_date_str += "August";
+              break;
+            }
+            case 9: {
+              result_date_str += "September";
+              break;
+            }
+            case 10: {
+              result_date_str += "October";
+              break;
+            }
+            case 11: {
+              result_date_str += "November";
+              break;
+            }
+            case 12: {
+              result_date_str += "December";
+              break;
+            }
+            default: {
+              return RC::INTERNAL;
+              break;
+            }
+          }
+          break;
+        }
+        case 'm': {
+          char tmp[3];
+          sprintf(tmp, "%d", month);
+          if (0 <= month && month <= 9) {
+            result_date_str += "0";
+          }
+          result_date_str += tmp;
+          break;
+        }
+        case 'D': {
+          char tmp[3];
+          sprintf(tmp, "%d", day);
+          if (10 <= day && day <= 20) {
+            result_date_str += tmp;
+            result_date_str += "th";
+          } else {
+            switch (day % 10) {
+              case 1: {
+                result_date_str += tmp;
+                result_date_str += "st";
+                break;
+              }
+              case 2: {
+                result_date_str += tmp;
+                result_date_str += "nd";
+                break;
+              }
+              case 3: {
+                result_date_str += tmp;
+                result_date_str += "rd";
+                break;
+              }
+              default: {
+                result_date_str += tmp;
+                result_date_str += "th";
+                break;
+              }
+            }
+          }
+          break;
+        }
+        case 'd': {
+          char tmp[3];
+          sprintf(tmp, "%d", day);
+          if (0 <= day && day <= 9) {
+            result_date_str += "0";
+          }
+          result_date_str += tmp;
+          break;
+        }
+        default: {
+          result_date_str += cell_format_chars[i];
+          break;
+        }
+      }
+    } else if (cell_format_chars[i] != '%') {
+      result_date_str += cell_format_chars[i];
+    }
+  }
+  value.set_type(CHARS);
+  value.set_data(strdup(result_date_str.c_str()), result_date_str.size());
+  return RC::SUCCESS;
+}
+RC FunctionExpr::length(const Tuple &tuple, Value &value) const {
+  Value str;
+  RC rc = param1_->get_value(tuple, str);
+  if (rc != RC::SUCCESS) {
+    return rc;
+  }
+  int length = str.get_string().size();
+  value.set_int(length);
+  return rc;
+}
+
+float CustomRound(float number, int decimalPlaces) {
+  float multiplier = std::pow(10.0f, decimalPlaces);
+  return std::round(number * multiplier) / multiplier;
+}
+
+RC FunctionExpr::round(const Tuple &tuple, Value &value) const {
+  Value num;
+  RC rc = param1_->get_value(tuple, num);
+  if (rc != RC::SUCCESS) {
+    return rc;
+  } 
+  if (num.attr_type() != AttrType::FLOATS) {
+    return RC::INTERNAL;
+  }
+  int demical = 0;
+  if (param2_) {
+    Value m_demical;
+    rc = param2_->get_value(tuple, m_demical);
+    if (rc != RC::SUCCESS) {
+      return rc;
+    }
+    if (m_demical.attr_type() != AttrType::INTS) {
+      return RC::INTERNAL;
+    }
+    demical = m_demical.get_int();
+  }
+
+  value.set_float(CustomRound(num.get_float(), demical));
+  return rc;
+}
+RC FunctionExpr::get_value(const Tuple &tuple, Value &value) const {
+  RC rc = RC::SUCCESS;
+  switch (type_)
+  {
+  case PFuncType::DATE_FORMAT:
+    rc = date_format(tuple, value);
+    break;
+  case PFuncType::ROUND:
+    rc = round(tuple, value);
+    break;
+  case PFuncType::LENGTH:
+    rc = length(tuple, value);
+    break;
+  default:
+    rc = RC::UNIMPLENMENT;
+    break;
+  }
+  return rc;
+}
+
+RC FunctionExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
+  const std::unordered_map<std::string, Table *> &cur_table_map,
+    Expression *&res_expr, CompOp comp, Db *db) 
+{
+  assert(expr->fexp != nullptr);
+  FunctionExpr* fun_expr = nullptr;
+  Expression* parm1 = nullptr;
+  Expression* parm2 = nullptr;
+  RC rc = RC::SUCCESS;
+  if (expr->fexp->params.empty() || expr->fexp->params.size() > 2) {
+    LOG_ERROR("func parm error");
+    return RC::PARAM_ERROR;
+  }
+  rc = Expression::create_expression(expr->fexp->params[0], parent_table_map, cur_table_map, parm1, comp, db);
+  if (rc != RC::SUCCESS) {
+    LOG_ERROR("FunctionExpr Create Param[0] Failed. RC = %d:%s", rc, strrc(rc));
+    return rc;
+  }
+  if (expr->fexp->type == PFuncType::DATE_FORMAT) {
+    if (expr->fexp->params.size() != 2) {
+      LOG_ERROR("func parm error");
+      return RC::INTERNAL;
+    }
+    rc = Expression::create_expression(expr->fexp->params[1], parent_table_map, cur_table_map, parm2, comp, db);
+    if (rc != RC::SUCCESS) {
+      LOG_ERROR("FunctionExpr Create Param[1] Failed. RC = %d:%s", rc, strrc(rc));
+      delete parm1;
+      return rc;
+    }
+    fun_expr = new FunctionExpr(expr->fexp->type, parm1, parm2);
+  } else if (expr->fexp->type == PFuncType::ROUND) {
+    if (expr->fexp->params.size() == 2) {
+      rc = Expression::create_expression(expr->fexp->params[1], parent_table_map, cur_table_map, parm2, comp, db);
+      if (rc != RC::SUCCESS) {
+        LOG_ERROR("FunctionExpr Create Param[1] Failed. RC = %d:%s", rc, strrc(rc));
+        delete parm1;
+        return rc;
+      }
+    }
+    fun_expr = new FunctionExpr(expr->fexp->type, parm1, parm2);
+  } else if (expr->fexp->type == PFuncType::LENGTH) {
+    fun_expr = new FunctionExpr(expr->fexp->type, parm1);
+  }  else {
+    LOG_ERROR("not support this function");
+    return RC::NOT_IMPLEMENT;
+  }
+  res_expr = fun_expr;
+  return rc;
 }
