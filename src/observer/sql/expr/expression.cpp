@@ -1003,48 +1003,189 @@ RC HavingFieldExpr::get_value(const Tuple &tuple, Value &value) const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool DateFormat(const std::string& inputDate, 
-  const std::string& inputFormat, 
-  const std::string& outputFormat, std::string& result) {
-    std::tm date = {};
-    std::istringstream ss(inputDate);
-    ss >> std::get_time(&date, inputFormat.c_str());
-    if (ss.fail()) {
-        return false;
-    }
-    std::ostringstream oss;
-    oss << std::put_time(&date, outputFormat.c_str());
-    result = oss.str();
-    return true;
-}
-
 RC FunctionExpr::date_format(const Tuple &tuple, Value &value) const {
-  Value date, format;
-  RC rc = param1_->get_value(tuple, date);
-  if (rc != RC::SUCCESS) {
-    return rc;
-  }
-  rc = param2_->get_value(tuple, format);
-  if (rc != RC::SUCCESS) {
-    return rc;
-  }
-  if (date.attr_type() != AttrType::DATES || format.attr_type() != AttrType::CHARS) {
-    LOG_ERROR("date_format input parma error");
+  // Value date, format;
+  // RC rc = param1_->get_value(tuple, date);
+  // if (rc != RC::SUCCESS) {
+  //   return rc;
+  // }
+  // rc = param2_->get_value(tuple, format);
+  // if (rc != RC::SUCCESS) {
+  //   return rc;
+  // }
+  // if (date.attr_type() != AttrType::DATES || format.attr_type() != AttrType::CHARS) {
+  //   LOG_ERROR("date_format input parma error");
+  //   return RC::INTERNAL;
+  // }
+  // int year = date.get_int() / 10000;
+  // int month = date.get_int() % 10000 / 100;
+  // int day = date.get_int() % 100;
+  // std::ostringstream oss;
+  // oss << year << '-' << std::setw(2) << std::setfill('0') << month << '-' << std::setw(2) << std::setfill('0') << day;
+
+  // std::string res;
+  // if (DateFormat(oss.str(), "%Y-%m-%d", format.get_string(), res)) {
+  //   value.set_string(res.c_str(), res.size());
+  //   return rc;
+  // }
+  // LOG_ERROR("date_format error");
+  // return RC::INTERNAL;
+
+  Expression *date_expr = param1_;
+  Expression *format_expr = param2_;
+  Value date;
+  Value format;
+  date_expr->get_value(tuple, date);
+  format_expr->get_value(tuple, format);
+  if (date.attr_type() != DATES) {
     return RC::INTERNAL;
   }
-  int year = date.get_int() / 10000;
-  int month = date.get_int() % 10000 / 100;
-  int day = date.get_int() % 100;
-  std::ostringstream oss;
-  oss << year << '-' << std::setw(2) << std::setfill('0') << month << '-' << std::setw(2) << std::setfill('0') << day;
-
-  std::string res;
-  if (DateFormat(oss.str(), "%Y-%m-%d", format.get_string(), res)) {
-    value.set_string(res.c_str(), res.size());
-    return rc;
+  if (format.attr_type() != CHARS) {
+    return RC::INTERNAL;
   }
-  LOG_ERROR("date_format error");
-  return RC::INTERNAL;
+  int cell_date = *(int *)(date.data());
+  char *cell_format_chars = (char *)(format.data());
+  std::string result_date_str;
+  int year = cell_date / 10000;
+  int month = (cell_date / 100) % 100;
+  int day = cell_date % 100;
+  for (size_t i = 0; i < strlen(cell_format_chars); i++) {
+    if (65 <= cell_format_chars[i] && cell_format_chars[i] <= 122) {
+      switch (cell_format_chars[i]) {
+        case 'Y': {
+          char tmp[5];
+          sprintf(tmp, "%d", year);
+          result_date_str += tmp;
+          break;
+        }
+        case 'y': {
+          char tmp[5];
+          sprintf(tmp, "%d", year % 100);
+          if (0 <= (year % 100) && (year % 100) <= 9) {
+            result_date_str += "0";
+          }
+          result_date_str += tmp;
+          break;
+        }
+        case 'M': {
+          switch (month) {
+            case 1: {
+              result_date_str += "January";
+              break;
+            }
+            case 2: {
+              result_date_str += "February";
+              break;
+            }
+            case 3: {
+              result_date_str += "March";
+              break;
+            }
+            case 4: {
+              result_date_str += "April";
+              break;
+            }
+            case 5: {
+              result_date_str += "May";
+              break;
+            }
+            case 6: {
+              result_date_str += "June";
+              break;
+            }
+            case 7: {
+              result_date_str += "July";
+              break;
+            }
+            case 8: {
+              result_date_str += "August";
+              break;
+            }
+            case 9: {
+              result_date_str += "September";
+              break;
+            }
+            case 10: {
+              result_date_str += "October";
+              break;
+            }
+            case 11: {
+              result_date_str += "November";
+              break;
+            }
+            case 12: {
+              result_date_str += "December";
+              break;
+            }
+            default: {
+              return RC::INTERNAL;
+              break;
+            }
+          }
+          break;
+        }
+        case 'm': {
+          char tmp[3];
+          sprintf(tmp, "%d", month);
+          if (0 <= month && month <= 9) {
+            result_date_str += "0";
+          }
+          result_date_str += tmp;
+          break;
+        }
+        case 'D': {
+          char tmp[3];
+          sprintf(tmp, "%d", day);
+          if (10 <= day && day <= 20) {
+            result_date_str += tmp;
+            result_date_str += "th";
+          } else {
+            switch (day % 10) {
+              case 1: {
+                result_date_str += tmp;
+                result_date_str += "st";
+                break;
+              }
+              case 2: {
+                result_date_str += tmp;
+                result_date_str += "nd";
+                break;
+              }
+              case 3: {
+                result_date_str += tmp;
+                result_date_str += "rd";
+                break;
+              }
+              default: {
+                result_date_str += tmp;
+                result_date_str += "th";
+                break;
+              }
+            }
+          }
+          break;
+        }
+        case 'd': {
+          char tmp[3];
+          sprintf(tmp, "%d", day);
+          if (0 <= day && day <= 9) {
+            result_date_str += "0";
+          }
+          result_date_str += tmp;
+          break;
+        }
+        default: {
+          result_date_str += cell_format_chars[i];
+          break;
+        }
+      }
+    } else if (cell_format_chars[i] != '%') {
+      result_date_str += cell_format_chars[i];
+    }
+  }
+  value.set_type(CHARS);
+  value.set_data(strdup(result_date_str.c_str()), result_date_str.size());
+  return RC::SUCCESS;
 }
 RC FunctionExpr::length(const Tuple &tuple, Value &value) const {
   Value str;
