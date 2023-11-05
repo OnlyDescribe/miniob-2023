@@ -151,6 +151,16 @@ RC ValueExpr::create_expression(const PExpr *expr, const std::unordered_map<std:
   return RC::SUCCESS;
 }
 
+RC ValueExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+    Expression *&res_expr, CompOp comp, Db *db)
+{
+  assert(PExpType::UNARY == expr->type);
+  auto uexpr = expr->uexp;
+  assert(uexpr->is_attr == 0);
+  res_expr = new ValueExpr(uexpr->value);
+  return RC::SUCCESS;
+}
+
 /////////////////////////////////////////////////////////////////////////////////
 CastExpr::CastExpr(unique_ptr<Expression> child, AttrType cast_type) : child_(std::move(child)), cast_type_(cast_type)
 {}

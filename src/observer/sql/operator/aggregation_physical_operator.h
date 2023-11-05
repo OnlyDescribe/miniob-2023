@@ -80,6 +80,7 @@ struct AggregateValue
   std::vector<Value> aggregates_;
 };
 
+template <typename T>
 class SimpleAggregationHashTable
 {
 
@@ -116,7 +117,8 @@ public:
     for (auto it = ht_.begin(); it != ht_.end(); it++) {
       auto not_null_it = null_not_record_.find(it->first);
       for (int i = 0; i < it->second.aggregates_.size(); i++) {
-        if (!not_null_it->second.aggregates_[i].is_null() &&
+        if (agg_exprs_[i]->type() == ExprType::AGGRFUNCTION &&
+            !not_null_it->second.aggregates_[i].is_null() &&
             static_cast<AggretationExpr *>(agg_exprs_[i])->aggr_type() == AggrFuncType::AVG) {
           it->second.aggregates_[i] =
               Value(it->second.aggregates_[i].get_float() / not_null_it->second.aggregates_[i].get_int());
@@ -127,7 +129,7 @@ public:
 
   void clear() { ht_.clear(); }
 
-  AggregateValue get_aggr_value(const AggregateKey &agg_key)
+  AggregateValue get_aggr_value(const T &agg_key)
   {
     auto it = ht_.find(agg_key);
     if (it == ht_.end()) {
@@ -136,7 +138,7 @@ public:
     return it->second;
   }
 
-  void insert_combine(const AggregateKey &agg_key, const Tuple &tuple)
+  void insert_combine(const T &agg_key, const Tuple &tuple)
   {
     if (ht_.count(agg_key) == 0) {
       ht_.insert({agg_key, generate_initial_aggregateValue()});
@@ -144,7 +146,45 @@ public:
     }
     combine_aggregate_values(&ht_[agg_key], &null_not_record_[agg_key], tuple);
   }
+    /** An iterator over the aggregation hash table */
+  class Iterator {
+    public:
+        Iterator() {};
+        Iterator(typename std::unordered_map<T, AggregateValue>::const_iterator iter)
+            : iter_(iter) {}
 
+        const T& Key() const {
+            return iter_->first;
+        }
+
+        const AggregateValue& Val() {
+            return iter_->second;
+        }
+
+        bool operator==(const Iterator& other) const {
+            return iter_ == other.iter_;
+        }
+
+        bool operator!=(const Iterator& other) const {
+            return iter_ != other.iter_;
+        }
+
+        Iterator& operator++() {
+            ++iter_;
+            return *this;
+        }
+
+    private:
+        typename std::unordered_map<T, AggregateValue>::const_iterator iter_;
+    };
+
+    Iterator begin() const {
+        return Iterator(ht_.begin());
+    }
+
+    Iterator end() const {
+        return Iterator(ht_.end());
+    }
 private:
   // 将b聚合到a, not_null表示记录a非空的个数(需要计算平均值)
   void aggregate_value(const Value &b, Value &a, Value &not_null, AggrFuncType type)
@@ -203,21 +243,27 @@ private:
   {
     std::vector<Value> values{};
     for (const auto &agg_expr_ptr : agg_exprs_) {
-      auto aggr_expr = static_cast<AggretationExpr *>(agg_expr_ptr);
-      switch (aggr_expr->aggr_type()) {
-        case AggrFuncType::COUNT_STAR:
-        case AggrFuncType::COUNT:
-          // Count start starts at zero.
-          values.emplace_back(Value(0));
-          break;
-        case AggrFuncType::MIN:
-        case AggrFuncType::MAX:
-        case AggrFuncType::SUM:
-        case AggrFuncType::AVG:
-          // other start starts at NULL.
-          values.emplace_back(Value(AttrType::NULLS));
-          break;
-        default: break;
+      if (agg_expr_ptr->type() == ExprType::AGGRFUNCTION) {
+        auto aggr_expr = static_cast<AggretationExpr *>(agg_expr_ptr);
+        switch (aggr_expr->aggr_type()) {
+          case AggrFuncType::COUNT_STAR:
+          case AggrFuncType::COUNT:
+            // Count start starts at zero.
+            values.emplace_back(Value(0));
+            break;
+          case AggrFuncType::MIN:
+          case AggrFuncType::MAX:
+          case AggrFuncType::SUM:
+          case AggrFuncType::AVG:
+            // other start starts at NULL.
+            values.emplace_back(Value(AttrType::NULLS));
+            break;
+          default: break;
+        }
+      } else if (agg_expr_ptr->type() == ExprType::FIELD) {
+        values.emplace_back(Value(AttrType::NULLS));
+      } else {
+        LOG_WARN("agg_expr_ not implement");
       }
     }
     return {values};
@@ -231,15 +277,25 @@ private:
   void combine_aggregate_values(AggregateValue *results, AggregateValue *null_not_record, const Tuple &tuple)
   {
     for (uint32_t i = 0; i < agg_exprs_.size(); i++) {
-      auto aggr_expr = static_cast<AggretationExpr *>(agg_exprs_[i]);
-      Value value;
-      aggr_expr->get_value(tuple, value);
-      aggregate_value(value, results->aggregates_[i], null_not_record->aggregates_[i], aggr_expr->aggr_type());
+      if (agg_exprs_[i]->type() == ExprType::AGGRFUNCTION) {
+        auto aggr_expr = static_cast<AggretationExpr *>(agg_exprs_[i]);
+        Value value;
+        aggr_expr->get_value(tuple, value);
+        aggregate_value(value, results->aggregates_[i], null_not_record->aggregates_[i], aggr_expr->aggr_type());
+      } else {
+        assert(agg_exprs_[i]->type() == ExprType::FIELD);
+        // auto field_expr = static_cast<FieldExpr *>(agg_exprs_[i]);
+        RC rc = agg_exprs_[i]->get_value(tuple, results->aggregates_[i]);
+        if (rc != RC::SUCCESS) {
+          LOG_WARN("combine not success");
+        }
+      }
     }
   }
   /** The hash table is just a map from aggregate keys to aggregate values */
-  std::unordered_map<AggregateKey, AggregateValue> ht_{};
-  std::unordered_map<AggregateKey, AggregateValue> null_not_record_{};
+  std::unordered_map<T, AggregateValue> ht_{};
+  // std::unordered_map<T, AggregateValue>::iterator;
+  std::unordered_map<T, AggregateValue> null_not_record_{};
   std::vector<Expression *> agg_exprs_{nullptr};  // not own this
   // AggregateValue results_;
 };
@@ -254,7 +310,7 @@ class AggregationPhysicalOperator : public PhysicalOperator
 public:
   AggregationPhysicalOperator(std::vector<std::unique_ptr<Expression>> &&aggr_exprs) : projects_(std::move(aggr_exprs))
   {
-    ht_ = std::make_unique<SimpleAggregationHashTable>();
+    ht_ = std::make_unique<SimpleAggregationHashTable<AggregateKey>>();
   }
 
   virtual ~AggregationPhysicalOperator() = default;
@@ -278,7 +334,7 @@ public:
 private:
   std::vector<std::unique_ptr<Expression>> projects_;  // 投影
   std::vector<Expression *> aggr_exprs_;               // 聚合表达式
-  std::unique_ptr<SimpleAggregationHashTable> ht_;     // 聚合哈希表
+  std::unique_ptr<SimpleAggregationHashTable<AggregateKey>> ht_;     // 聚合哈希表
   std::unique_ptr<AggregationTuple> aggregation_tuple_;
 
   ExpressionTuple exprssion_tuple_;  // 表达式
