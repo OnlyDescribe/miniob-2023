@@ -268,6 +268,8 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, const std::unorde
     return rc;
   }
 
+
+
   // create join on statement
   JoinOnStmt *join_on_stmt = nullptr;
   rc = JoinOnStmt::create(db, default_table, &table_map, select_sql.join_conds, join_on_stmt);

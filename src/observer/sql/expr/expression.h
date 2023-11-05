@@ -62,7 +62,8 @@ enum class ExprType
   ARITHMETIC,    ///< 算术运算
   SUBQUERY,      ///< 子查询
   LIST,          ///< 列表达式
-  HavingField    // 取得havingField的值
+  HavingField,   ///< 取得havingField的值
+  FUNCTION       ///< 取得havingField的值
 };
 
 /**
@@ -542,4 +543,45 @@ public:
 
 private:
   int pos_;
+};
+
+
+
+/**
+ * @brief function表达式, length、round和date_format。
+ * 比如 having a > 1 and b < 1;
+ */
+class FunctionExpr: public Expression
+{
+public:
+  explicit FunctionExpr(PFuncType type, Expression* param1, Expression* param2 = nullptr): 
+     type_(type), param1_(param1), param2_(param2) {}
+
+  virtual ~FunctionExpr() = default;
+
+  virtual RC get_value(const Tuple &tuple, Value &value) const;
+
+  RC try_get_value(Value &value) const { return RC::UNIMPLENMENT; }
+  /**
+   * @brief 表达式的类型
+   * 可以根据表达式类型来转换为具体的子类
+   */
+  ExprType type() const { return ExprType::FUNCTION; }
+  /**
+   * @brief 表达式值的类型
+   * @details 一个表达式运算出结果后，只有一个值
+   */
+  AttrType value_type() const { return AttrType::UNDEFINED; };
+
+  static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
+  const std::unordered_map<std::string, Table *> &cur_table_map,
+    Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
+private:
+  RC date_format(const Tuple &tuple, Value &value) const;
+  RC length(const Tuple &tuple, Value &value) const;
+  RC round(const Tuple &tuple, Value &value) const;
+private:
+  PFuncType type_;
+  Expression* param1_;
+  Expression* param2_;
 };

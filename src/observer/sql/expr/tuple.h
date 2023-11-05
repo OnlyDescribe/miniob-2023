@@ -389,7 +389,8 @@ public:
 
   RC cell_at(int index, Value &cell) const override
   {
-    if (!expressions_ || !tuple_ || index < 0 || index >= static_cast<int>(expressions_->size())) {
+    if (!expressions_  || index < 0 || index >= static_cast<int>(expressions_->size())) {
+      LOG_ERROR("calc physical operator error");
       return RC::INTERNAL;
     }
     Expression *expr = (*expressions_)[index].get();

@@ -11,6 +11,14 @@ See the Mulan PSL v2 for more details. */
 //
 // Created by Wangyunlai on 2022/07/05.
 //
+
+#include <sstream>
+#include <cmath>
+#include <iomanip>
+#include <ctime>
+#include <string>
+
+#include "sql/parser/value.h"
 #include "common/rc.h"
 #include "common/log/log.h"
 #include "common/lang/string.h"
@@ -43,6 +51,8 @@ RC Expression::create_expression(const PExpr *expr, const std::unordered_map<std
     return SubQueryExpr::create_expression(expr, parent_table_map, cur_table_map, res_expr, comp, db);
   } else if (expr->type == PExpType::AGGRFUNC) {
     return AggretationExpr::create_expression(expr, parent_table_map, cur_table_map, res_expr, comp, db);
+  } else if (expr->type == PExpType::FUNC) {
+    return FunctionExpr::create_expression(expr, parent_table_map, cur_table_map, res_expr, comp, db);
   }
   return RC::UNIMPLENMENT;
 }
@@ -989,4 +999,160 @@ RC HavingFieldExpr::get_value(const Tuple &tuple, Value &value) const
     return RC::INTERNAL;
   }
   return tuple.cell_at(pos_, value);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+bool DateFormat(const std::string& inputDate, 
+  const std::string& inputFormat, 
+  const std::string& outputFormat, std::string& result) {
+    std::tm date = {};
+    std::istringstream ss(inputDate);
+    ss >> std::get_time(&date, inputFormat.c_str());
+    if (ss.fail()) {
+        return false;
+    }
+    std::ostringstream oss;
+    oss << std::put_time(&date, outputFormat.c_str());
+    result = oss.str();
+    return true;
+}
+
+RC FunctionExpr::date_format(const Tuple &tuple, Value &value) const {
+  Value date, format;
+  RC rc = param1_->get_value(tuple, date);
+  if (rc != RC::SUCCESS) {
+    return rc;
+  }
+  rc = param2_->get_value(tuple, format);
+  if (rc != RC::SUCCESS) {
+    return rc;
+  }
+  if (date.attr_type() != AttrType::DATES || format.attr_type() != AttrType::CHARS) {
+    LOG_ERROR("date_format input parma error");
+    return RC::INTERNAL;
+  }
+  int year = date.get_int() / 10000;
+  int month = date.get_int() % 10000 / 100;
+  int day = date.get_int() % 100;
+  std::ostringstream oss;
+  oss << year << '-' << std::setw(2) << std::setfill('0') << month << '-' << std::setw(2) << std::setfill('0') << day;
+
+  std::string res;
+  if (DateFormat(oss.str(), "%Y-%m-%d", format.get_string(), res)) {
+    value.set_string(res.c_str(), res.size());
+    return rc;
+  }
+  LOG_ERROR("date_format error");
+  return RC::INTERNAL;
+}
+RC FunctionExpr::length(const Tuple &tuple, Value &value) const {
+  Value str;
+  RC rc = param1_->get_value(tuple, str);
+  if (rc != RC::SUCCESS) {
+    return rc;
+  }
+  int length = str.get_string().size();
+  value.set_int(length);
+  return rc;
+}
+
+float CustomRound(float number, int decimalPlaces) {
+  float multiplier = std::pow(10.0f, decimalPlaces);
+  return std::round(number * multiplier) / multiplier;
+}
+
+RC FunctionExpr::round(const Tuple &tuple, Value &value) const {
+  Value num;
+  RC rc = param1_->get_value(tuple, num);
+  if (rc != RC::SUCCESS) {
+    return rc;
+  } 
+  if (num.attr_type() != AttrType::FLOATS) {
+    return RC::INTERNAL;
+  }
+  int demical = 0;
+  if (param2_) {
+    Value m_demical;
+    rc = param2_->get_value(tuple, m_demical);
+    if (rc != RC::SUCCESS) {
+      return rc;
+    }
+    if (m_demical.attr_type() != AttrType::INTS) {
+      return RC::INTERNAL;
+    }
+    demical = m_demical.get_int();
+  }
+
+  value.set_float(CustomRound(num.get_float(), demical));
+  return rc;
+}
+RC FunctionExpr::get_value(const Tuple &tuple, Value &value) const {
+  RC rc = RC::SUCCESS;
+  switch (type_)
+  {
+  case PFuncType::DATE_FORMAT:
+    rc = date_format(tuple, value);
+    break;
+  case PFuncType::ROUND:
+    rc = round(tuple, value);
+    break;
+  case PFuncType::LENGTH:
+    rc = length(tuple, value);
+    break;
+  default:
+    rc = RC::UNIMPLENMENT;
+    break;
+  }
+  return rc;
+}
+
+RC FunctionExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
+  const std::unordered_map<std::string, Table *> &cur_table_map,
+    Expression *&res_expr, CompOp comp, Db *db) 
+{
+  assert(expr->fexp != nullptr);
+  FunctionExpr* fun_expr = nullptr;
+  Expression* parm1 = nullptr;
+  Expression* parm2 = nullptr;
+  RC rc = RC::SUCCESS;
+  if (expr->fexp->params.empty() || expr->fexp->params.size() > 2) {
+    LOG_ERROR("func parm error");
+    return RC::PARAM_ERROR;
+  }
+  rc = Expression::create_expression(expr->fexp->params[0], parent_table_map, cur_table_map, parm1, comp, db);
+  if (rc != RC::SUCCESS) {
+    LOG_ERROR("FunctionExpr Create Param[0] Failed. RC = %d:%s", rc, strrc(rc));
+    return rc;
+  }
+  if (expr->fexp->type == PFuncType::DATE_FORMAT) {
+    if (expr->fexp->params.size() != 2) {
+      LOG_ERROR("func parm error");
+      return RC::INTERNAL;
+    }
+    rc = Expression::create_expression(expr->fexp->params[1], parent_table_map, cur_table_map, parm2, comp, db);
+    if (rc != RC::SUCCESS) {
+      LOG_ERROR("FunctionExpr Create Param[1] Failed. RC = %d:%s", rc, strrc(rc));
+      delete parm1;
+      return rc;
+    }
+    fun_expr = new FunctionExpr(expr->fexp->type, parm1, parm2);
+  } else if (expr->fexp->type == PFuncType::ROUND) {
+    if (expr->fexp->params.size() == 2) {
+      rc = Expression::create_expression(expr->fexp->params[1], parent_table_map, cur_table_map, parm2, comp, db);
+      if (rc != RC::SUCCESS) {
+        LOG_ERROR("FunctionExpr Create Param[1] Failed. RC = %d:%s", rc, strrc(rc));
+        delete parm1;
+        return rc;
+      }
+    }
+    fun_expr = new FunctionExpr(expr->fexp->type, parm1, parm2);
+  } else if (expr->fexp->type == PFuncType::LENGTH) {
+    fun_expr = new FunctionExpr(expr->fexp->type, parm1);
+  }  else {
+    LOG_ERROR("not support this function");
+    return RC::NOT_IMPLEMENT;
+  }
+  res_expr = fun_expr;
+  return rc;
 }

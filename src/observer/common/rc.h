@@ -35,6 +35,7 @@ See the Mulan PSL v2 for more details. */
   DEFINE_RC(BUFFERPOOL_OPEN)             \
   DEFINE_RC(BUFFERPOOL_NOBUF)            \
   DEFINE_RC(BUFFERPOOL_INVALID_PAGE_NUM) \
+  DEFINE_RC(PARAM_ERROR)                 \
   DEFINE_RC(RECORD_OPENNED)              \
   DEFINE_RC(RECORD_INVALID_RID)          \
   DEFINE_RC(RECORD_INVALID_KEY)          \
