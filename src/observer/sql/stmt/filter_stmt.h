@@ -44,7 +44,8 @@ public:
   const std::vector<FilterUnit *> &filter_units() const { return filter_units_; }
 
 public:
-  static RC create(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,
+  static RC create(Db *db, Table *default_table, const std::unordered_map<std::string, Table *> &parent_table_map,
+      const std::unordered_map<std::string, Table *>& cur_table_map,
       PConditionExpr *conditions, FilterStmt *&stmt);
 
   static RC create_filter_unit(Db *db, Table *default_table, std::unordered_map<std::string, Table *> *tables,

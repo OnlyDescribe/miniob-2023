@@ -141,7 +141,7 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, const std::unorde
       || project_exp->type == PExpType::SUBQUERY
       || project_exp->type == PExpType::FUNC) {
       Expression *expr = nullptr;
-      RC rc = Expression::create_expression(project_exp, table_map, expr);
+      RC rc = Expression::create_expression(project_exp, parent_table_map, table_map, expr);
       if (rc != RC::SUCCESS) {
         return rc;
       }
@@ -165,6 +165,10 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, const std::unorde
     // select * from;
     if (common::is_blank(relation_attr.relation_name.c_str()) &&
         0 == strcmp(relation_attr.attribute_name.c_str(), "*")) {
+      if (!project_exp->alias.empty()) {
+        LOG_WARN("* can has alias");
+        return RC::SQL_SYNTAX;
+      }
       for (Table *table : tables) {
         wildcard_fields(table, projects, with_table_name, alias_map);
       }
@@ -179,6 +183,10 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, const std::unorde
           return RC::SCHEMA_FIELD_MISSING;
         }
         // select *.*;
+        if (!project_exp->alias.empty()) {
+          LOG_WARN("* can has alias");
+          return RC::SQL_SYNTAX;
+        }
         for (Table *table : tables) {
           wildcard_fields(table, projects, with_table_name, alias_map);
         }
@@ -192,9 +200,12 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, const std::unorde
         Table *table = iter->second;
         //   select table.* from xxx;
         if (0 == strcmp(field_name, "*")) {
+          if (!project_exp->alias.empty()) {
+            LOG_WARN("* can has alias");
+            return RC::SQL_SYNTAX;
+          }
           wildcard_fields(table, projects, with_table_name, alias_map);
         } else {
-
           //  select table.rel from xxx;
           const FieldMeta *field_meta = table->table_meta().field(field_name);
           if (nullptr == field_meta) {
@@ -249,12 +260,9 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, const std::unorde
     default_table = tables[0];
   }
 
-  auto merge_table_map = table_map;
-  merge_table_map.insert(parent_table_map.begin(), parent_table_map.end());
-
   // create filter statement in `where` statement
   FilterStmt *filter_stmt = nullptr;
-  RC rc = FilterStmt::create(db, default_table, &merge_table_map, select_sql.conditions, filter_stmt);
+  RC rc = FilterStmt::create(db, default_table, parent_table_map, table_map, select_sql.conditions, filter_stmt);
   if (rc != RC::SUCCESS) {
     LOG_WARN("cannot construct filter stmt");
     return rc;
@@ -262,7 +270,7 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, const std::unorde
 
   // create join on statement
   JoinOnStmt *join_on_stmt = nullptr;
-  rc = JoinOnStmt::create(db, default_table, &merge_table_map, select_sql.join_conds, join_on_stmt);
+  rc = JoinOnStmt::create(db, default_table, &table_map, select_sql.join_conds, join_on_stmt);
   if (rc != RC::SUCCESS) {
     LOG_WARN("cannot construct filter stmt");
     return rc;
@@ -306,7 +314,7 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, const std::unorde
     // 否则，就可以通过query_field拿到groupby的信息(那些field类型是聚合的)
     // create groupby, 这里偷懒，直接用filter_stmt
     FilterStmt *having_stmt = nullptr;
-    rc = FilterStmt::create(db, default_table, &table_map, select_sql.havings, having_stmt);
+    rc = FilterStmt::create(db, default_table, parent_table_map, table_map, select_sql.havings, having_stmt);
     if (rc != RC::SUCCESS) {
       LOG_WARN("cannot construct filter stmt");
       return rc;

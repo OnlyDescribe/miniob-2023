@@ -24,24 +24,25 @@ See the Mulan PSL v2 for more details. */
 
 using namespace std;
 
-RC Expression::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+RC Expression::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
+    const std::unordered_map<std::string, Table *> &cur_table_map,
     Expression *&res_expr, CompOp comp, Db *db)
 {
   if (expr->type == PExpType::UNARY) {
     auto uexpr = expr->uexp;
     if (uexpr->is_attr) {
-      return FieldExpr::create_expression(expr, table_map, res_expr, comp, db);
+      return FieldExpr::create_expression(expr, parent_table_map, cur_table_map, res_expr, comp, db);
     } else {
-      return ValueExpr::create_expression(expr, table_map, res_expr, comp, db);
+      return ValueExpr::create_expression(expr, parent_table_map, cur_table_map, res_expr, comp, db);
     }
   } else if (expr->type == PExpType::ARITHMETIC) {
-    return ArithmeticExpr::create_expression(expr, table_map, res_expr, comp, db);
+    return ArithmeticExpr::create_expression(expr, parent_table_map, cur_table_map, res_expr, comp, db);
   } else if (expr->type == PExpType::LIST) {
-    return ListExpr::create_expression(expr, table_map, res_expr, comp, db);
+    return ListExpr::create_expression(expr, parent_table_map, cur_table_map, res_expr, comp, db);
   } else if (expr->type == PExpType::SUBQUERY) {
-    return SubQueryExpr::create_expression(expr, table_map, res_expr, comp, db);
+    return SubQueryExpr::create_expression(expr, parent_table_map, cur_table_map, res_expr, comp, db);
   } else if (expr->type == PExpType::AGGRFUNC) {
-    return AggretationExpr::create_expression(expr, table_map, res_expr, comp, db);
+    return AggretationExpr::create_expression(expr, parent_table_map, cur_table_map, res_expr, comp, db);
   }
   return RC::UNIMPLENMENT;
 }
@@ -70,7 +71,7 @@ void FieldExpr::get_fieldexprs(Expression *expr, std::vector<Expression *> &fiel
     case ExprType::ARITHMETIC: {
       auto aexp = static_cast<ArithmeticExpr *>(expr);
       get_fieldexprs(aexp->left().get(), field_exprs);
-      get_fieldexprs(aexp->left().get(), field_exprs);
+      get_fieldexprs(aexp->right().get(), field_exprs);
       break;
     }
     default: break;
@@ -78,7 +79,8 @@ void FieldExpr::get_fieldexprs(Expression *expr, std::vector<Expression *> &fiel
   return;
 }
 
-RC FieldExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+RC FieldExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
+    const std::unordered_map<std::string, Table *> &cur_table_map,
     Expression *&res_expr, CompOp comp, Db *db)
 {
 
@@ -89,25 +91,31 @@ RC FieldExpr::create_expression(const PExpr *expr, const std::unordered_map<std:
   const char *table_name = attr.relation_name.c_str();
   const char *field_name = attr.attribute_name.c_str();
 
-  if (table_map.empty()) {
+  if (cur_table_map.empty()) {
     LOG_WARN("invalid. empty, table");
     return RC::SCHEMA_FIELD_MISSING;
   }
 
   Table *table = nullptr;
   if (common::is_blank(table_name)) {
-    if (table_map.size() != 1) {
+    if (cur_table_map.size() != 1) {
       LOG_WARN("invalid. I do not know the attr's table. attr=%s", field_name);
       return RC::SCHEMA_FIELD_MISSING;
     }
-    table = table_map.begin()->second;
-  }
-  if (nullptr == table) {
-    auto iter = table_map.find(table_name);
-    if (iter != table_map.end()) {
+    table = cur_table_map.begin()->second;
+  } else {
+    auto iter = cur_table_map.find(table_name);
+    if (iter != cur_table_map.end()) {
       table = iter->second;
     }
+    if (table == nullptr) {
+      auto iter2 = parent_table_map.find(table_name);
+      if (iter2 != cur_table_map.end()) {
+        table = iter2->second;
+      }
+    }
   }
+
   if (table == nullptr) {
     table = db->find_table(table_name);
   }
@@ -132,7 +140,8 @@ RC ValueExpr::get_value(const Tuple &tuple, Value &value) const
   return RC::SUCCESS;
 }
 
-RC ValueExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+RC ValueExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
+    const std::unordered_map<std::string, Table *> &cur_table_map,
     Expression *&res_expr, CompOp comp, Db *db)
 {
   assert(PExpType::UNARY == expr->type);
@@ -660,7 +669,8 @@ RC ArithmeticExpr::try_get_value(Value &value) const
   return calc_value(left_value, right_value, value);
 }
 
-RC ArithmeticExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+RC ArithmeticExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
+  const std::unordered_map<std::string, Table *> &cur_table_map,
     Expression *&res_expr, CompOp comp, Db *db)
 {
   assert(PExpType::ARITHMETIC == expr->type);
@@ -668,14 +678,14 @@ RC ArithmeticExpr::create_expression(const PExpr *expr, const std::unordered_map
   Expression *right_expr = nullptr;
   RC rc = RC::SUCCESS;
   if (expr->aexp->left != nullptr) {
-    rc = Expression::create_expression(expr->aexp->left, table_map, left_expr);
+    rc = Expression::create_expression(expr->aexp->left, parent_table_map, cur_table_map, left_expr);
     if (rc != RC::SUCCESS) {
       LOG_ERROR("ArithmeticExpr Create Left Expression Failed. RC = %d:%s", rc, strrc(rc));
       return rc;
     }
   }
   if (expr->aexp->right) {
-    rc = Expression::create_expression(expr->aexp->right, table_map, right_expr);
+    rc = Expression::create_expression(expr->aexp->right, parent_table_map, cur_table_map, right_expr);
     if (rc != RC::SUCCESS) {
       LOG_ERROR("ArithmeticExpr Create Right Expression Failed. RC = %d:%s", rc, strrc(rc));
       delete left_expr;
@@ -751,7 +761,8 @@ void AggretationExpr::get_aggrfuncexprs(Expression *expr, std::vector<Expression
   }
 }
 
-RC AggretationExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+RC AggretationExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
+  const std::unordered_map<std::string, Table *> &cur_table_map,
     Expression *&res_expr, CompOp comp, Db *db)
 {
   assert(expr->agexp->expr);
@@ -761,7 +772,7 @@ RC AggretationExpr::create_expression(const PExpr *expr, const std::unordered_ma
     return RC::SUCCESS;
   } else {
     Expression *sub_expr = nullptr;
-    RC rc = Expression::create_expression(expr->agexp->expr, table_map, sub_expr, comp, db);
+    RC rc = Expression::create_expression(expr->agexp->expr, parent_table_map, cur_table_map, sub_expr, comp, db);
     if (rc != RC::SUCCESS) {
       return rc;
     }
@@ -924,11 +935,15 @@ RC SubQueryExpr::get_and_set_one_row_value(const Tuple &tuple, Value &value, Tup
   return rc;
 }
 
-RC SubQueryExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+RC SubQueryExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
+    const std::unordered_map<std::string, Table *> &cur_table_map,
     Expression *&res_expr, CompOp comp, Db *db)
 {
   Stmt *tmp_stmt = nullptr;
-  RC rc = SelectStmt::create(db, *expr->sexp->sub_select, table_map, tmp_stmt);
+
+  auto new_map = parent_table_map;
+  new_map.insert(cur_table_map.begin(), cur_table_map.end());
+  RC rc = SelectStmt::create(db, *expr->sexp->sub_select, new_map, tmp_stmt);
   if (rc != RC::SUCCESS) {
     return rc;
   }
@@ -947,7 +962,8 @@ RC ListExpr::get_value(const Tuple &tuple, Value &value) const
   return rc;
 }
 
-RC ListExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+RC ListExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
+    const std::unordered_map<std::string, Table *> &cur_table_map,
     Expression *&res_expr, CompOp comp, Db *db)
 {
   assert(expr->lexp != nullptr);
@@ -956,7 +972,7 @@ RC ListExpr::create_expression(const PExpr *expr, const std::unordered_map<std::
   std::vector<std::unique_ptr<Expression>> vec;
   for (const auto &expr : p_list_expr->expr_list) {
     Expression *tmp;
-    RC rc = Expression::create_expression(expr, table_map, tmp, comp, db);
+    RC rc = Expression::create_expression(expr, parent_table_map, cur_table_map, tmp, comp, db);
     if (rc != RC::SUCCESS) {
       return rc;
     }
