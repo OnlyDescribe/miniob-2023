@@ -928,7 +928,7 @@ RC SubQueryExpr::create_expression(const PExpr *expr, const std::unordered_map<s
     Expression *&res_expr, CompOp comp, Db *db)
 {
   Stmt *tmp_stmt = nullptr;
-  RC rc = SelectStmt::create(db, *expr->sexp->sub_select, tmp_stmt);
+  RC rc = SelectStmt::create(db, *expr->sexp->sub_select, table_map, tmp_stmt);
   if (rc != RC::SUCCESS) {
     return rc;
   }

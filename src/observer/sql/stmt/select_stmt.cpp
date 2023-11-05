@@ -88,7 +88,7 @@ RC SelectStmt::createField(
   return RC::SCHEMA_FIELD_NOT_EXIST;
 }
 
-RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
+RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, const std::unordered_map<std::string, Table*>& parent_table_map, Stmt *&stmt)
 {
   if (nullptr == db) {
     LOG_WARN("invalid argument. db is null");
@@ -249,9 +249,12 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
     default_table = tables[0];
   }
 
+  auto merge_table_map = table_map;
+  merge_table_map.insert(parent_table_map.begin(), parent_table_map.end());
+
   // create filter statement in `where` statement
   FilterStmt *filter_stmt = nullptr;
-  RC rc = FilterStmt::create(db, default_table, &table_map, select_sql.conditions, filter_stmt);
+  RC rc = FilterStmt::create(db, default_table, &merge_table_map, select_sql.conditions, filter_stmt);
   if (rc != RC::SUCCESS) {
     LOG_WARN("cannot construct filter stmt");
     return rc;
@@ -259,7 +262,7 @@ RC SelectStmt::create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt)
 
   // create join on statement
   JoinOnStmt *join_on_stmt = nullptr;
-  rc = JoinOnStmt::create(db, default_table, &table_map, select_sql.join_conds, join_on_stmt);
+  rc = JoinOnStmt::create(db, default_table, &merge_table_map, select_sql.join_conds, join_on_stmt);
   if (rc != RC::SUCCESS) {
     LOG_WARN("cannot construct filter stmt");
     return rc;

@@ -52,7 +52,8 @@ public:
   StmtType type() const override { return StmtType::SELECT; }
 
 public:
-  static RC create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt);
+  static RC create(Db *db, const SelectSqlNode &select_sql, 
+    const std::unordered_map<std::string, Table*>& parent_table_map, Stmt *&stmt);
   // 目前只用这个方法， table_name不支持别名
   static RC createField(
       const std::vector<Table *> &tables, const char *table_name, const char *attr_name, Field &field);

@@ -23,7 +23,7 @@ RC CreateTableSelectStmt::create(Db *db, const CreateTableSelectSqlNode &create_
   create_table_select_stmt->attr_infos_ = create_table_select.attr_infos;
 
   Stmt *select_stmt = nullptr;
-  SelectStmt::create(db, create_table_select.select, select_stmt);
+  SelectStmt::create(db, create_table_select.select, {}, select_stmt);
   create_table_select_stmt->select_stmt_.reset(static_cast<SelectStmt *>(select_stmt));
 
   stmt = create_table_select_stmt;
