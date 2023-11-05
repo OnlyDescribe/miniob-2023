@@ -11,6 +11,13 @@ See the Mulan PSL v2 for more details. */
 #include <execution>
 #include "sql/operator/orderby_physical_operator.h"
 
+#ifdef __clang__
+#define SORT(item_begin, item_end, compare_function) std::sort(item_begin, item_end, compare_function)
+#else
+#define SORT(item_begin, item_end, compare_function) std::sort(std::execution::par, item_begin, item_end, compare_function)
+#endif
+
+
 OrderbyPhysicalOperator::OrderbyPhysicalOperator(
     std::vector<std::unique_ptr<FieldExpr>> &&expressions, std::vector<SortType> &&sortTypes)
     : expressions_(std::move(expressions)), sort_types_(std::move(sortTypes))
@@ -52,9 +59,8 @@ RC OrderbyPhysicalOperator::open(Trx *trx)
     item.data = tuple->copy_tuple();
     items_.push_back(item);
   }
-  // vector<Tuple*>
-  // 内存排序模型
-  std::sort(std::execution::par, items_.begin(), items_.end(), [&](const SortItem &a, const SortItem &b) -> bool {
+
+  auto cmp = [&](const SortItem &a, const SortItem &b) -> bool {
     assert(a.key->size() == b.key->size());
     assert(a.key->size() == sort_types_.size());
     for (int i = 0; i < a.key->size(); i++) {
@@ -78,7 +84,9 @@ RC OrderbyPhysicalOperator::open(Trx *trx)
       }
     }
     return false;
-  });
+  };
+
+  SORT(items_.begin(), items_.end(), cmp);
   idx_ = -1;
   return RC::SUCCESS;
 }

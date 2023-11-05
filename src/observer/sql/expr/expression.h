@@ -128,7 +128,8 @@ public:
   virtual std::string name() const { return name_; }
   virtual void set_name(std::string name) { name_ = std::move(name); }
   virtual void set_name(const std::string &name, const std::string &second) { name_ = name + "." + second; }
-  static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+  static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
+      const std::unordered_map<std::string, Table *> &cur_table_map,
       Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
 
 private:
@@ -162,7 +163,8 @@ public:
   RC get_value(const Tuple &tuple, Value &value) const override;
 
   static void get_fieldexprs(Expression *expr, std::vector<Expression *> &field_exprs);
-  static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+  static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
+      const std::unordered_map<std::string, Table *> &cur_table_map,
       Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
 
 private:
@@ -196,7 +198,8 @@ public:
 
   const Value &get_value() const { return value_; }
 
-  static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+  static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
+      const std::unordered_map<std::string, Table *> &cur_table_map,
       Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
 
 private:
@@ -357,7 +360,8 @@ public:
   std::unique_ptr<Expression> &left() { return left_; }
   std::unique_ptr<Expression> &right() { return right_; }
 
-  static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+  static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
+      const std::unordered_map<std::string, Table *> &cur_table_map,
       Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
 
 private:
@@ -416,7 +420,8 @@ public:
   AggrFuncType aggr_type() { return aggr_func_type_; }
 
   static void get_aggrfuncexprs(Expression *expr, std::vector<Expression *> &aggrfunc_exprs);
-  static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+  static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
+      const std::unordered_map<std::string, Table *> &cur_table_map,
       Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
 
 private:
@@ -456,8 +461,9 @@ public:
 
   virtual AttrType value_type() const { return AttrType::UNDEFINED; }
 
-  static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
-      Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
+  static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
+    const std::unordered_map<std::string, Table *> &cur_table_map,
+    Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
 
   // should own this?
   SelectStmt *subquery_stmt{nullptr};
@@ -498,7 +504,8 @@ public:
   // 移动到values里面取
   void set_values(std::vector<std::unique_ptr<Expression>> &&values) { values_ = std::move(values); }
 
-  static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &table_map,
+  static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
+      const std::unordered_map<std::string, Table *> &cur_table_map,
       Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
 
 private:

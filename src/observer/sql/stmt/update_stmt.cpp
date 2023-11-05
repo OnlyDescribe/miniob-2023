@@ -141,7 +141,7 @@ RC UpdateStmt::create(Db *db, UpdateSqlNode &update, Stmt *&stmt)
     } else if (update.assignments[i].expr->type == PExpType::SUBQUERY) {
       auto &sub_select = update.assignments[i].expr->sexp;
       Stmt *subquery_stmt = nullptr;
-      RC rc = SelectStmt::create(db, *sub_select->sub_select, subquery_stmt);
+      RC rc = SelectStmt::create(db, *sub_select->sub_select, {}, subquery_stmt);
       if (rc != RC::SUCCESS) {
         return rc;
       }
@@ -159,7 +159,8 @@ RC UpdateStmt::create(Db *db, UpdateSqlNode &update, Stmt *&stmt)
   // create filter statement in `where` statement
   FilterStmt *filter_stmt = nullptr;
 
-  RC rc = FilterStmt::create(db, table, &table_map, update.conditions, filter_stmt);
+
+  RC rc = FilterStmt::create(db, table, {}, table_map, update.conditions, filter_stmt);
   if (rc != RC::SUCCESS) {
     LOG_WARN("cannot construct filter stmt");
     return rc;
