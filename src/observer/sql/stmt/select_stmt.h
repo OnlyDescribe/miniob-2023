@@ -39,14 +39,6 @@ struct OrderByUnit
   }
 };
 
-// 为了区分聚合是在groupby里面的还是 单独的
-enum class WhereConditoin
-{
-  NONE,
-  AGGREGATION,
-  GROUPBY,
-};
-
 /**
  * @brief 表示select语句
  * @ingroup Statement
@@ -61,18 +53,17 @@ public:
 
 public:
   static RC create(Db *db, const SelectSqlNode &select_sql, Stmt *&stmt);
+  // 目前只用这个方法， table_name不支持别名
   static RC createField(
       const std::vector<Table *> &tables, const char *table_name, const char *attr_name, Field &field);
 
 public:
-  const WhereConditoin whereConditoinType() const;
   const std::vector<Table *> &tables() const { return tables_; }
   std::vector<Field> &groupbys() { return groupbys_; }
   FilterStmt *filter_stmt() const { return filter_stmt_; }
   JoinOnStmt *join_on_stmt() const { return join_on_stmt_; }
   FilterStmt *having_stmt() const { return having_stmt_; }
   std::vector<OrderByUnit> *orderbys() const { return orderbys_.get(); }
-  WhereConditoin whereConditoin{WhereConditoin::NONE};
 
   // not own this, move to physical operator
   std::vector<std::unique_ptr<Expression>> projects;
