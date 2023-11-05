@@ -75,10 +75,25 @@ RC CreateTableSelectExecutor::execute(SQLStageEvent *sql_event)
   // 设置表列名
   for (int i = 0; i < attribute_count; i++) {
     const TupleCellSpec &spec = schema.cell_at(i);
-    const char *alias = spec.alias();
-    if (nullptr != alias || alias[0] != 0) {
-      select_attr_infos[i].name = alias;
+    std::string alias = spec.alias();
+    if (!alias.empty()) {
+      size_t dotPos = alias.find('.');
+      if (dotPos != std::string::npos) {
+        select_attr_infos[i].name = alias.substr(dotPos + 1);
+      } else {
+        select_attr_infos[i].name = alias;
+      }
     }
+  }
+
+  // 如果列名重复, FAILURE
+  std::set<std::string_view> unique_attrs;
+  for (auto &&attr_info : select_attr_infos) {
+    if (unique_attrs.count(attr_info.name) > 0) {
+      LOG_WARN("Duplicate column name");
+      return RC::INVALID_ARGUMENT;
+    }
+    unique_attrs.insert(attr_info.name);
   }
 
   //  比较Create table和Select的attr_infos, 并找出 table 比 select 多增加的字段
