@@ -205,6 +205,8 @@ RC CreateViewExecutor::execute(SQLStageEvent *sql_event)
   // 3.3.4
   view->schema() = new TupleSchema(schema);
 
+  view->alias() = view_alias;
+
   rc = physical_operator->close();
   physical_operator.reset();
   return rc;

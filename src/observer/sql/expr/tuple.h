@@ -435,7 +435,7 @@ public:
 
   RC cell_at(int index, Value &cell) const override
   {
-    if (!expressions_  || index < 0 || index >= static_cast<int>(expressions_->size())) {
+    if (!expressions_ || index < 0 || index >= static_cast<int>(expressions_->size())) {
       LOG_ERROR("calc physical operator error");
       return RC::INTERNAL;
     }
@@ -453,9 +453,16 @@ public:
     assert(view_table != nullptr);
 
     TupleSchema *schema = view_table->schema();
+    std::vector<std::string> &alias = view_table->alias();
 
     for (int i = 0; i < schema->cell_num(); ++i) {
-      std::string view_alias = view_table->schema()->cell_at(i).alias();
+      std::string view_alias;
+      if (!alias.empty()) {
+        view_alias = alias[i];
+      } else {
+        view_alias = view_table->schema()->cell_at(i).alias();
+      }
+
       std::string table_alias = spec.field_name();
       std::string view_name;
       std::string table_name;
