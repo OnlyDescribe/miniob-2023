@@ -21,12 +21,15 @@ See the Mulan PSL v2 for more details. */
 #include "common/io/io.h"
 #include "common/lang/string.h"
 #include "common/log/log.h"
+#include "session/session.h"
 #include "sql/expr/expression.h"
 #include "sql/operator/logical_operator.h"
 #include "sql/executor/sql_result.h"
+#include "sql/stmt/create_view_stmt.h"
 #include "sql/stmt/stmt.h"
 #include "event/sql_event.h"
 #include "event/session_event.h"
+#include "storage/db/db.h"
 
 using namespace std;
 using namespace common;
@@ -34,6 +37,16 @@ using namespace common;
 RC OptimizeStage::handle_request(SQLStageEvent *sql_event)
 {
   unique_ptr<LogicalOperator> logical_operator;
+
+  // // 如果是创建视图, 再创建一份逻辑算子保存在sql_event中, 执行阶段会放进视图Table中
+  // if (sql_event->sql_node()->flag == SCF_CREATE_VIEW) {
+  //   unique_ptr<LogicalOperator> view_logical_operator;
+  //   Stmt *view_stmt = sql_event->view_stmt();
+  //   logical_plan_generator_.create(view_stmt, view_logical_operator);
+  //   sql_event->set_logical_operator(std::move(view_logical_operator));
+  //   delete view_stmt;
+  // }
+
   RC rc = create_logical_plan(sql_event, logical_operator);
   if (rc != RC::SUCCESS) {
     if (rc != RC::UNIMPLENMENT) {

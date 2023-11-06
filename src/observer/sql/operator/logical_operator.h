@@ -35,6 +35,7 @@ enum class LogicalOperatorType
 {
   CALC,
   TABLE_GET,    ///< 从表中获取数据
+  VIEW_GET,     ///< 从视图中获取数据
   PREDICATE,    ///< 过滤，就是谓词
   PROJECTION,   ///< 投影，就是select
   AGGREGATION,  ///< 聚合
@@ -63,13 +64,14 @@ public:
   {
     switch (type()) {
       case LogicalOperatorType::TABLE_GET: return "TABLE_GET";
+      case LogicalOperatorType::VIEW_GET: return "VIEW_GET";
       case LogicalOperatorType::PREDICATE: return "PREDICATE";
       case LogicalOperatorType::PROJECTION: return "PROJECTION";
       case LogicalOperatorType::AGGREGATION: return "AGGREGATION";
       case LogicalOperatorType::ORDER_BY: return "ORDER_BY";
       case LogicalOperatorType::JOIN: return "JOIN";
       case LogicalOperatorType::INSERT: return "INSERT";
-      case LogicalOperatorType::DELETE: return "INSERT";
+      case LogicalOperatorType::DELETE: return "DELETE";
       case LogicalOperatorType::UPDATE: return "UPDATE";
       case LogicalOperatorType::EXPLAIN: return "EXPLAIN";
       case LogicalOperatorType::GROUPBY: return "GROUPBY";

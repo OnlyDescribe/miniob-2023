@@ -375,9 +375,9 @@ struct CreateTableSelectSqlNode
  */
 struct CreateViewSqlNode
 {
-  std::string relation_name;  ///< Relation name
-  SelectSqlNode select;       ///< select_node
-  // std::vector<std::string> alias;  ///< alias
+  std::string relation_name;       ///< Relation name
+  SelectSqlNode select;            ///< select_node
+  std::vector<std::string> alias;  ///< alias
 };
 
 /**

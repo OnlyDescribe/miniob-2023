@@ -8,7 +8,10 @@ EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
 MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
 See the Mulan PSL v2 for more details. */
 
+#if defined(__clang__)
+#else
 #include <execution>
+#endif
 #include "sql/operator/orderby_physical_operator.h"
 
 #ifdef __clang__

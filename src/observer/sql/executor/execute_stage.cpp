@@ -25,6 +25,7 @@ See the Mulan PSL v2 for more details. */
 #include "event/session_event.h"
 #include "sql/parser/value.h"
 #include "sql/stmt/create_table_select_stmt.h"
+#include "sql/stmt/create_view_stmt.h"
 #include "sql/stmt/stmt.h"
 #include "sql/stmt/select_stmt.h"
 #include "storage/default/default_handler.h"
@@ -71,8 +72,8 @@ RC ExecuteStage::handle_request_with_physical_operator(SQLStageEvent *sql_event)
   sql_result->set_operator(std::move(physical_operator));
 
   // 除了处理物理算子
-  // CREATE_TABLE_SELECT 还需要执行创表
-  if (stmt->type() == StmtType::CREATE_TABLE_SELECT) {
+  // CREATE_TABLE_SELECT 和 CREATE_VIEW 还需要执行创表
+  if (stmt->type() == StmtType::CREATE_TABLE_SELECT || stmt->type() == StmtType::CREATE_VIEW) {
     SessionEvent *session_event = sql_event->session_event();
 
     Stmt *stmt = sql_event->stmt();

@@ -12,6 +12,8 @@ See the Mulan PSL v2 for more details. */
 // Created by Meiyi & Wangyunlai on 2021/5/13.
 //
 
+#include <cassert>
+#include <cstddef>
 #include <limits.h>
 #include <string.h>
 #include <algorithm>
@@ -33,6 +35,7 @@ See the Mulan PSL v2 for more details. */
 #include "storage/index/index.h"
 #include "storage/index/bplus_tree_index.h"
 #include "storage/trx/trx.h"
+#include "sql/expr/tuple.h"
 
 Table::~Table()
 {
@@ -51,6 +54,10 @@ Table::~Table()
     delete index;
   }
   indexes_.clear();
+
+  if (schema_) {
+    delete schema_;
+  }
 
   LOG_INFO("Table has been closed: %s", name());
 }

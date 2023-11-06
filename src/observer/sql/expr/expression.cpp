@@ -12,6 +12,7 @@ See the Mulan PSL v2 for more details. */
 // Created by Wangyunlai on 2022/07/05.
 //
 
+#include <cmath>
 #include <sstream>
 #include <string>
 
@@ -26,12 +27,12 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/physical_operator.h"
 
 #include "sql/stmt/select_stmt.h"
+#include "storage/record/record.h"
 
 using namespace std;
 
 RC Expression::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
-    const std::unordered_map<std::string, Table *> &cur_table_map,
-    Expression *&res_expr, CompOp comp, Db *db)
+    const std::unordered_map<std::string, Table *> &cur_table_map, Expression *&res_expr, CompOp comp, Db *db)
 {
   if (expr->type == PExpType::UNARY) {
     auto uexpr = expr->uexp;
@@ -58,6 +59,10 @@ RC Expression::create_expression(const PExpr *expr, const std::unordered_map<std
 RC FieldExpr::get_value(const Tuple &tuple, Value &value) const
 {
   return tuple.find_cell(TupleCellSpec(table_name(), field_name()), value);
+}
+RC FieldExpr::get_record(const Tuple &tuple, RecordPos &rid) const
+{
+  return tuple.find_record(TupleCellSpec(table_name(), field_name()), rid);
 }
 
 void FieldExpr::get_fieldexprs(Expression *expr, std::vector<Expression *> &field_exprs)
@@ -87,8 +92,7 @@ void FieldExpr::get_fieldexprs(Expression *expr, std::vector<Expression *> &fiel
 }
 
 RC FieldExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
-    const std::unordered_map<std::string, Table *> &cur_table_map,
-    Expression *&res_expr, CompOp comp, Db *db)
+    const std::unordered_map<std::string, Table *> &cur_table_map, Expression *&res_expr, CompOp comp, Db *db)
 {
 
   assert(PExpType::UNARY == expr->type);
@@ -130,12 +134,21 @@ RC FieldExpr::create_expression(const PExpr *expr, const std::unordered_map<std:
     LOG_WARN("No such table: attr.relation_name: %s", attr.relation_name.c_str());
     return RC::SCHEMA_TABLE_NOT_EXIST;
   }
+
   const FieldMeta *field_meta = table->table_meta().field(attr.attribute_name.c_str());
   if (nullptr == field_meta) {
     LOG_WARN("no such field in table: table %s, field %s", table->name(), attr.attribute_name.c_str());
     table = nullptr;
     return RC::SCHEMA_FIELD_NOT_EXIST;
   }
+
+  // // 支持视图, 如果table是视图, 要恢复对应的字段表名
+  // const Table *query_table = nullptr;
+  // if (table->is_view()) {
+  //   query_table = table->table_meta().view_table(attr.attribute_name.c_str());
+  // } else {
+  //   query_table = table;
+  // }
   res_expr = new FieldExpr(table, field_meta);
   return RC::SUCCESS;
 }
@@ -147,9 +160,10 @@ RC ValueExpr::get_value(const Tuple &tuple, Value &value) const
   return RC::SUCCESS;
 }
 
+RC ValueExpr::get_record(const Tuple &tuple, RecordPos &rid) const { return RC::NOTFOUND; }
+
 RC ValueExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
-    const std::unordered_map<std::string, Table *> &cur_table_map,
-    Expression *&res_expr, CompOp comp, Db *db)
+    const std::unordered_map<std::string, Table *> &cur_table_map, Expression *&res_expr, CompOp comp, Db *db)
 {
   assert(PExpType::UNARY == expr->type);
   auto uexpr = expr->uexp;
@@ -193,6 +207,15 @@ RC CastExpr::get_value(const Tuple &tuple, Value &cell) const
   }
 
   return cast(cell, cell);
+}
+
+RC CastExpr::get_record(const Tuple &tuple, RecordPos &rid) const
+{
+  RC rc = child_->get_record(tuple, rid);
+  if (rc != RC::SUCCESS) {
+    return rc;
+  }
+  return RC::SUCCESS;
 }
 
 RC CastExpr::try_get_value(Value &value) const
@@ -467,6 +490,8 @@ RC ComparisonExpr::get_value(const Tuple &tuple, Value &value) const
   return rc;
 }
 
+RC ComparisonExpr::get_record(const Tuple &tuple, RecordPos &rid) const { return RC::NOTFOUND; }
+
 // 反转比较符号
 void ComparisonExpr::reverse_comp()
 {
@@ -510,6 +535,8 @@ RC ConjunctionExpr::get_value(const Tuple &tuple, Value &value) const
   value.set_boolean(default_value);
   return rc;
 }
+
+RC ConjunctionExpr::get_record(const Tuple &tuple, RecordPos &rid) const { return RC::NOTFOUND; }
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -676,9 +703,11 @@ RC ArithmeticExpr::try_get_value(Value &value) const
   return calc_value(left_value, right_value, value);
 }
 
-RC ArithmeticExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
-  const std::unordered_map<std::string, Table *> &cur_table_map,
-    Expression *&res_expr, CompOp comp, Db *db)
+RC ArithmeticExpr::get_record(const Tuple &tuple, RecordPos &rid) const { return RC::NOTFOUND; }
+
+RC ArithmeticExpr::create_expression(const PExpr *expr,
+    const std::unordered_map<std::string, Table *> &parent_table_map,
+    const std::unordered_map<std::string, Table *> &cur_table_map, Expression *&res_expr, CompOp comp, Db *db)
 {
   assert(PExpType::ARITHMETIC == expr->type);
   Expression *left_expr = nullptr;
@@ -743,6 +772,8 @@ RC AggretationExpr::get_value(const Tuple &tuple, Value &value) const
   return rc;
 }
 
+RC AggretationExpr::get_record(const Tuple &tuple, RecordPos &rid) const { return RC::NOTFOUND; }
+
 void AggretationExpr::get_aggrfuncexprs(Expression *expr, std::vector<Expression *> &aggrfunc_exprs)
 {
   if (expr == nullptr) {
@@ -768,9 +799,9 @@ void AggretationExpr::get_aggrfuncexprs(Expression *expr, std::vector<Expression
   }
 }
 
-RC AggretationExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
-  const std::unordered_map<std::string, Table *> &cur_table_map,
-    Expression *&res_expr, CompOp comp, Db *db)
+RC AggretationExpr::create_expression(const PExpr *expr,
+    const std::unordered_map<std::string, Table *> &parent_table_map,
+    const std::unordered_map<std::string, Table *> &cur_table_map, Expression *&res_expr, CompOp comp, Db *db)
 {
   assert(expr->agexp->expr);
   if (expr->agexp->is_star) {
@@ -859,6 +890,8 @@ RC SubQueryExpr::get_value(const Tuple &tuple, Value &value) const
   return rc;
 }
 
+RC SubQueryExpr::get_record(const Tuple &tuple, RecordPos &rid) const { return RC::NOTFOUND; }
+
 /**
  * @description: 如果返回的数据行数<=1, 则返回RC::SUCCESS
  * @param {Tuple} &tuple
@@ -943,8 +976,7 @@ RC SubQueryExpr::get_and_set_one_row_value(const Tuple &tuple, Value &value, Tup
 }
 
 RC SubQueryExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
-    const std::unordered_map<std::string, Table *> &cur_table_map,
-    Expression *&res_expr, CompOp comp, Db *db)
+    const std::unordered_map<std::string, Table *> &cur_table_map, Expression *&res_expr, CompOp comp, Db *db)
 {
   Stmt *tmp_stmt = nullptr;
 
@@ -969,9 +1001,10 @@ RC ListExpr::get_value(const Tuple &tuple, Value &value) const
   return rc;
 }
 
+RC ListExpr::get_record(const Tuple &tuple, RecordPos &rid) const { return RC::NOTFOUND; }
+
 RC ListExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
-    const std::unordered_map<std::string, Table *> &cur_table_map,
-    Expression *&res_expr, CompOp comp, Db *db)
+    const std::unordered_map<std::string, Table *> &cur_table_map, Expression *&res_expr, CompOp comp, Db *db)
 {
   assert(expr->lexp != nullptr);
   PListExpr *p_list_expr = expr->lexp;
@@ -998,9 +1031,12 @@ RC HavingFieldExpr::get_value(const Tuple &tuple, Value &value) const
   return tuple.cell_at(pos_, value);
 }
 
+RC HavingFieldExpr::get_record(const Tuple &tuple, RecordPos &rid) const { return RC::NOTFOUND; }
+
 ////////////////////////////////////////////////////////////////////////////////
 
-RC FunctionExpr::date_format(const Tuple &tuple, Value &value) const {
+RC FunctionExpr::date_format(const Tuple &tuple, Value &value) const
+{
 
   Expression *date_expr = param1_;
   Expression *format_expr = param2_;
@@ -1158,7 +1194,8 @@ RC FunctionExpr::date_format(const Tuple &tuple, Value &value) const {
   value.set_data(strdup(result_date_str.c_str()), result_date_str.size());
   return RC::SUCCESS;
 }
-RC FunctionExpr::length(const Tuple &tuple, Value &value) const {
+RC FunctionExpr::length(const Tuple &tuple, Value &value) const
+{
   Value str;
   RC rc = param1_->get_value(tuple, str);
   if (rc != RC::SUCCESS) {
@@ -1169,17 +1206,19 @@ RC FunctionExpr::length(const Tuple &tuple, Value &value) const {
   return rc;
 }
 
-float CustomRound(float number, int decimalPlaces) {
+float CustomRound(float number, int decimalPlaces)
+{
   float multiplier = std::pow(10.0f, decimalPlaces);
   return std::round(number * multiplier) / multiplier;
 }
 
-RC FunctionExpr::round(const Tuple &tuple, Value &value) const {
+RC FunctionExpr::round(const Tuple &tuple, Value &value) const
+{
   Value num;
   RC rc = param1_->get_value(tuple, num);
   if (rc != RC::SUCCESS) {
     return rc;
-  } 
+  }
   if (num.attr_type() != AttrType::FLOATS) {
     return RC::INTERNAL;
   }
@@ -1199,34 +1238,27 @@ RC FunctionExpr::round(const Tuple &tuple, Value &value) const {
   value.set_float(CustomRound(num.get_float(), demical));
   return rc;
 }
-RC FunctionExpr::get_value(const Tuple &tuple, Value &value) const {
+RC FunctionExpr::get_value(const Tuple &tuple, Value &value) const
+{
   RC rc = RC::SUCCESS;
-  switch (type_)
-  {
-  case PFuncType::DATE_FORMAT:
-    rc = date_format(tuple, value);
-    break;
-  case PFuncType::ROUND:
-    rc = round(tuple, value);
-    break;
-  case PFuncType::LENGTH:
-    rc = length(tuple, value);
-    break;
-  default:
-    rc = RC::UNIMPLENMENT;
-    break;
+  switch (type_) {
+    case PFuncType::DATE_FORMAT: rc = date_format(tuple, value); break;
+    case PFuncType::ROUND: rc = round(tuple, value); break;
+    case PFuncType::LENGTH: rc = length(tuple, value); break;
+    default: rc = RC::UNIMPLENMENT; break;
   }
   return rc;
 }
 
+RC FunctionExpr::get_record(const Tuple &tuple, RecordPos &rid) const { return RC::NOTFOUND; }
+
 RC FunctionExpr::create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
-  const std::unordered_map<std::string, Table *> &cur_table_map,
-    Expression *&res_expr, CompOp comp, Db *db) 
+    const std::unordered_map<std::string, Table *> &cur_table_map, Expression *&res_expr, CompOp comp, Db *db)
 {
   assert(expr->fexp != nullptr);
-  FunctionExpr* fun_expr = nullptr;
-  Expression* parm1 = nullptr;
-  Expression* parm2 = nullptr;
+  FunctionExpr *fun_expr = nullptr;
+  Expression *parm1 = nullptr;
+  Expression *parm2 = nullptr;
   RC rc = RC::SUCCESS;
   if (expr->fexp->params.empty() || expr->fexp->params.size() > 2) {
     LOG_ERROR("func parm error");
@@ -1261,7 +1293,7 @@ RC FunctionExpr::create_expression(const PExpr *expr, const std::unordered_map<s
     fun_expr = new FunctionExpr(expr->fexp->type, parm1, parm2);
   } else if (expr->fexp->type == PFuncType::LENGTH) {
     fun_expr = new FunctionExpr(expr->fexp->type, parm1);
-  }  else {
+  } else {
     LOG_ERROR("not support this function");
     return RC::NOT_IMPLEMENT;
   }

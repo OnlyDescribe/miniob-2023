@@ -32,7 +32,7 @@ RC CreateTableSelectExecutor::execute(SQLStageEvent *sql_event)
 
   // 1. 从select获取并设置新表的attr_infos
   std::vector<AttrInfoSqlNode> select_attr_infos;
-  const TupleSchema &schema = sql_result->tuple_schema();
+  const TupleSchema &schema = sql_result->physical_operator()->tuple_schema();
   int attribute_count = schema.cell_num();
   select_attr_infos.resize(attribute_count);
 
@@ -49,28 +49,41 @@ RC CreateTableSelectExecutor::execute(SQLStageEvent *sql_event)
 
   Tuple *tuple;
   Value value;
-  std::vector<Value> values;
+  std::vector<std::vector<Value>> values_vec;
 
   // 从values获取各字段类型
-  rc = physical_operator->next();
-  if (rc != RC::SUCCESS) {
-    physical_operator->close();
-    physical_operator.reset();
-    return rc;
-  }
-  tuple = physical_operator->current_tuple();
-  assert(tuple != nullptr);
-  for (int i = 0; i < attribute_count; i++) {
-    rc = tuple->cell_at(i, value);
+  std::vector<int> nulls(attribute_count, 1);  // 为了确保type不为null
+
+  while (std::accumulate(nulls.begin(), nulls.end(), 0) != 0) {
+    rc = physical_operator->next();
     if (rc != RC::SUCCESS) {
       physical_operator->close();
       physical_operator.reset();
       return rc;
     }
-    values.push_back(value);
-    select_attr_infos[i].type = value.attr_type();
-    select_attr_infos[i].length = value.length();
+    tuple = physical_operator->current_tuple();
+    assert(tuple != nullptr);
+
+    std::vector<Value> values;
+    for (int i = 0; i < attribute_count; i++) {
+      rc = tuple->cell_at(i, value);
+      if (rc != RC::SUCCESS) {
+        physical_operator->close();
+        physical_operator.reset();
+        return rc;
+      }
+      values.push_back(value);
+
+      if (value.attr_type() != AttrType::NULLS) {
+        nulls[i] = 0;
+      }
+      select_attr_infos[i].type = value.attr_type();
+      select_attr_infos[i].length = value.length();
+    }
+    values_vec.push_back(std::move(values));
   }
+
+  // TODO: select_attr_infos设置是否可以为NULL, 参考view, null字段四则运算组合也是null
 
   // 设置表列名
   for (int i = 0; i < attribute_count; i++) {
@@ -84,6 +97,16 @@ RC CreateTableSelectExecutor::execute(SQLStageEvent *sql_event)
         select_attr_infos[i].name = alias;
       }
     }
+  }
+
+  // 如果列名重复, FAILURE
+  std::set<std::string_view> unique_attrs;
+  for (auto &&attr_info : select_attr_infos) {
+    if (unique_attrs.count(attr_info.name) > 0) {
+      LOG_WARN("Duplicate column name");
+      return RC::INVALID_ARGUMENT;
+    }
+    unique_attrs.insert(attr_info.name);
   }
 
   //  比较Create table和Select的attr_infos, 并找出 table 比 select 多增加的字段
@@ -167,20 +190,24 @@ RC CreateTableSelectExecutor::execute(SQLStageEvent *sql_event)
   Table *new_table = session->get_current_db()->find_table(table_name);
   assert(new_table != nullptr);
   Record record;
-  std::vector<Value> insert_values(diff_attr_num, Value(AttrType::NULLS));
-  insert_values.insert(insert_values.end(), values.begin(), values.end());
-  rc = new_table->make_record(attribute_count, insert_values.data(), record);
-  if (rc != RC::SUCCESS) {
-    physical_operator->close();
-    physical_operator.reset();
-    return rc;
+
+  for (auto &&values : values_vec) {
+    std::vector<Value> insert_values(diff_attr_num, Value(AttrType::NULLS));
+    insert_values.insert(insert_values.end(), values.begin(), values.end());
+    rc = new_table->make_record(attribute_count, insert_values.data(), record);
+    if (rc != RC::SUCCESS) {
+      physical_operator->close();
+      physical_operator.reset();
+      return rc;
+    }
+    rc = new_table->insert_record(record);
+    if (rc != RC::SUCCESS) {
+      physical_operator->close();
+      physical_operator.reset();
+      return rc;
+    }
   }
-  rc = new_table->insert_record(record);
-  if (rc != RC::SUCCESS) {
-    physical_operator->close();
-    physical_operator.reset();
-    return rc;
-  }
+
   while (RC::SUCCESS == (rc = physical_operator->next())) {
     tuple = physical_operator->current_tuple();
     assert(tuple != nullptr);
@@ -193,6 +220,10 @@ RC CreateTableSelectExecutor::execute(SQLStageEvent *sql_event)
         return rc;
       }
       insert_values.push_back(value);
+      if (nulls[i] == 1 && value.attr_type() != AttrType::NULLS) {
+        nulls[i] = 0;
+        select_attr_infos[i].type = value.attr_type();
+      }
     }
     new_table->make_record(attribute_count, insert_values.data(), record);
     if (rc != RC::SUCCESS) {

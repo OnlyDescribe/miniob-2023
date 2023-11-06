@@ -79,4 +79,6 @@ private:
   LogicalPlanGenerator logical_plan_generator_;    ///< 根据SQL生成逻辑计划
   PhysicalPlanGenerator physical_plan_generator_;  ///< 根据逻辑计划生成物理计划
   Rewriter rewriter_;                              ///< 逻辑计划改写
+
+  friend PhysicalPlanGenerator;
 };

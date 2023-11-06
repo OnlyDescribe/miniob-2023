@@ -555,6 +555,54 @@ create_view_stmt:
         delete $6;
       }
     }
+    | CREATE VIEW ID LBRACE ID id_list RBRACE AS SELECT select_attr FROM select_from where group_by having order_by
+    {
+      $$ = new ParsedSqlNode(SCF_CREATE_VIEW);
+      CreateViewSqlNode &create_view = $$->create_view;
+      create_view.relation_name = $3;
+      free($3);
+
+      std::vector<std::string> *alias = $6;
+
+      if (alias != nullptr) {
+        create_view.alias.swap(*alias);
+      }
+
+      create_view.alias.emplace_back($5);
+      std::reverse(create_view.alias.begin(), create_view.alias.end());
+
+      free($5);
+      free($6);
+
+      SelectSqlNode& select = create_view.select;
+
+      if($12 != nullptr)
+      {
+        FromSqlNode* from_node = $12;
+        select.relations.swap(from_node->relations);
+        select.join_conds.swap(from_node->join_conds);
+        delete $12;
+      }
+
+      select.conditions = $13;
+
+      if ($14 != nullptr) {
+        select.groupbys = *$14;
+        delete $14;
+      }
+
+      select.havings = $15;
+
+      if ($16 != nullptr) {
+        select.orderbys = *$16;
+        delete $16;
+      }
+
+      if ($10 != nullptr) {
+        select.attributes.swap(*$10);
+        delete $10;
+      }
+    }
     ;
 
 insert_stmt:        /*insert   语句的语法解析树*/

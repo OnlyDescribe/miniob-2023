@@ -15,8 +15,12 @@ See the Mulan PSL v2 for more details. */
 #pragma once
 
 #include <functional>
+#include <memory>
+#include <string>
 #include <vector>
+#include "storage/db/db.h"
 #include "storage/table/table_meta.h"
+// #include "sql/operator/physical_operator.h"
 
 struct RID;
 class Record;
@@ -29,7 +33,7 @@ class Index;
 class IndexScanner;
 class RecordDeleter;
 class Trx;
-
+class TupleSchema;
 /**
  * @brief 表
  *
@@ -109,10 +113,31 @@ public:
   Index *find_index(const char *index_name) const;
   Index *find_index_by_field(const std::vector<std::string> &field_names) const;
 
+  // 用于视图
+public:
+  bool &is_view() { return is_view_; }
+  bool &updatable() { return updatable_; }
+  bool &modifiable() { return modifiable_; }
+  TupleSchema *&schema() { return schema_; }
+  void set_view_tables(const std::vector<const Table *> &view_tables) { table_meta_.view_tables_ = view_tables; }
+  std::string &view_sql() { return view_sql_; }
+  Db *&view_db() { return view_db_; }
+
 private:
   std::string base_dir_;
   TableMeta table_meta_;
   DiskBufferPool *data_buffer_pool_ = nullptr;   /// 数据文件关联的buffer pool
   RecordFileHandler *record_handler_ = nullptr;  /// 记录操作
   std::vector<Index *> indexes_;
+
+  // 视图
+  bool is_view_ = false;
+  bool updatable_ = false;
+  bool modifiable_ = false;
+
+  std::string view_sql_;
+  Db *view_db_;
+  // SelectStmt *select_stmt_;
+  // LogicalOperator *logical_operator_;
+  TupleSchema *schema_;
 };

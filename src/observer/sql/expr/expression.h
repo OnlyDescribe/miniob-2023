@@ -23,6 +23,7 @@ See the Mulan PSL v2 for more details. */
 #include "storage/field/field.h"
 #include "sql/parser/value.h"
 #include "common/log/log.h"
+#include "storage/record/record.h"
 
 class Tuple;
 class SelectStmt;
@@ -89,6 +90,11 @@ public:
   virtual RC get_value(const Tuple &tuple, Value &value) const = 0;
 
   /**
+   * @brief 根据具体的tuple，来计算当前表达式的值所在的 Record, 如果不存在则返回 NOTFOUND
+   */
+  virtual RC get_record(const Tuple &tuple, RecordPos &rid) const = 0;
+
+  /**
    * @brief 在没有实际运行的情况下，也就是无法获取tuple的情况下，尝试获取表达式的值
    * @details 有些表达式的值是固定的，比如ValueExpr，这种情况下可以直接获取值
    */
@@ -130,8 +136,8 @@ public:
   virtual void set_name(std::string name) { name_ = std::move(name); }
   virtual void set_name(const std::string &name, const std::string &second) { name_ = name + "." + second; }
   static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
-      const std::unordered_map<std::string, Table *> &cur_table_map,
-      Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
+      const std::unordered_map<std::string, Table *> &cur_table_map, Expression *&res_expr, CompOp comp = CompOp::NO_OP,
+      Db *db = nullptr);
 
 private:
   std::string name_;
@@ -163,10 +169,12 @@ public:
 
   RC get_value(const Tuple &tuple, Value &value) const override;
 
+  RC get_record(const Tuple &tuple, RecordPos &rid) const override;
+
   static void get_fieldexprs(Expression *expr, std::vector<Expression *> &field_exprs);
   static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
-      const std::unordered_map<std::string, Table *> &cur_table_map,
-      Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
+      const std::unordered_map<std::string, Table *> &cur_table_map, Expression *&res_expr, CompOp comp = CompOp::NO_OP,
+      Db *db = nullptr);
 
 private:
   Field field_;
@@ -191,6 +199,8 @@ public:
     return RC::SUCCESS;
   }
 
+  RC get_record(const Tuple &tuple, RecordPos &rid) const override;
+
   ExprType type() const override { return ExprType::VALUE; }
 
   AttrType value_type() const override { return value_.attr_type(); }
@@ -200,8 +210,8 @@ public:
   const Value &get_value() const { return value_; }
 
   static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
-      const std::unordered_map<std::string, Table *> &cur_table_map,
-      Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
+      const std::unordered_map<std::string, Table *> &cur_table_map, Expression *&res_expr, CompOp comp = CompOp::NO_OP,
+      Db *db = nullptr);
 
 private:
   Value value_;
@@ -221,6 +231,8 @@ public:
   RC get_value(const Tuple &tuple, Value &value) const override;
 
   RC try_get_value(Value &value) const override;
+
+  RC get_record(const Tuple &tuple, RecordPos &rid) const override;
 
   AttrType value_type() const override { return cast_type_; }
 
@@ -247,6 +259,8 @@ public:
   ExprType type() const override { return ExprType::COMPARISON; }
 
   RC get_value(const Tuple &tuple, Value &value) const override;
+
+  RC get_record(const Tuple &tuple, RecordPos &rid) const override;
 
   AttrType value_type() const override { return BOOLEANS; }
 
@@ -309,6 +323,8 @@ public:
 
   RC get_value(const Tuple &tuple, Value &value) const override;
 
+  RC get_record(const Tuple &tuple, RecordPos &rid) const override;
+
   Type conjunction_type() const { return conjunction_type_; }
 
   void set_parent_tuple(const std::shared_ptr<Tuple> &tuple)
@@ -356,14 +372,16 @@ public:
   RC get_value(const Tuple &tuple, Value &value) const override;
   RC try_get_value(Value &value) const override;
 
+  RC get_record(const Tuple &tuple, RecordPos &rid) const override;
+
   Type arithmetic_type() const { return arithmetic_type_; }
 
   std::unique_ptr<Expression> &left() { return left_; }
   std::unique_ptr<Expression> &right() { return right_; }
 
   static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
-      const std::unordered_map<std::string, Table *> &cur_table_map,
-      Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
+      const std::unordered_map<std::string, Table *> &cur_table_map, Expression *&res_expr, CompOp comp = CompOp::NO_OP,
+      Db *db = nullptr);
 
 private:
   RC calc_value(const Value &left_value, const Value &right_value, Value &value) const;
@@ -398,6 +416,8 @@ public:
 
   RC try_get_value(Value &value) const { return RC::UNIMPLENMENT; }
 
+  RC get_record(const Tuple &tuple, RecordPos &rid) const;
+
   /**
    * @brief 表达式的类型
    * 可以根据表达式类型来转换为具体的子类
@@ -422,8 +442,8 @@ public:
 
   static void get_aggrfuncexprs(Expression *expr, std::vector<Expression *> &aggrfunc_exprs);
   static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
-      const std::unordered_map<std::string, Table *> &cur_table_map,
-      Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
+      const std::unordered_map<std::string, Table *> &cur_table_map, Expression *&res_expr, CompOp comp = CompOp::NO_OP,
+      Db *db = nullptr);
 
 private:
   AggrFuncType aggr_func_type_;
@@ -458,13 +478,15 @@ public:
 
   virtual RC try_get_value(Value &value) const { return RC::UNIMPLENMENT; }
 
+  virtual RC get_record(const Tuple &tuple, RecordPos &rid) const;
+
   virtual ExprType type() const { return ExprType::SUBQUERY; }
 
   virtual AttrType value_type() const { return AttrType::UNDEFINED; }
 
   static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
-    const std::unordered_map<std::string, Table *> &cur_table_map,
-    Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
+      const std::unordered_map<std::string, Table *> &cur_table_map, Expression *&res_expr, CompOp comp = CompOp::NO_OP,
+      Db *db = nullptr);
 
   // should own this?
   SelectStmt *subquery_stmt{nullptr};
@@ -488,6 +510,8 @@ public:
 
   virtual RC try_get_value(Value &value) const { return RC::UNIMPLENMENT; }
 
+  virtual RC get_record(const Tuple &tuple, RecordPos &rid) const;
+
   virtual ExprType type() const { return ExprType::LIST; }
 
   Expression *expr_at(int i) { return values_[i].get(); }
@@ -506,8 +530,8 @@ public:
   void set_values(std::vector<std::unique_ptr<Expression>> &&values) { values_ = std::move(values); }
 
   static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
-      const std::unordered_map<std::string, Table *> &cur_table_map,
-      Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
+      const std::unordered_map<std::string, Table *> &cur_table_map, Expression *&res_expr, CompOp comp = CompOp::NO_OP,
+      Db *db = nullptr);
 
 private:
   std::vector<std::unique_ptr<Expression>> values_;
@@ -529,6 +553,8 @@ public:
   virtual RC get_value(const Tuple &tuple, Value &value) const;
 
   RC try_get_value(Value &value) const { return RC::UNIMPLENMENT; }
+
+  virtual RC get_record(const Tuple &tuple, RecordPos &rid) const;
   /**
    * @brief 表达式的类型
    * 可以根据表达式类型来转换为具体的子类
@@ -545,23 +571,25 @@ private:
   int pos_;
 };
 
-
-
 /**
  * @brief function表达式, length、round和date_format。
  * 比如 having a > 1 and b < 1;
  */
-class FunctionExpr: public Expression
+class FunctionExpr : public Expression
 {
 public:
-  explicit FunctionExpr(PFuncType type, Expression* param1, Expression* param2 = nullptr): 
-     type_(type), param1_(param1), param2_(param2) {}
+  explicit FunctionExpr(PFuncType type, Expression *param1, Expression *param2 = nullptr)
+      : type_(type), param1_(param1), param2_(param2)
+  {}
 
   virtual ~FunctionExpr() = default;
 
   virtual RC get_value(const Tuple &tuple, Value &value) const;
 
   RC try_get_value(Value &value) const { return RC::UNIMPLENMENT; }
+
+  virtual RC get_record(const Tuple &tuple, RecordPos &rid) const;
+
   /**
    * @brief 表达式的类型
    * 可以根据表达式类型来转换为具体的子类
@@ -574,14 +602,16 @@ public:
   AttrType value_type() const { return AttrType::UNDEFINED; };
 
   static RC create_expression(const PExpr *expr, const std::unordered_map<std::string, Table *> &parent_table_map,
-  const std::unordered_map<std::string, Table *> &cur_table_map,
-    Expression *&res_expr, CompOp comp = CompOp::NO_OP, Db *db = nullptr);
+      const std::unordered_map<std::string, Table *> &cur_table_map, Expression *&res_expr, CompOp comp = CompOp::NO_OP,
+      Db *db = nullptr);
+
 private:
   RC date_format(const Tuple &tuple, Value &value) const;
   RC length(const Tuple &tuple, Value &value) const;
   RC round(const Tuple &tuple, Value &value) const;
+
 private:
   PFuncType type_;
-  Expression* param1_;
-  Expression* param2_;
+  Expression *param1_;
+  Expression *param2_;
 };

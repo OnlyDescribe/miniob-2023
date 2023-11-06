@@ -22,12 +22,15 @@ See the Mulan PSL v2 for more details. */
 #include "common/log/log.h"
 #include "sql/expr/tuple_cell.h"
 #include "sql/parser/parse.h"
+#include "sql/parser/parse_defs.h"
 #include "sql/parser/value.h"
 #include "sql/expr/expression.h"
 #include "storage/buffer/disk_buffer_pool.h"
 #include "storage/buffer/frame.h"
+#include "storage/default/default_handler.h"
 #include "storage/record/record.h"
 #include "storage/record/record_manager.h"
+#include "common/global_context.h"
 
 class Table;
 
@@ -88,6 +91,10 @@ public:
    * @param[out] cell  返回的Cell
    */
   virtual RC cell_at(int index, Value &cell) const = 0;
+
+  // 根据spec, 找到对应record的位置
+  virtual RC find_record(const TupleCellSpec &spec, RecordPos &rid) const = 0;
+  virtual RC record_at(int index, RecordPos &rid) const = 0;
 
   /**
    * @brief 根据cell的描述，获取cell的值
@@ -196,7 +203,7 @@ public:
       Frame *frame = nullptr;
       std::string texts;  // 文本内容
 
-      PageNum page_num;   // 溢出页号
+      PageNum page_num;  // 溢出页号
       int record_offset{0};
       memcpy(&page_num,
           this->record_->data() + field_meta->offset() + record_offset,
@@ -222,6 +229,30 @@ public:
       cell.set_data(this->record_->data() + field_meta->offset(), field_meta->len());
     }
     return RC::SUCCESS;
+  }
+
+  RC record_at(int index, RecordPos &rid) const override
+  {
+    rid = RecordPos(table_->table_id(), record_->rid());
+    return RC::SUCCESS;
+  }
+
+  RC find_record(const TupleCellSpec &spec, RecordPos &rid) const override
+  {
+    const char *table_name = spec.table_name();
+    const char *field_name = spec.field_name();
+    if (0 != strcmp(table_name, table_->name())) {
+      return RC::NOTFOUND;
+    }
+
+    for (size_t i = 0; i < speces_.size(); ++i) {
+      const FieldExpr *field_expr = speces_[i];
+      const Field &field = field_expr->field();
+      if (0 == strcmp(field_name, field.field_name())) {
+        return record_at(i, rid);
+      }
+    }
+    return RC::NOTFOUND;
   }
 
   RC find_cell(const TupleCellSpec &spec, Value &cell) const override
@@ -335,6 +366,21 @@ public:
 
   RC find_cell(const TupleCellSpec &spec, Value &cell) const override { return tuple_->find_cell(spec, cell); }
 
+  RC record_at(int index, RecordPos &rid) const override
+  {
+    if (index < 0 || index >= static_cast<int>(speces_.size())) {
+      return RC::INTERNAL;
+    }
+    if (tuple_ == nullptr) {
+      return RC::INTERNAL;
+    }
+
+    const TupleCellSpec *spec = speces_[index];
+    return tuple_->find_record(*spec, rid);
+  }
+
+  RC find_record(const TupleCellSpec &spec, RecordPos &rid) const override { return tuple_->find_record(spec, rid); }
+
   Tuple *copy_tuple() const override
   {
     ProjectTuple *tuple = new ProjectTuple();
@@ -398,13 +444,88 @@ public:
     return rc;
   }
 
+  // 对于视图, 在表中存放了他的表达式的名字
+  // 一般自上到下会遇到expression的find_cell的情况都是视图这种算子串联导致的
   RC find_cell(const TupleCellSpec &spec, Value &cell) const override
   {
-    for (const std::unique_ptr<Expression> &expr : *expressions_) {
-      if (0 == strcmp(spec.alias(), expr->name().c_str())) {
-        return expr->try_get_value(cell);
+    // 直接从全局找视图表, 对比表头
+    Table *view_table = GCTX.handler_->find_table("sys", spec.table_name());
+    assert(view_table != nullptr);
+
+    TupleSchema *schema = view_table->schema();
+
+    for (int i = 0; i < schema->cell_num(); ++i) {
+      std::string view_alias = view_table->schema()->cell_at(i).alias();
+      std::string table_alias = spec.field_name();
+      std::string view_name;
+      std::string table_name;
+      if (!view_alias.empty()) {
+        size_t dotPos = view_alias.find('.');
+        if (dotPos != std::string::npos) {
+          view_name = view_alias.substr(dotPos + 1);
+        } else {
+          view_name = view_alias;
+        }
+      }
+      if (!table_alias.empty()) {
+        size_t dotPos = table_alias.find('.');
+        if (dotPos != std::string::npos) {
+          table_name = table_alias.substr(dotPos + 1);
+        } else {
+          table_name = table_alias;
+        }
+      }
+      if (0 == table_name.compare(view_name)) {
+        return cell_at(i, cell);
       }
     }
+
+    return RC::NOTFOUND;
+  }
+
+  RC record_at(int index, RecordPos &rid) const override
+  {
+    if (!expressions_ || !tuple_ || index < 0 || index >= static_cast<int>(expressions_->size())) {
+      return RC::INTERNAL;
+    }
+    Expression *expr = (*expressions_)[index].get();
+    RC rc = expr->get_record(*tuple_, rid);
+    return rc;
+  }
+
+  RC find_record(const TupleCellSpec &spec, RecordPos &rid) const override
+  {  // 直接从全局找视图表, 对比表头
+    Table *view_table = GCTX.handler_->find_table("sys", spec.table_name());
+    assert(view_table != nullptr);
+
+    TupleSchema *schema = view_table->schema();
+
+    for (int i = 0; i < schema->cell_num(); ++i) {
+      std::string view_alias = view_table->schema()->cell_at(i).alias();
+      std::string table_alias = spec.field_name();
+      std::string view_name;
+      std::string table_name;
+      if (!view_alias.empty()) {
+        size_t dotPos = view_alias.find('.');
+        if (dotPos != std::string::npos) {
+          view_name = view_alias.substr(dotPos + 1);
+        } else {
+          view_name = view_alias;
+        }
+      }
+      if (!table_alias.empty()) {
+        size_t dotPos = table_alias.find('.');
+        if (dotPos != std::string::npos) {
+          table_name = table_alias.substr(dotPos + 1);
+        } else {
+          table_name = table_alias;
+        }
+      }
+      if (0 == table_name.compare(view_name)) {
+        return record_at(i, rid);
+      }
+    }
+
     return RC::NOTFOUND;
   }
 
@@ -457,6 +578,10 @@ public:
 
   virtual RC find_cell(const TupleCellSpec &spec, Value &cell) const override { return RC::INTERNAL; }
 
+  RC record_at(int index, RecordPos &rid) const override { return RC::NOTFOUND; }
+
+  RC find_record(const TupleCellSpec &spec, RecordPos &rid) const override { return RC::NOTFOUND; }
+
 private:
   std::vector<Value> cells_;
 };
@@ -505,6 +630,30 @@ public:
     }
 
     return right_->find_cell(spec, value);
+  }
+
+  RC record_at(int index, RecordPos &rid) const override
+  {
+    const int left_cell_num = left_->cell_num();
+    if (index > 0 && index < left_cell_num) {
+      return left_->record_at(index, rid);
+    }
+
+    if (index >= left_cell_num && index < left_cell_num + right_->cell_num()) {
+      return right_->record_at(index - left_cell_num, rid);
+    }
+
+    return RC::NOTFOUND;
+  }
+
+  RC find_record(const TupleCellSpec &spec, RecordPos &rid) const override
+  {
+    RC rc = left_->find_record(spec, rid);
+    if (rc == RC::SUCCESS || rc != RC::NOTFOUND) {
+      return rc;
+    }
+
+    return right_->find_record(spec, rid);
   }
 
   auto &get_left() const { return left_; }
@@ -569,6 +718,10 @@ public:
     //   }
     // }
   }
+
+  RC record_at(int index, RecordPos &rid) const override { return RC::NOTFOUND; }
+
+  RC find_record(const TupleCellSpec &spec, RecordPos &rid) const override { return RC::NOTFOUND; }
 
   Tuple *copy_tuple() const override
   {

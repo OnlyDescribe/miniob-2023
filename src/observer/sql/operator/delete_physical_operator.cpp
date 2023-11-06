@@ -52,6 +52,36 @@ RC DeletePhysicalOperator::next()
       return rc;
     }
 
+    // 若是视图
+    if (table_->is_view()) {
+      if (!table_->modifiable()) {
+        // 删除应该只支持单表
+        LOG_WARN("failed to delete record: %s");
+        return RC::INVALID_ARGUMENT;
+      }
+      const Table *origin_table = table_->table_meta().view_table(0);
+      // const TableMeta &origin_table_meta = origin_table->table_meta();
+
+      // 并找到原表要删除的record的id
+      std::string alias;  // 暂时用不到
+      RecordPos rid;
+      rc = tuple->find_record(
+          TupleCellSpec(table_->name(), table_->table_meta().field(table_->table_meta().sys_field_num())->name()), rid);
+      if (rc != RC::SUCCESS) {
+        return rc;
+      }
+      Record old_record;
+      const_cast<Table *>(origin_table)->get_record(rid.rid, old_record);
+
+      rc = trx_->delete_record(const_cast<Table *>(origin_table), old_record);
+      if (rc != RC::SUCCESS) {
+        LOG_WARN("failed to delete record: %s", strrc(rc));
+        return rc;
+      }
+      continue;
+    }
+
+    // 若不是视图
     RowTuple *row_tuple = static_cast<RowTuple *>(tuple);
     Record &record = row_tuple->record();
     rc = trx_->delete_record(table_, record);

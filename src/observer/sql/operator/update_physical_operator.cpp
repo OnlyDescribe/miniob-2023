@@ -1,10 +1,16 @@
 #include "common/log/log.h"
+#include "common/rc.h"
+#include "sql/expr/tuple.h"
 #include "sql/operator/update_physical_operator.h"
 #include "storage/record/record.h"
 #include "storage/table/table.h"
 #include "storage/trx/trx.h"
 #include "sql/stmt/update_stmt.h"
+#include <algorithm>
+#include <cassert>
+#include <cstring>
 #include <limits>
+#include <vector>
 
 UpdatePhysicalOperator::UpdatePhysicalOperator(Table *table, std::vector<std::unique_ptr<Expression>> &&values_exprs,
     const std::vector<const FieldMeta *> &field_metas)
@@ -145,6 +151,126 @@ RC UpdatePhysicalOperator::next()
       return RC::SCHEMA_FIELD_TYPE_MISMATCH;
     }
 
+    // 如果是视图, 更新的tuple不一定是RowTuple
+    if (table_->is_view()) {
+      if (!table_->updatable()) {
+        LOG_WARN("can not be updated");
+        return RC::INVALID_ARGUMENT;
+      }
+      const TableMeta &table_meta = table_->table_meta();
+      const std::vector<const Table *> view_tables = table_meta.view_tables();
+
+      // 需要找到视图中需要修改的原表, 以及相应的原字段元信息, 修改值，需要更新的record的rid
+      struct IdValuePair
+      {
+        int id;
+        Value value;
+      };
+      struct UpdateMeta  // 暂时先直接复制
+      {
+        RecordPos rid;  // 原表中需要更新的record的rid
+        // std::vector<FieldMeta> field_metas;  // 原字段元信息
+        // std::vector<Value> values;           // 修改值
+
+        std::vector<IdValuePair> id_values;
+      };
+
+      std::map<const Table *, UpdateMeta> table_update_map;
+
+      for (int i = 0; i < field_metas_.size(); i++) {
+        const FieldMeta *meta = field_metas_[i];
+        Value &value = values_[i];
+
+        // 找到视图字段对应的原表
+        const Table *origin_table = view_tables[meta->id()];
+
+        // 原表的更新信息
+        UpdateMeta &update_meta = table_update_map[origin_table];
+
+        IdValuePair id_value_pair;
+        // update_meta.values.push_back(value);
+        id_value_pair.value = value;
+
+        // 将更新元信息与原表进行对应
+        const std::vector<FieldMeta> &origin_field_metas = *origin_table->table_meta().field_metas();
+        for (const FieldMeta &origin_meta : origin_field_metas) {
+          assert(origin_meta.name() != nullptr);
+          assert(meta->name() != nullptr);
+          if (strcmp(origin_meta.name(), meta->name()) == 0) {
+            // update_meta.field_metas.push_back(origin_meta);
+            // 找到原表的字段元信息
+            id_value_pair.id = origin_meta.id();
+
+            // 并找到原表要更新的record的id
+            std::string alias;  // 暂时用不到
+            rc = tuple->find_record(TupleCellSpec(table_->name(), origin_meta.name()), update_meta.rid);
+            if (rc != RC::SUCCESS) {
+              return rc;
+            }
+            break;
+          }
+        }
+        table_update_map[origin_table].id_values.push_back(std::move(id_value_pair));
+      }
+
+      // 执行更新
+      for (auto &&[origin_table, update_meta] : table_update_map) {
+        const TableMeta &origin_table_meta = origin_table->table_meta();
+
+        Record old_record;
+        RowTuple old_tuple;
+        RID rid = update_meta.rid.rid;
+        std::vector<IdValuePair> &id_value_pairs = update_meta.id_values;
+
+        std::sort(id_value_pairs.begin(), id_value_pairs.end(), [](const IdValuePair &lhs, const IdValuePair &rhs) {
+          return lhs.id < rhs.id;
+        });
+
+        const_cast<Table *>(origin_table)->get_record(rid, old_record);
+
+        old_tuple.set_table(origin_table);
+        old_tuple.set_schema(origin_table, origin_table->table_meta().field_metas());
+        old_tuple.set_record(&old_record);
+
+        // 替换得到新Tuple
+        Record new_record;
+        Value cell;
+
+        std::vector<Value> values;
+        int value_num =
+            origin_table_meta.field_num() - origin_table_meta.extra_field_num() - origin_table_meta.sys_field_num();
+        values.reserve(value_num);
+
+        for (int i = 0, j = 0; i < value_num; ++i) {
+          if (id_value_pairs[j].id == i) {
+            values.push_back(id_value_pairs[j].value);
+            ++j;
+          } else {
+            old_tuple.cell_at(i, cell);
+            values.push_back(cell);
+          }
+        }
+
+        RC rc = const_cast<Table *>(origin_table)->make_record(value_num, values.data(), new_record);
+
+        if (rc != RC::SUCCESS) {
+          LOG_WARN("failed to make record. rc=%s", strrc(rc));
+          // TODO(oldcb): 应该要把可能的溢出页的资源删除
+          return rc;
+        }
+
+        // 更新Tuple
+        rc = trx_->update_record(const_cast<Table *>(origin_table), old_record, new_record);
+        if (rc != RC::SUCCESS) {
+          LOG_WARN("failed to update record by transaction. rc=%s", strrc(rc));
+          return rc;
+        }
+      }
+
+      continue;
+    }
+
+    // 2. 如果不是视图, 更新的tuple一定是RowTuple
     // 得到需要删除的Tuple
     RowTuple *row_tuple = static_cast<RowTuple *>(tuple);
     Record &old_record = row_tuple->record();

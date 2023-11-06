@@ -24,6 +24,7 @@ See the Mulan PSL v2 for more details. */
 #include "common/log/log.h"
 #include "storage/index/index_meta.h"
 #include "storage/field/field_meta.h"
+#include "storage/table/table.h"
 
 class Field;
 
@@ -80,6 +81,16 @@ struct RID
     static RID rid{std::numeric_limits<PageNum>::max(), std::numeric_limits<SlotNum>::max()};
     return &rid;
   }
+};
+
+/**
+ * @brief record在属于哪个表, 以及对应的 rid, 全局可以根据这个能找到对应的record
+ 但目前没有使用到, 本以为视图的实现逻辑要追踪record的表和rid, 实则不是。
+ */
+struct RecordPos
+{
+  int32_t table_id;
+  RID rid;
 };
 
 /**
