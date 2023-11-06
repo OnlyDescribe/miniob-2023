@@ -98,15 +98,15 @@ RC CreateTableSelectExecutor::execute(SQLStageEvent *sql_event)
     }
   }
 
-  // 如果列名重复, FAILURE
-  std::set<std::string_view> unique_attrs;
-  for (auto &&attr_info : select_attr_infos) {
-    if (unique_attrs.count(attr_info.name) > 0) {
-      LOG_WARN("Duplicate column name");
-      return RC::INVALID_ARGUMENT;
-    }
-    unique_attrs.insert(attr_info.name);
-  }
+  // // 如果列名重复, FAILURE
+  // std::set<std::string_view> unique_attrs;
+  // for (auto &&attr_info : select_attr_infos) {
+  //   if (unique_attrs.count(attr_info.name) > 0) {
+  //     LOG_WARN("Duplicate column name");
+  //     return RC::INVALID_ARGUMENT;
+  //   }
+  //   unique_attrs.insert(attr_info.name);
+  // }
 
   //  比较Create table和Select的attr_infos, 并找出 table 比 select 多增加的字段
   std::vector<AttrInfoSqlNode> table_attr_infos = create_table_select_stmt->attr_infos();

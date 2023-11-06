@@ -154,15 +154,15 @@ RC CreateViewExecutor::execute(SQLStageEvent *sql_event)
     }
   }
 
-  // 如果列名重复, FAILURE
-  std::set<std::string_view> unique_attrs;
-  for (auto &&attr_info : select_attr_infos) {
-    if (unique_attrs.count(attr_info.name) > 0) {
-      LOG_WARN("Duplicate column name");
-      return RC::INVALID_ARGUMENT;
-    }
-    unique_attrs.insert(attr_info.name);
-  }
+  // // 如果列名重复, FAILURE
+  // std::set<std::string_view> unique_attrs;
+  // for (auto &&attr_info : select_attr_infos) {
+  //   if (unique_attrs.count(attr_info.name) > 0) {
+  //     LOG_WARN("Duplicate column name");
+  //     return RC::INVALID_ARGUMENT;
+  //   }
+  //   unique_attrs.insert(attr_info.name);
+  // }
 
   // 若从空表创建, 尝试从原表中获取信息
   if (empty_select) {
