@@ -61,56 +61,58 @@ RC CreateViewExecutor::execute(SQLStageEvent *sql_event)
 
   Tuple *tuple;
   Value value;
+  bool empty_select = false;
 
   std::vector<int> nulls(attribute_count, 1);  // 为了确保type不为null
 
   rc = physical_operator->next();
-  if (rc != RC::SUCCESS) {
-    physical_operator->close();
-    physical_operator.reset();
-    return rc;
-  }
-  tuple = physical_operator->current_tuple();
-  // assert(tuple != nullptr);
-  for (int i = 0; i < attribute_count; i++) {
-    RecordPos rid;
-    rc = tuple->record_at(i, rid);
-    if (rc == RC::NOTFOUND) {
-      view_is_modifiable = false;
-      view_tables.push_back(nullptr);
-    } else {
-      view_tables.push_back(session->get_current_db()->find_table(rid.table_id));
+  // 如果select中没数据
+  if (rc == RC::RECORD_EOF) {
+    rc = RC::SUCCESS;
+    empty_select = true;
+  } else {
+    tuple = physical_operator->current_tuple();
+    // assert(tuple != nullptr);
+    for (int i = 0; i < attribute_count; i++) {
+      RecordPos rid;
+      rc = tuple->record_at(i, rid);
+      if (rc == RC::NOTFOUND) {
+        view_is_modifiable = false;
+        view_tables.push_back(nullptr);
+      } else {
+        view_tables.push_back(session->get_current_db()->find_table(rid.table_id));
+      }
+
+      rc = tuple->cell_at(i, value);
+      if (rc != RC::SUCCESS) {
+        physical_operator->close();
+        physical_operator.reset();
+        return rc;
+      }
+
+      if (value.attr_type() != AttrType::NULLS) {
+        nulls[i] = 0;
+      }
+      select_attr_infos[i].type = value.attr_type();
+      select_attr_infos[i].length = value.length();
     }
 
-    rc = tuple->cell_at(i, value);
-    if (rc != RC::SUCCESS) {
-      physical_operator->close();
-      physical_operator.reset();
-      return rc;
-    }
-
-    if (value.attr_type() != AttrType::NULLS) {
-      nulls[i] = 0;
-    }
-    select_attr_infos[i].type = value.attr_type();
-    select_attr_infos[i].length = value.length();
-  }
-
-  // 继续设置select_attr_infos[i].type
-  while (std::accumulate(nulls.begin(), nulls.end(), 0) != 0) {
-    while (RC::SUCCESS == (rc = physical_operator->next())) {
-      tuple = physical_operator->current_tuple();
-      assert(tuple != nullptr);
-      for (int i = 0; i < attribute_count; i++) {
-        rc = tuple->cell_at(i, value);
-        if (rc != RC::SUCCESS) {
-          physical_operator->close();
-          physical_operator.reset();
-          return rc;
-        }
-        if (nulls[i] == 1 && value.attr_type() != AttrType::NULLS) {
-          nulls[i] = 0;
-          select_attr_infos[i].type = value.attr_type();
+    // 继续设置select_attr_infos[i].type
+    while (std::accumulate(nulls.begin(), nulls.end(), 0) != 0) {
+      while (RC::SUCCESS == (rc = physical_operator->next())) {
+        tuple = physical_operator->current_tuple();
+        assert(tuple != nullptr);
+        for (int i = 0; i < attribute_count; i++) {
+          rc = tuple->cell_at(i, value);
+          if (rc != RC::SUCCESS) {
+            physical_operator->close();
+            physical_operator.reset();
+            return rc;
+          }
+          if (nulls[i] == 1 && value.attr_type() != AttrType::NULLS) {
+            nulls[i] = 0;
+            select_attr_infos[i].type = value.attr_type();
+          }
         }
       }
     }
@@ -159,6 +161,22 @@ RC CreateViewExecutor::execute(SQLStageEvent *sql_event)
     }
     unique_attrs.insert(attr_info.name);
   }
+
+  // // 若从空表创建, 尝试从原表中获取信息
+  // if (values_vec.empty()) {
+  //   for (int i = 0; i < attribute_count; i++) {
+  //     for (int j = 0; j < select_tables.size(); ++j) {
+  //       const TableMeta &select_table_meta =
+  //           session->get_current_db()->find_table(select_tables[0]->name())->table_meta();
+  //       if (select_table_meta.field(select_attr_infos[i].name.c_str()) != nullptr) {
+  //         nulls[i] = 0;
+  //         select_attr_infos[i].type = select_table_meta.field(select_attr_infos[i].name.c_str())->type();
+  //         select_attr_infos[i].length = select_table_meta.field(select_attr_infos[i].name.c_str())->len();
+  //         break;
+  //       }
+  //     }
+  //   }
+  // }
 
   // 2. 创建视图表 // TODO(oldcb): 在exit的时候销毁视图
   rc = session->get_current_db()->create_table(view_name, attribute_count, select_attr_infos.data());

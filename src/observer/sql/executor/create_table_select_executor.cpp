@@ -71,9 +71,9 @@ RC CreateTableSelectExecutor::execute(SQLStageEvent *sql_event)
 
       if (value.attr_type() != AttrType::NULLS) {
         nulls[i] = 0;
+        select_attr_infos[i].type = value.attr_type();
+        select_attr_infos[i].length = value.length();
       }
-      select_attr_infos[i].type = value.attr_type();
-      select_attr_infos[i].length = value.length();
     }
     values_vec.push_back(std::move(values));
   }
