@@ -233,7 +233,7 @@ public:
 
   RC record_at(int index, RecordPos &rid) const override
   {
-    rid = RecordPos(table_->table_id(), record_->rid());
+    rid = {table_->table_id(), record_->rid()};
     return RC::SUCCESS;
   }
 
