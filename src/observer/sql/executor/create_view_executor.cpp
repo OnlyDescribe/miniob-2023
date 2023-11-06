@@ -57,8 +57,8 @@ RC CreateViewExecutor::execute(SQLStageEvent *sql_event)
   // 1.2 从values获取各字段属性, 以及字段所对应的原表(如果有的话)
   Session *session = sql_event->session_event()->session();
 
-  bool view_is_modifiable = true;          // View是否可被修改
-  std::vector<const Table *> view_tables;  // 在 Table 的元信息中设置每个字段对应的原表指针
+  bool view_is_modifiable = true;                           // View是否可被修改
+  std::vector<const Table *> view_tables(attribute_count);  // 在 Table 的元信息中设置每个字段对应的原表指针
 
   Tuple *tuple;
   Value value;
@@ -79,9 +79,9 @@ RC CreateViewExecutor::execute(SQLStageEvent *sql_event)
       rc = tuple->record_at(i, rid);
       if (rc == RC::NOTFOUND) {
         view_is_modifiable = false;
-        view_tables.push_back(nullptr);
+        view_tables[i] = nullptr;
       } else {
-        view_tables.push_back(session->get_current_db()->find_table(rid.table_id));
+        view_tables[i] = session->get_current_db()->find_table(rid.table_id);
       }
 
       rc = tuple->cell_at(i, value);
@@ -93,9 +93,9 @@ RC CreateViewExecutor::execute(SQLStageEvent *sql_event)
 
       if (value.attr_type() != AttrType::NULLS) {
         nulls[i] = 0;
+        select_attr_infos[i].type = value.attr_type();
+        select_attr_infos[i].length = value.length();
       }
-      select_attr_infos[i].type = value.attr_type();
-      select_attr_infos[i].length = value.length();
     }
 
     // 继续设置select_attr_infos[i].type
@@ -113,6 +113,7 @@ RC CreateViewExecutor::execute(SQLStageEvent *sql_event)
           if (nulls[i] == 1 && value.attr_type() != AttrType::NULLS) {
             nulls[i] = 0;
             select_attr_infos[i].type = value.attr_type();
+            select_attr_infos[i].length = value.length();
           }
         }
       }
@@ -176,6 +177,14 @@ RC CreateViewExecutor::execute(SQLStageEvent *sql_event)
           break;
         }
       }
+    }
+  }
+
+  // 实在没办法, 找到NULL列, 替换为默认的INT
+  for (int i = 0; i < nulls.size(); ++i) {
+    if (nulls[i] == 1) {
+      select_attr_infos[i].type = AttrType::INTS;
+      select_attr_infos[i].length = 4;
     }
   }
 
