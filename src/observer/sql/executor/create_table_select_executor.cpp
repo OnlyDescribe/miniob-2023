@@ -172,7 +172,7 @@ RC CreateTableSelectExecutor::execute(SQLStageEvent *sql_event)
     for (int i = 0; i < attribute_count; i++) {
       for (int j = 0; j < select_tables.size(); ++j) {
         const TableMeta &select_table_meta =
-            session->get_current_db()->find_table(select_tables[0]->name())->table_meta();
+            session->get_current_db()->find_table(select_tables[j]->name())->table_meta();
         if (select_table_meta.field(select_attr_infos[i].name.c_str()) != nullptr) {
           nulls[i] = 0;
           select_attr_infos[i].type = select_table_meta.field(select_attr_infos[i].name.c_str())->type();

@@ -27,6 +27,7 @@ RC CreateViewExecutor::execute(SQLStageEvent *sql_event)
       static_cast<int>(stmt->type()));
 
   CreateViewStmt *create_view_stmt = static_cast<CreateViewStmt *>(stmt);
+  const std::vector<Table *> &select_tables = create_view_stmt->select_stmt()->tables();
 
   const char *view_name = create_view_stmt->table_name().c_str();
   const std::vector<std::string> &view_alias = create_view_stmt->alias();
@@ -162,21 +163,21 @@ RC CreateViewExecutor::execute(SQLStageEvent *sql_event)
     unique_attrs.insert(attr_info.name);
   }
 
-  // // 若从空表创建, 尝试从原表中获取信息
-  // if (values_vec.empty()) {
-  //   for (int i = 0; i < attribute_count; i++) {
-  //     for (int j = 0; j < select_tables.size(); ++j) {
-  //       const TableMeta &select_table_meta =
-  //           session->get_current_db()->find_table(select_tables[0]->name())->table_meta();
-  //       if (select_table_meta.field(select_attr_infos[i].name.c_str()) != nullptr) {
-  //         nulls[i] = 0;
-  //         select_attr_infos[i].type = select_table_meta.field(select_attr_infos[i].name.c_str())->type();
-  //         select_attr_infos[i].length = select_table_meta.field(select_attr_infos[i].name.c_str())->len();
-  //         break;
-  //       }
-  //     }
-  //   }
-  // }
+  // 若从空表创建, 尝试从原表中获取信息
+  if (empty_select) {
+    for (int i = 0; i < attribute_count; i++) {
+      for (int j = 0; j < select_tables.size(); ++j) {
+        const TableMeta &select_table_meta =
+            session->get_current_db()->find_table(select_tables[j]->name())->table_meta();
+        if (select_table_meta.field(select_attr_infos[i].name.c_str()) != nullptr) {
+          nulls[i] = 0;
+          select_attr_infos[i].type = select_table_meta.field(select_attr_infos[i].name.c_str())->type();
+          select_attr_infos[i].length = select_table_meta.field(select_attr_infos[i].name.c_str())->len();
+          break;
+        }
+      }
+    }
+  }
 
   // 2. 创建视图表 // TODO(oldcb): 在exit的时候销毁视图
   rc = session->get_current_db()->create_table(view_name, attribute_count, select_attr_infos.data());
