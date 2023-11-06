@@ -14,6 +14,7 @@ See the Mulan PSL v2 for more details. */
 
 #pragma once
 
+#include <cstring>
 #include <memory>
 #include <type_traits>
 #include <vector>
@@ -474,6 +475,7 @@ public:
           view_name = view_alias;
         }
       }
+
       if (!table_alias.empty()) {
         size_t dotPos = table_alias.find('.');
         if (dotPos != std::string::npos) {
