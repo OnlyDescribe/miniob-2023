@@ -475,6 +475,7 @@ public:
           view_name = view_alias;
         }
       }
+
       if (!table_alias.empty()) {
         size_t dotPos = table_alias.find('.');
         if (dotPos != std::string::npos) {
@@ -483,7 +484,8 @@ public:
           table_name = table_alias;
         }
       }
-      if (0 == table_name.compare(view_name) && 0 == strcmp(spec.table_name(), view_table->name())) {
+      if (0 == table_name.compare(view_name) &&
+          0 == strcmp(spec.table_name(), view_table->table_meta().view_table(i)->name())) {
         return cell_at(i, cell);
       }
     }
