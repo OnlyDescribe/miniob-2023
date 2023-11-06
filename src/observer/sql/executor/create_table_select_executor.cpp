@@ -175,8 +175,8 @@ RC CreateTableSelectExecutor::execute(SQLStageEvent *sql_event)
             session->get_current_db()->find_table(select_tables[0]->name())->table_meta();
         if (select_table_meta.field(select_attr_infos[i].name.c_str()) != nullptr) {
           nulls[i] = 0;
-          select_attr_infos[i].type = value.attr_type();
-          select_attr_infos[i].length = value.length();
+          select_attr_infos[i].type = select_table_meta.field(select_attr_infos[i].name.c_str())->type();
+          select_attr_infos[i].length = select_table_meta.field(select_attr_infos[i].name.c_str())->len();
           break;
         }
       }
@@ -229,12 +229,6 @@ RC CreateTableSelectExecutor::execute(SQLStageEvent *sql_event)
       physical_operator.reset();
       return rc;
     }
-  }
-
-  if (rc == RC::RECORD_EOF) {
-    rc = RC::SUCCESS;
-  } else {
-    return rc;
   }
 
   rc = physical_operator->close();

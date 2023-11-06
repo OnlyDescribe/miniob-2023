@@ -137,9 +137,9 @@ private:
   bool modifiable_ = false;
 
   std::string view_sql_;
-  Db *view_db_;
+  Db *view_db_ = nullptr;
   // SelectStmt *select_stmt_;
   // LogicalOperator *logical_operator_;
-  TupleSchema *schema_;
+  TupleSchema *schema_ = nullptr;
   std::vector<std::string> alias_;
 };
