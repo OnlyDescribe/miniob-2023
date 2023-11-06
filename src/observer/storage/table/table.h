@@ -119,6 +119,7 @@ public:
   bool &updatable() { return updatable_; }
   bool &modifiable() { return modifiable_; }
   TupleSchema *&schema() { return schema_; }
+  std::vector<std::string> &alias() { return alias_; }
   void set_view_tables(const std::vector<const Table *> &view_tables) { table_meta_.view_tables_ = view_tables; }
   std::string &view_sql() { return view_sql_; }
   Db *&view_db() { return view_db_; }
@@ -136,8 +137,9 @@ private:
   bool modifiable_ = false;
 
   std::string view_sql_;
-  Db *view_db_;
+  Db *view_db_ = nullptr;
   // SelectStmt *select_stmt_;
   // LogicalOperator *logical_operator_;
-  TupleSchema *schema_;
+  TupleSchema *schema_ = nullptr;
+  std::vector<std::string> alias_;
 };

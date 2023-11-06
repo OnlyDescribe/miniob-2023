@@ -2,6 +2,7 @@
 
 #include "session/session.h"
 #include "common/log/log.h"
+#include "sql/parser/value.h"
 #include "storage/table/table.h"
 #include "sql/stmt/create_table_select_stmt.h"
 #include "event/sql_event.h"
@@ -25,6 +26,8 @@ RC CreateTableSelectExecutor::execute(SQLStageEvent *sql_event)
   CreateTableSelectStmt *create_table_select_stmt = static_cast<CreateTableSelectStmt *>(stmt);
 
   const char *table_name = create_table_select_stmt->table_name().c_str();
+  const std::vector<Table *> &select_tables = create_table_select_stmt->select_stmt()->tables();
+  Session *session = sql_event->session_event()->session();
 
   // 因为经过handle_request_with_physical_operator, schema和物理算子都放进了sql_result
   SqlResult *sql_result = sql_event->session_event()->sql_result();
@@ -47,22 +50,14 @@ RC CreateTableSelectExecutor::execute(SQLStageEvent *sql_event)
     return rc;
   }
 
+  // 1. 收集所有的values以及一些信息
   Tuple *tuple;
   Value value;
-  std::vector<std::vector<Value>> values_vec;
+  std::vector<std::vector<Value>> values_vec;  // 收集所有的values
+  std::vector<int> nulls(attribute_count, 1);  // 为了确保type不为null， 从values获取各字段类型
 
-  // 从values获取各字段类型
-  std::vector<int> nulls(attribute_count, 1);  // 为了确保type不为null
-
-  while (std::accumulate(nulls.begin(), nulls.end(), 0) != 0) {
-    rc = physical_operator->next();
-    if (rc != RC::SUCCESS) {
-      physical_operator->close();
-      physical_operator.reset();
-      return rc;
-    }
+  while (RC::SUCCESS == (rc = physical_operator->next())) {
     tuple = physical_operator->current_tuple();
-    assert(tuple != nullptr);
 
     std::vector<Value> values;
     for (int i = 0; i < attribute_count; i++) {
@@ -76,11 +71,15 @@ RC CreateTableSelectExecutor::execute(SQLStageEvent *sql_event)
 
       if (value.attr_type() != AttrType::NULLS) {
         nulls[i] = 0;
+        select_attr_infos[i].type = value.attr_type();
+        select_attr_infos[i].length = value.length();
       }
-      select_attr_infos[i].type = value.attr_type();
-      select_attr_infos[i].length = value.length();
     }
     values_vec.push_back(std::move(values));
+  }
+
+  if (rc == RC::RECORD_EOF) {
+    rc = RC::SUCCESS;
   }
 
   // TODO: select_attr_infos设置是否可以为NULL, 参考view, null字段四则运算组合也是null
@@ -99,15 +98,15 @@ RC CreateTableSelectExecutor::execute(SQLStageEvent *sql_event)
     }
   }
 
-  // 如果列名重复, FAILURE
-  std::set<std::string_view> unique_attrs;
-  for (auto &&attr_info : select_attr_infos) {
-    if (unique_attrs.count(attr_info.name) > 0) {
-      LOG_WARN("Duplicate column name");
-      return RC::INVALID_ARGUMENT;
-    }
-    unique_attrs.insert(attr_info.name);
-  }
+  // // 如果列名重复, FAILURE
+  // std::set<std::string_view> unique_attrs;
+  // for (auto &&attr_info : select_attr_infos) {
+  //   if (unique_attrs.count(attr_info.name) > 0) {
+  //     LOG_WARN("Duplicate column name");
+  //     return RC::INVALID_ARGUMENT;
+  //   }
+  //   unique_attrs.insert(attr_info.name);
+  // }
 
   //  比较Create table和Select的attr_infos, 并找出 table 比 select 多增加的字段
   std::vector<AttrInfoSqlNode> table_attr_infos = create_table_select_stmt->attr_infos();
@@ -167,6 +166,31 @@ RC CreateTableSelectExecutor::execute(SQLStageEvent *sql_event)
         intersect_index.end(),
         std::back_inserter(difference_index));
   }
+
+  // 若从空表创建, 尝试从原表中获取信息
+  if (values_vec.empty()) {
+    for (int i = 0; i < attribute_count; i++) {
+      for (int j = 0; j < select_tables.size(); ++j) {
+        const TableMeta &select_table_meta =
+            session->get_current_db()->find_table(select_tables[j]->name())->table_meta();
+        if (select_table_meta.field(select_attr_infos[i].name.c_str()) != nullptr) {
+          nulls[i] = 0;
+          select_attr_infos[i].type = select_table_meta.field(select_attr_infos[i].name.c_str())->type();
+          select_attr_infos[i].length = select_table_meta.field(select_attr_infos[i].name.c_str())->len();
+          break;
+        }
+      }
+    }
+  }
+
+  // 实在没办法, 找到NULL列, 替换为默认的INT
+  for (int i = 0; i < nulls.size(); ++i) {
+    if (nulls[i] == 1) {
+      select_attr_infos[i].type = AttrType::INTS;
+      select_attr_infos[i].length = 4;
+    }
+  }
+
   //  根据 table_attr_infos, 调整 attr_infos
   int diff_attr_num = difference_index.size();
   attribute_count += diff_attr_num;
@@ -178,7 +202,6 @@ RC CreateTableSelectExecutor::execute(SQLStageEvent *sql_event)
   attr_infos.insert(attr_infos.end(), select_attr_infos.begin(), select_attr_infos.end());
 
   // 2. 创建表
-  Session *session = sql_event->session_event()->session();
   rc = session->get_current_db()->create_table(table_name, attribute_count, attr_infos.data());
   if (rc != RC::SUCCESS) {
     physical_operator->close();
@@ -206,43 +229,6 @@ RC CreateTableSelectExecutor::execute(SQLStageEvent *sql_event)
       physical_operator.reset();
       return rc;
     }
-  }
-
-  while (RC::SUCCESS == (rc = physical_operator->next())) {
-    tuple = physical_operator->current_tuple();
-    assert(tuple != nullptr);
-    std::vector<Value> insert_values(diff_attr_num, Value(AttrType::NULLS));
-    for (int i = 0; i < attribute_count; i++) {
-      rc = tuple->cell_at(i, value);
-      if (rc != RC::SUCCESS) {
-        physical_operator->close();
-        physical_operator.reset();
-        return rc;
-      }
-      insert_values.push_back(value);
-      if (nulls[i] == 1 && value.attr_type() != AttrType::NULLS) {
-        nulls[i] = 0;
-        select_attr_infos[i].type = value.attr_type();
-      }
-    }
-    new_table->make_record(attribute_count, insert_values.data(), record);
-    if (rc != RC::SUCCESS) {
-      physical_operator->close();
-      physical_operator.reset();
-      return rc;
-    }
-    rc = new_table->insert_record(record);
-    if (rc != RC::SUCCESS) {
-      physical_operator->close();
-      physical_operator.reset();
-      return rc;
-    }
-  }
-
-  if (rc == RC::RECORD_EOF) {
-    rc = RC::SUCCESS;
-  } else {
-    return rc;
   }
 
   rc = physical_operator->close();

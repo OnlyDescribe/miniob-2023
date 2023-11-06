@@ -27,6 +27,7 @@ RC CreateViewExecutor::execute(SQLStageEvent *sql_event)
       static_cast<int>(stmt->type()));
 
   CreateViewStmt *create_view_stmt = static_cast<CreateViewStmt *>(stmt);
+  const std::vector<Table *> &select_tables = create_view_stmt->select_stmt()->tables();
 
   const char *view_name = create_view_stmt->table_name().c_str();
   const std::vector<std::string> &view_alias = create_view_stmt->alias();
@@ -56,61 +57,64 @@ RC CreateViewExecutor::execute(SQLStageEvent *sql_event)
   // 1.2 从values获取各字段属性, 以及字段所对应的原表(如果有的话)
   Session *session = sql_event->session_event()->session();
 
-  bool view_is_modifiable = true;          // View是否可被修改
-  std::vector<const Table *> view_tables;  // 在 Table 的元信息中设置每个字段对应的原表指针
+  bool view_is_modifiable = true;                           // View是否可被修改
+  std::vector<const Table *> view_tables(attribute_count);  // 在 Table 的元信息中设置每个字段对应的原表指针
 
   Tuple *tuple;
   Value value;
+  bool empty_select = false;
 
   std::vector<int> nulls(attribute_count, 1);  // 为了确保type不为null
 
   rc = physical_operator->next();
-  if (rc != RC::SUCCESS) {
-    physical_operator->close();
-    physical_operator.reset();
-    return rc;
-  }
-  tuple = physical_operator->current_tuple();
-  assert(tuple != nullptr);
-  for (int i = 0; i < attribute_count; i++) {
-    RecordPos rid;
-    rc = tuple->record_at(i, rid);
-    if (rc == RC::NOTFOUND) {
-      view_is_modifiable = false;
-      view_tables.push_back(nullptr);
-    } else {
-      view_tables.push_back(session->get_current_db()->find_table(rid.table_id));
+  // 如果select中没数据
+  if (rc == RC::RECORD_EOF) {
+    rc = RC::SUCCESS;
+    empty_select = true;
+  } else {
+    tuple = physical_operator->current_tuple();
+    // assert(tuple != nullptr);
+    for (int i = 0; i < attribute_count; i++) {
+      RecordPos rid;
+      rc = tuple->record_at(i, rid);
+      if (rc == RC::NOTFOUND) {
+        view_is_modifiable = false;
+        view_tables[i] = nullptr;
+      } else {
+        view_tables[i] = session->get_current_db()->find_table(rid.table_id);
+      }
+
+      rc = tuple->cell_at(i, value);
+      if (rc != RC::SUCCESS) {
+        physical_operator->close();
+        physical_operator.reset();
+        return rc;
+      }
+
+      if (value.attr_type() != AttrType::NULLS) {
+        nulls[i] = 0;
+        select_attr_infos[i].type = value.attr_type();
+        select_attr_infos[i].length = value.length();
+      }
     }
 
-    rc = tuple->cell_at(i, value);
-    if (rc != RC::SUCCESS) {
-      physical_operator->close();
-      physical_operator.reset();
-      return rc;
-    }
-
-    if (value.attr_type() != AttrType::NULLS) {
-      nulls[i] = 0;
-    }
-    select_attr_infos[i].type = value.attr_type();
-    select_attr_infos[i].length = value.length();
-  }
-
-  // 继续设置select_attr_infos[i].type
-  while (std::accumulate(nulls.begin(), nulls.end(), 0) != 0) {
-    while (RC::SUCCESS == (rc = physical_operator->next())) {
-      tuple = physical_operator->current_tuple();
-      assert(tuple != nullptr);
-      for (int i = 0; i < attribute_count; i++) {
-        rc = tuple->cell_at(i, value);
-        if (rc != RC::SUCCESS) {
-          physical_operator->close();
-          physical_operator.reset();
-          return rc;
-        }
-        if (nulls[i] == 1 && value.attr_type() != AttrType::NULLS) {
-          nulls[i] = 0;
-          select_attr_infos[i].type = value.attr_type();
+    // 继续设置select_attr_infos[i].type
+    while (std::accumulate(nulls.begin(), nulls.end(), 0) != 0) {
+      while (RC::SUCCESS == (rc = physical_operator->next())) {
+        tuple = physical_operator->current_tuple();
+        assert(tuple != nullptr);
+        for (int i = 0; i < attribute_count; i++) {
+          rc = tuple->cell_at(i, value);
+          if (rc != RC::SUCCESS) {
+            physical_operator->close();
+            physical_operator.reset();
+            return rc;
+          }
+          if (nulls[i] == 1 && value.attr_type() != AttrType::NULLS) {
+            nulls[i] = 0;
+            select_attr_infos[i].type = value.attr_type();
+            select_attr_infos[i].length = value.length();
+          }
         }
       }
     }
@@ -150,14 +154,38 @@ RC CreateViewExecutor::execute(SQLStageEvent *sql_event)
     }
   }
 
-  // 如果列名重复, FAILURE
-  std::set<std::string_view> unique_attrs;
-  for (auto &&attr_info : select_attr_infos) {
-    if (unique_attrs.count(attr_info.name) > 0) {
-      LOG_WARN("Duplicate column name");
-      return RC::INVALID_ARGUMENT;
+  // // 如果列名重复, FAILURE
+  // std::set<std::string_view> unique_attrs;
+  // for (auto &&attr_info : select_attr_infos) {
+  //   if (unique_attrs.count(attr_info.name) > 0) {
+  //     LOG_WARN("Duplicate column name");
+  //     return RC::INVALID_ARGUMENT;
+  //   }
+  //   unique_attrs.insert(attr_info.name);
+  // }
+
+  // 若从空表创建, 尝试从原表中获取信息
+  if (empty_select) {
+    for (int i = 0; i < attribute_count; i++) {
+      for (int j = 0; j < select_tables.size(); ++j) {
+        const TableMeta &select_table_meta =
+            session->get_current_db()->find_table(select_tables[j]->name())->table_meta();
+        if (select_table_meta.field(select_attr_infos[i].name.c_str()) != nullptr) {
+          nulls[i] = 0;
+          select_attr_infos[i].type = select_table_meta.field(select_attr_infos[i].name.c_str())->type();
+          select_attr_infos[i].length = select_table_meta.field(select_attr_infos[i].name.c_str())->len();
+          break;
+        }
+      }
     }
-    unique_attrs.insert(attr_info.name);
+  }
+
+  // 实在没办法, 找到NULL列, 替换为默认的INT
+  for (int i = 0; i < nulls.size(); ++i) {
+    if (nulls[i] == 1) {
+      select_attr_infos[i].type = AttrType::INTS;
+      select_attr_infos[i].length = 4;
+    }
   }
 
   // 2. 创建视图表 // TODO(oldcb): 在exit的时候销毁视图
@@ -204,6 +232,8 @@ RC CreateViewExecutor::execute(SQLStageEvent *sql_event)
 
   // 3.3.4
   view->schema() = new TupleSchema(schema);
+
+  view->alias() = view_alias;
 
   rc = physical_operator->close();
   physical_operator.reset();
