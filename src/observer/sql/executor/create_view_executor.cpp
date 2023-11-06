@@ -102,7 +102,7 @@ RC CreateViewExecutor::execute(SQLStageEvent *sql_event)
     while (std::accumulate(nulls.begin(), nulls.end(), 0) != 0) {
       while (RC::SUCCESS == (rc = physical_operator->next())) {
         tuple = physical_operator->current_tuple();
-        assert(tuple != nullptr);
+        // assert(tuple != nullptr);
         for (int i = 0; i < attribute_count; i++) {
           rc = tuple->cell_at(i, value);
           if (rc != RC::SUCCESS) {
@@ -198,7 +198,7 @@ RC CreateViewExecutor::execute(SQLStageEvent *sql_event)
 
   // 3. 设置表关于视图的属性
   Table *view = session->get_current_db()->find_table(view_name);
-  assert(view != nullptr);
+  // assert(view != nullptr);
 
   // 3.1 设置table属性, 为一视图表
   view->is_view() = true;

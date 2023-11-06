@@ -14,6 +14,7 @@ See the Mulan PSL v2 for more details. */
 
 #pragma once
 
+#include <cstring>
 #include <memory>
 #include <type_traits>
 #include <vector>
@@ -482,7 +483,7 @@ public:
           table_name = table_alias;
         }
       }
-      if (0 == table_name.compare(view_name)) {
+      if (0 == table_name.compare(view_name) && 0 == strcmp(spec.table_name(), view_table->name())) {
         return cell_at(i, cell);
       }
     }
