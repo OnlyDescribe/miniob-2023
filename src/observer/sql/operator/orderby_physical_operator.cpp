@@ -28,10 +28,17 @@ OrderbyPhysicalOperator::OrderbyPhysicalOperator(
 
 OrderbyPhysicalOperator::~OrderbyPhysicalOperator()
 {
-  for (auto &item : items_) {
-    delete item.key;
-    delete item.data;
+  // for (auto &item : items_) {
+  //   delete item.key;
+  //   delete item.data;
+  // }
+  for(int i = 0; i < multi_items_.size(); i++) {
+    for (auto &item : multi_items_[i]) {
+      delete item.key;
+      delete item.data;
+    }
   }
+  multi_items_.clear();
 }
 
 RC OrderbyPhysicalOperator::open(Trx *trx)
@@ -44,8 +51,15 @@ RC OrderbyPhysicalOperator::open(Trx *trx)
     return RC::NOT_MATCH;
   }
   RC rc = children_[0]->open(trx);
-  items_.reserve(2048);
+  // items_.reserve(2048);
+  int numCores = std::thread::hardware_concurrency();
+  multi_items_.clear();
+  multi_items_.resize(numCores);
+  for (int i = 0; i < numCores; i++) {
+    multi_items_[i].reserve(256);
+  }
 
+  cnt_ = 0;
   while ((rc = children_[0]->next()) == RC::SUCCESS) {
     Tuple *tuple = children_[0]->current_tuple();
     SortItem item;
@@ -60,54 +74,75 @@ RC OrderbyPhysicalOperator::open(Trx *trx)
       item.key->push_back(std::move(value));
     }
     item.data = tuple->copy_tuple();
-    items_.push_back(item);
+    multi_items_[cnt_ % numCores].push_back(item);
+    cnt_++;
   }
 
-  auto cmp = [&](const SortItem &a, const SortItem &b) -> bool {
-    assert(a.key->size() == b.key->size());
-    assert(a.key->size() == sort_types_.size());
-    for (int i = 0; i < a.key->size(); i++) {
-      if ((*a.key)[i].attr_type() == AttrType::NULLS && (*b.key)[i].attr_type() != AttrType::NULLS) {
-        return sort_types_[i] == SortType::ASC ? true : false;
-      } else if ((*a.key)[i].attr_type() != AttrType::NULLS && (*b.key)[i].attr_type() == AttrType::NULLS) {
-        return sort_types_[i] == SortType::ASC ? false : true;
-      } else if ((*a.key)[i].attr_type() == AttrType::NULLS && (*b.key)[i].attr_type() == AttrType::NULLS) {
-        continue;
-      } else {
-        int ret = (*a.key)[i].compare((*b.key)[i]);
-        // -1, a<b, 0: ret=0, 1,
-        if (ret != 0) {
-          bool result = ret < 0;
-          // 默认升序
-          if (sort_types_[i] == SortType::DESC) {
-            result = !result;
-          }
-          return result;
-        }
-      }
-    }
-    return false;
+  auto sort_item = [&](int pos) {
+    std::sort(multi_items_[pos].begin(), multi_items_[pos].end(), [this](const SortItem &a, const SortItem &b) -> bool{
+      return this->cmp(a, b);
+    });
   };
+  
+  // 创建多个线程，每个线程对一维进行排序
+  std::vector<std::thread> threads;
 
-  SORT(items_.begin(), items_.end(), cmp);
-  idx_ = -1;
+  for (int i = 0; i < numCores; ++i) {
+      threads.push_back(std::thread(sort_item, i));
+  }
+  // 等待所有线程完成
+  for (auto& thread : threads) {
+      thread.join();
+  }
+  
+  for (int i = 0; i < numCores; i++) {
+    if (multi_items_[i].size()) {
+      heap_.push_back({i, 0});
+    }
+  }
+  std::make_heap(heap_.begin(), heap_.end(), [&](const pii& a, const pii& b) ->bool {
+    const auto& item1 = multi_items_[a.first][a.second];
+    const auto& item2 = multi_items_[b.first][b.second];
+    return !this->cmp(item1, item2);
+  });
   return RC::SUCCESS;
 }
 RC OrderbyPhysicalOperator::next()
 {
-  if (++idx_ >= items_.size()) {
+  if (heap_.empty()) {
     return RC::RECORD_EOF;
   }
-  tuple_ = items_[idx_].data;
+  // tuple_ = items_[idx_].data;
+  pii top = heap_[0];
+
+  std::pop_heap(heap_.begin(), heap_.end(), [&](const pii& a, const pii& b) ->bool {
+    const auto& item1 = multi_items_[a.first][a.second];
+    const auto& item2 = multi_items_[b.first][b.second];
+    return !this->cmp(item1, item2);
+  });
+  heap_.pop_back();
+
+  if (top.second + 1 < multi_items_[top.first].size()) {
+    heap_.push_back({top.first, top.second + 1});
+
+    std::push_heap(heap_.begin(), heap_.end(), [&](const pii& a, const pii& b) ->bool {
+      const auto& item1 = multi_items_[a.first][a.second];
+      const auto& item2 = multi_items_[b.first][b.second];
+      return !this->cmp(item1, item2);
+    });
+  }
+  tuple_ = multi_items_[top.first][top.second].data;
   return RC::SUCCESS;
 }
 RC OrderbyPhysicalOperator::close()
 {
-  for (auto &item : items_) {
-    delete item.key;
-    delete item.data;
+  for(int i = 0; i < multi_items_.size(); i++) {
+      for (auto &item : multi_items_[i]) {
+        delete item.key;
+        delete item.data;
+      }
   }
-  items_.clear();
+  multi_items_.clear();
   return RC::SUCCESS;
 }
 
