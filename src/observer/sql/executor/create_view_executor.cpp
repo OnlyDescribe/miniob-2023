@@ -71,7 +71,7 @@ RC CreateViewExecutor::execute(SQLStageEvent *sql_event)
     return rc;
   }
   tuple = physical_operator->current_tuple();
-  assert(tuple != nullptr);
+  // assert(tuple != nullptr);
   for (int i = 0; i < attribute_count; i++) {
     RecordPos rid;
     rc = tuple->record_at(i, rid);
