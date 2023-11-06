@@ -484,8 +484,7 @@ public:
           table_name = table_alias;
         }
       }
-      if (0 == table_name.compare(view_name) &&
-          0 == strcmp(spec.table_name(), view_table->table_meta().view_table(i)->name())) {
+      if (0 == table_name.compare(view_name)) {
         return cell_at(i, cell);
       }
     }
