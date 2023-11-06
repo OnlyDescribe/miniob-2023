@@ -14,6 +14,7 @@ See the Mulan PSL v2 for more details. */
 
 #pragma once
 
+#include <cstring>
 #include <memory>
 #include <type_traits>
 #include <vector>
@@ -474,6 +475,7 @@ public:
           view_name = view_alias;
         }
       }
+
       if (!table_alias.empty()) {
         size_t dotPos = table_alias.find('.');
         if (dotPos != std::string::npos) {
@@ -482,7 +484,8 @@ public:
           table_name = table_alias;
         }
       }
-      if (0 == table_name.compare(view_name)) {
+
+      if (0 == view_alias.compare((*expressions_)[i]->name())) {
         return cell_at(i, cell);
       }
     }
@@ -528,7 +531,8 @@ public:
           table_name = table_alias;
         }
       }
-      if (0 == table_name.compare(view_name)) {
+
+      if (0 == view_alias.compare((*expressions_)[i]->name())) {
         return record_at(i, rid);
       }
     }
@@ -629,6 +633,9 @@ public:
     return RC::NOTFOUND;
   }
 
+  // TODO, 对于视图来说, 是没有表头的信息的,
+  // 因此无法无法通过表达式的名字来判断spec的表是在JoinedTuple的左孩子还是右孩子
+  // 因此目前视图还不支持join
   RC find_cell(const TupleCellSpec &spec, Value &value) const override
   {
     RC rc = left_->find_cell(spec, value);

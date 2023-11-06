@@ -792,6 +792,17 @@ select_attr:
       $$->push_back(pexpr);
       // std::reverse($$->begin(), $$->end());
     }
+    | pexpr AS DATA select_attr_list {
+      if ($4 != nullptr) {
+        $$ = $4;
+      } else {
+        $$ = new std::vector<PExpr *>;
+      }
+      PExpr * pexpr = $1;
+      pexpr->alias = "data";
+      $$->push_back(pexpr);
+      // std::reverse($$->begin(), $$->end());
+    }
     ;
 
 select_attr_list:
@@ -850,6 +861,17 @@ select_attr_list:
       if($4 == AggrFuncType::COUNT) {
         pexpr->alias = "count";
       }
+      $$->push_back(pexpr);
+      // std::reverse($$->begin(), $$->end());
+    }
+    | COMMA pexpr AS DATA select_attr_list {
+      if ($5 != nullptr) {
+        $$ = $5;
+      } else {
+        $$ = new std::vector<PExpr *>;
+      }
+      PExpr * pexpr = $2;
+      pexpr->alias = "data";
       $$->push_back(pexpr);
       // std::reverse($$->begin(), $$->end());
     }
