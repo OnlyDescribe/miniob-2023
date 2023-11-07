@@ -168,7 +168,7 @@ RC UpdatePhysicalOperator::next()
       };
       struct UpdateMeta  // 暂时先直接复制
       {
-        RID rid;  // 原表中需要更新的record的rid
+        RecordPos rid;  // 原表中需要更新的record的rid
         // std::vector<FieldMeta> field_metas;  // 原字段元信息
         // std::vector<Value> values;           // 修改值
 
@@ -203,7 +203,7 @@ RC UpdatePhysicalOperator::next()
 
             // 并找到原表要更新的record的id
             std::string alias;  // 暂时用不到
-            rc = tuple->find_record(TupleCellSpec(origin_table->name(), origin_meta.name()), update_meta.rid);
+            rc = tuple->find_record(TupleCellSpec(table_->name(), origin_meta.name()), update_meta.rid);
             if (rc != RC::SUCCESS) {
               return rc;
             }
@@ -219,7 +219,7 @@ RC UpdatePhysicalOperator::next()
 
         Record old_record;
         RowTuple old_tuple;
-        RID rid = update_meta.rid;
+        RID rid = update_meta.rid.rid;
         std::vector<IdValuePair> &id_value_pairs = update_meta.id_values;
 
         std::sort(id_value_pairs.begin(), id_value_pairs.end(), [](const IdValuePair &lhs, const IdValuePair &rhs) {

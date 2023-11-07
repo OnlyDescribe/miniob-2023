@@ -16,7 +16,9 @@ See the Mulan PSL v2 for more details. */
 
 #include <functional>
 #include <memory>
+#include <string>
 #include <vector>
+#include "storage/db/db.h"
 #include "storage/table/table_meta.h"
 // #include "sql/operator/physical_operator.h"
 
@@ -31,9 +33,7 @@ class Index;
 class IndexScanner;
 class RecordDeleter;
 class Trx;
-class LogicalOperator;
-class PhysicalOperator;
-
+class TupleSchema;
 /**
  * @brief 表
  *
@@ -102,9 +102,6 @@ public:
   const DiskBufferPool *data_buffer_pool() const { return data_buffer_pool_; }
   RC sync();
 
-  LogicalOperator *&logical_operator() { return logical_operator_; }
-  PhysicalOperator *&physical_operator() { return physical_operator_; }
-
 private:
   RC insert_entry_of_indexes(const char *record, const RID &rid);
   RC delete_entry_of_indexes(const char *record, const RID &rid, bool error_on_not_exists);
@@ -121,7 +118,10 @@ public:
   bool &is_view() { return is_view_; }
   bool &updatable() { return updatable_; }
   bool &modifiable() { return modifiable_; }
+  TupleSchema *&schema() { return schema_; }
   void set_view_tables(const std::vector<const Table *> &view_tables) { table_meta_.view_tables_ = view_tables; }
+  std::string &view_sql() { return view_sql_; }
+  Db *&view_db() { return view_db_; }
 
 private:
   std::string base_dir_;
@@ -134,8 +134,10 @@ private:
   bool is_view_ = false;
   bool updatable_ = false;
   bool modifiable_ = false;
-  LogicalOperator *logical_operator_;
-  //
-  PhysicalOperator *physical_operator_;  // 移动到算子移动在Table类后, 需要管理该资源. 存在循环引用问题,
-                                         // 无法使用智能指针
+
+  std::string view_sql_;
+  Db *view_db_;
+  // SelectStmt *select_stmt_;
+  // LogicalOperator *logical_operator_;
+  TupleSchema *schema_;
 };

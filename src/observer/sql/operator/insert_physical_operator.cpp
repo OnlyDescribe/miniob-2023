@@ -17,6 +17,7 @@ See the Mulan PSL v2 for more details. */
 #include "sql/stmt/insert_stmt.h"
 #include "storage/table/table.h"
 #include "storage/trx/trx.h"
+#include <algorithm>
 #include <cstring>
 #include <vector>
 
@@ -39,7 +40,13 @@ RC InsertPhysicalOperator::open(Trx *trx)
     // }
 
     const TableMeta &view_meta = table_->table_meta();
-    for (int i = 0; i < table_->table_meta().view_tables().size(); ++i) {
+
+    std::vector<const Table *> view_tables = table_->table_meta().view_tables();
+    std::sort(view_tables.begin(), view_tables.end());
+    auto last = std::unique(view_tables.begin(), view_tables.end());
+    view_tables.erase(last, view_tables.end());
+
+    for (int i = 0; i < view_tables.size(); ++i) {
       const Table *origin_table = table_->table_meta().view_table(i);
       const TableMeta &origin_table_meta = origin_table->table_meta();
 

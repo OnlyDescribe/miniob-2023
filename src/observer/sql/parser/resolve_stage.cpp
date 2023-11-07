@@ -54,13 +54,13 @@ RC ResolveStage::handle_request(SQLStageEvent *sql_event)
 
   sql_event->set_stmt(stmt);
 
-  // 如果是创建视图, 再创建一份stmt保存在sql_event中, 为了拿到自己资源的逻辑算子
-  if (sql_event->sql_node()->flag == SCF_CREATE_VIEW) {
-    ParsedSqlNode *sql_node = sql_event->view_sql_node().get();
-    Stmt *stmt = nullptr;
-    rc = Stmt::create_stmt(db, *sql_node, stmt);
-    sql_event->set_stmt(stmt);
-  }
+  // // 如果是创建视图, 再创建一份stmt保存在sql_event中, 为了拿到自己资源的逻辑算子
+  // if (sql_event->sql_node()->flag == SCF_CREATE_VIEW) {
+  //   ParsedSqlNode *sql_node = sql_event->view_sql_node().get();
+  //   Stmt *stmt = nullptr;
+  //   rc = Stmt::create_stmt(db, *sql_node, stmt);
+  //   sql_event->set_view_stmt(stmt);
+  // }
 
   return rc;
 }

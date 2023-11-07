@@ -29,6 +29,7 @@ See the Mulan PSL v2 for more details. */
 #include "sql/operator/aggregation_logical_operator.h"
 #include "sql/operator/update_logical_operator.h"
 
+#include "sql/operator/view_get_logical_operator.h"
 #include "sql/stmt/create_table_select_stmt.h"
 #include "sql/stmt/create_view_stmt.h"
 #include "sql/stmt/stmt.h"
@@ -117,7 +118,12 @@ RC LogicalPlanGenerator::create_plan(SelectStmt *select_stmt, unique_ptr<Logical
 
   // join
   for (Table *table : tables) {
-    unique_ptr<LogicalOperator> table_get_oper(new TableGetLogicalOperator(table, true /*readonly*/));
+    unique_ptr<LogicalOperator> table_get_oper;
+    if (table->is_view()) {
+      table_get_oper.reset(new ViewGetLogicalOperator(table, true /*readonly*/));
+    } else {
+      table_get_oper.reset(new TableGetLogicalOperator(table, true /*readonly*/));
+    }
     if (table_oper == nullptr) {
       table_oper = std::move(table_get_oper);
     } else {
@@ -291,8 +297,13 @@ RC LogicalPlanGenerator::create_plan(DeleteStmt *delete_stmt, unique_ptr<Logical
     const FieldMeta *field_meta = table->table_meta().field(i);
     fields.push_back(Field(table, field_meta));
   }
-  unique_ptr<LogicalOperator> table_get_oper(new TableGetLogicalOperator(table, false /*readonly*/));
 
+  unique_ptr<LogicalOperator> table_get_oper;
+  if (table->is_view()) {
+    table_get_oper.reset(new ViewGetLogicalOperator(table, false /*readonly*/));
+  } else {
+    table_get_oper.reset(new TableGetLogicalOperator(table, false /*readonly*/));
+  }
   unique_ptr<LogicalOperator> predicate_oper;
   RC rc = create_plan(filter_stmt, predicate_oper);
   if (rc != RC::SUCCESS) {
@@ -339,7 +350,12 @@ RC LogicalPlanGenerator::create_plan(UpdateStmt *update_stmt, unique_ptr<Logical
     const FieldMeta *field_meta = table->table_meta().field(i);
     fields.push_back(Field(table, field_meta));
   }
-  unique_ptr<LogicalOperator> table_get_oper(new TableGetLogicalOperator(table, false /*readonly*/));
+  unique_ptr<LogicalOperator> table_get_oper;
+  if (table->is_view()) {
+    table_get_oper.reset(new ViewGetLogicalOperator(table, false /*readonly*/));
+  } else {
+    table_get_oper.reset(new TableGetLogicalOperator(table, false /*readonly*/));
+  }
 
   unique_ptr<LogicalOperator> predicate_oper;
   RC rc = create_plan(filter_stmt, predicate_oper);

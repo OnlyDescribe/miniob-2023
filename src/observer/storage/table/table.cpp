@@ -35,8 +35,7 @@ See the Mulan PSL v2 for more details. */
 #include "storage/index/index.h"
 #include "storage/index/bplus_tree_index.h"
 #include "storage/trx/trx.h"
-#include "sql/operator/logical_operator.h"
-#include "sql/operator/physical_operator.h"
+#include "sql/expr/tuple.h"
 
 Table::~Table()
 {
@@ -56,13 +55,8 @@ Table::~Table()
   }
   indexes_.clear();
 
-  if (logical_operator_ != nullptr) {
-    assert(is_view_ == true);
-    delete logical_operator_;
-  }
-  if (physical_operator_ != nullptr) {
-    assert(is_view_ == true);
-    delete physical_operator_;
+  if (schema_) {
+    delete schema_;
   }
 
   LOG_INFO("Table has been closed: %s", name());

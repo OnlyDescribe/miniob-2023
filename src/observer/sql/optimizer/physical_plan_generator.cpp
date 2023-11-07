@@ -20,6 +20,9 @@ See the Mulan PSL v2 for more details. */
 #include "common/rc.h"
 #include "sql/operator/update_logical_operator.h"
 #include "sql/operator/update_physical_operator.h"
+#include "sql/operator/view_get_logical_operator.h"
+#include "sql/optimizer/logical_plan_generator.h"
+#include "sql/optimizer/optimize_stage.h"
 #include "sql/optimizer/physical_plan_generator.h"
 #include "sql/operator/table_get_logical_operator.h"
 #include "sql/operator/table_scan_physical_operator.h"
@@ -47,6 +50,7 @@ See the Mulan PSL v2 for more details. */
 #include "sql/expr/expression.h"
 #include "common/log/log.h"
 #include "storage/field/field_meta.h"
+#include "storage/table/table.h"
 
 using namespace std;
 
@@ -61,6 +65,10 @@ RC PhysicalPlanGenerator::create(LogicalOperator &logical_operator, unique_ptr<P
 
     case LogicalOperatorType::TABLE_GET: {
       return create_plan(static_cast<TableGetLogicalOperator &>(logical_operator), oper);
+    } break;
+
+    case LogicalOperatorType::VIEW_GET: {
+      return create_plan(static_cast<ViewGetLogicalOperator &>(logical_operator), oper);
     } break;
 
     case LogicalOperatorType::PREDICATE: {
@@ -110,27 +118,64 @@ RC PhysicalPlanGenerator::create(LogicalOperator &logical_operator, unique_ptr<P
   return rc;
 }
 
+RC PhysicalPlanGenerator::create_plan(ViewGetLogicalOperator &view_get_oper, unique_ptr<PhysicalOperator> &oper)
+{
+  Table *table = view_get_oper.table();
+
+  // 1. 如果table是视图, 应该下面接视图的物理算子
+  // 但是查询优化阶段的资源是unique_ptr的, 每次都被移动一点资源， 只能保存sql语句, 重建算子资源
+  // 这里的策略是无比愚蠢的, 而无奈
+  RC rc = RC::SUCCESS;
+  Db *db = table->view_db();
+  const std::string &view_sql = table->view_sql();
+
+  ParsedSqlResult parsed_sql_result;
+  parse(view_sql.c_str(), &parsed_sql_result);
+
+  std::unique_ptr<ParsedSqlNode> sql_node = std::move(parsed_sql_result.sql_nodes().front());
+  Stmt *view_stmt = nullptr;
+  rc = Stmt::create_stmt(db, *sql_node, view_stmt);
+
+  unique_ptr<LogicalOperator> view_logical_operator;
+  LogicalPlanGenerator logical_plan_generator;
+  OptimizeStage optimizer;
+  rc = logical_plan_generator.create(view_stmt, view_logical_operator);
+  if (rc != RC::SUCCESS) {
+    if (rc != RC::UNIMPLENMENT) {
+      LOG_WARN("failed to create logical plan. rc=%s", strrc(rc));
+    }
+    return rc;
+  }
+  rc = optimizer.rewrite(view_logical_operator);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to rewrite plan. rc=%s", strrc(rc));
+    return rc;
+  }
+
+  rc = optimizer.optimize(view_logical_operator);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to optimize plan. rc=%s", strrc(rc));
+    return rc;
+  }
+
+  std::unique_ptr<PhysicalOperator> phy_oper;
+  rc = create(*view_logical_operator, phy_oper);
+  if (rc != RC::SUCCESS) {
+    LOG_WARN("failed to create project logical operator's child physical operator. rc=%s", strrc(rc));
+    return rc;
+  }
+  oper = std::move(phy_oper);
+
+  return rc;
+}
+
 RC PhysicalPlanGenerator::create_plan(TableGetLogicalOperator &table_get_oper, unique_ptr<PhysicalOperator> &oper)
 {
   vector<unique_ptr<Expression>> &predicates = table_get_oper.predicates();
   // 看看是否有可以用于索引查找的表达式
   Table *table = table_get_oper.table();
 
-  // 1. 如果table是视图, 应该下面接视图的物理算子
-  if (table->is_view()) {
-    RC rc = RC::SUCCESS;
-    std::unique_ptr<PhysicalOperator> phy_oper;
-    rc = create(*table->logical_operator(), phy_oper);
-    if (rc != RC::SUCCESS) {
-      LOG_WARN("failed to create project logical operator's child physical operator. rc=%s", strrc(rc));
-      return rc;
-    }
-    oper = std::move(phy_oper);
-
-    return rc;
-  }
-
-  // 2. 如果table不是视图, 正常选择table_scan/index_scan
+  // 如果table不是视图, 正常选择table_scan/index_scan
   Index *index = nullptr;
   ValueExpr *value_expr = nullptr;
 

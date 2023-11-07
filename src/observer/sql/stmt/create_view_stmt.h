@@ -25,6 +25,6 @@ public:
 
 private:
   std::string table_name_;
-  std::vector<std::string> alias_;  // TODO(oldcb): 别名
+  std::vector<std::string> alias_;
   std::unique_ptr<SelectStmt> select_stmt_;
 };
